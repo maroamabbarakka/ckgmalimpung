@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+button,
+a,
+nav,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.mobile-safe-page {
+  padding-bottom: calc(150px + env(safe-area-inset-bottom));
+}
+
+.mobile-safe-submit {
+  bottom: calc(78px + env(safe-area-inset-bottom) + 10px);
+}
+
+@media (min-width: 768px) {
+  .mobile-safe-page {
+    padding-bottom: 2.5rem;
+  }
+
+  .mobile-safe-submit {
+    bottom: 1rem;
+  }
+}
+
+@media print {
+  @page {
+    /* Menyesuaikan ukuran kertas printer termal 58mm */
+    margin: 0;
+    size: 58mm auto; 
+  }
+  body {
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+}

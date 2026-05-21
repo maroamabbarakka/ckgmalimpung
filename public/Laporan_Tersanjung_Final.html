@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan Komprehensif TERSANJUNG v4.2</title>
+    <style>
+        :root {
+            --ink: #1f2937;
+            --muted: #64748b;
+            --blue: #1d4ed8;
+            --blue-soft: #eff6ff;
+            --green-soft: #ecfdf5;
+            --amber-soft: #fffbeb;
+            --line: #dbe3ee;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.62;
+            color: var(--ink);
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 40px;
+            background: #ffffff;
+        }
+        .report-page {
+            width: 100%;
+        }
+        .letterhead {
+            display: grid;
+            grid-template-columns: 92px 1fr 92px;
+            align-items: center;
+            gap: 18px;
+            margin-bottom: 22px;
+            padding-bottom: 16px;
+            border-bottom: 3px double #1d4ed8;
+        }
+        .logo {
+            width: 82px;
+            height: 82px;
+            object-fit: contain;
+        }
+        .letterhead-text {
+            text-align: center;
+            line-height: 1.35;
+        }
+        .letterhead-text .agency {
+            font-size: 13px;
+            font-weight: 800;
+            color: #334155;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .letterhead-text .title {
+            font-size: 20px;
+            font-weight: 900;
+            color: #0f172a;
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+        .letterhead-text .sub {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+        h1 {
+            color: #0f172a;
+            font-size: 30px;
+            text-align: center;
+            line-height: 1.25;
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 14px;
+            margin: 0 0 24px;
+        }
+        h2 {
+            color: var(--blue);
+            font-size: 22px;
+            margin-top: 38px;
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 6px;
+        }
+        h3 {
+            color: #334155;
+            font-size: 17px;
+            margin-top: 24px;
+        }
+        p { margin: 0 0 14px; text-align: justify; }
+        code {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            padding: 1px 5px;
+            border-radius: 5px;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 0.92em;
+        }
+        .print-btn {
+            display: block;
+            width: 210px;
+            margin: 0 auto 28px;
+            padding: 12px 20px;
+            background: #2563eb;
+            color: white;
+            text-align: center;
+            border-radius: 999px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 0;
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.22);
+        }
+        .print-btn:hover { background: #1d4ed8; }
+        .meta-info {
+            background: #f8fafc;
+            padding: 18px 22px;
+            border-radius: 10px;
+            border-left: 5px solid #2563eb;
+            margin-bottom: 28px;
+            font-weight: 600;
+        }
+        .subtitle {
+            text-align: center;
+            color: var(--muted);
+            margin-top: -10px;
+            margin-bottom: 24px;
+            font-size: 14px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin: 18px 0 24px;
+        }
+        .card {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 14px;
+            background: #f8fafc;
+        }
+        .card strong {
+            display: block;
+            color: #0f172a;
+            font-size: 20px;
+            line-height: 1.2;
+        }
+        .card span {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 18px 0 24px;
+            font-size: 14px;
+        }
+        .table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            margin: 18px 0 24px;
+        }
+        .table-wrap table {
+            min-width: 760px;
+            margin: 0;
+        }
+        .num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        th, td {
+            border: 1px solid #cbd5e1;
+            padding: 11px 13px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background: #f1f5f9;
+            color: #0f172a;
+            font-weight: 800;
+        }
+        tr:nth-child(even) { background: #f8fafc; }
+        .note-box {
+            background: var(--blue-soft);
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 15px 16px;
+            margin: 18px 0 22px;
+            font-size: 14px;
+        }
+        .note-box.green {
+            background: var(--green-soft);
+            border-color: #bbf7d0;
+        }
+        .note-box.amber {
+            background: var(--amber-soft);
+            border-color: #fde68a;
+        }
+        .note-title {
+            font-weight: 800;
+            color: #1d4ed8;
+            margin-bottom: 5px;
+        }
+        .green .note-title { color: #047857; }
+        .amber .note-title { color: #b45309; }
+        ul, ol { margin: 0 0 20px; padding-left: 22px; }
+        li { margin-bottom: 8px; }
+        .footer {
+            margin-top: 46px;
+            border-top: 1px solid var(--line);
+            padding-top: 16px;
+            text-align: right;
+            font-style: italic;
+            color: #64748b;
+            font-size: 14px;
+        }
+        @media (max-width: 760px) {
+            body { padding: 22px; }
+            .grid { grid-template-columns: 1fr; }
+            .letterhead { grid-template-columns: 64px 1fr 64px; gap: 10px; }
+            .logo { width: 58px; height: 58px; }
+            .letterhead-text .title { font-size: 15px; }
+            .letterhead-text .agency { font-size: 10px; }
+            .letterhead-text .sub { font-size: 10px; }
+            table { font-size: 12px; }
+            th, td { padding: 8px; }
+        }
+        @media print {
+            @page {
+                size: A4;
+                margin: 16mm 15mm 18mm 15mm;
+            }
+            html, body {
+                width: 210mm;
+                min-height: 297mm;
+                background: #ffffff;
+            }
+            body {
+                padding: 0;
+                max-width: 100%;
+                font-size: 11.4pt;
+                line-height: 1.5;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .no-print { display: none; }
+            .letterhead {
+                grid-template-columns: 72px 1fr 72px;
+                gap: 12px;
+                margin-bottom: 16px;
+                padding-bottom: 12px;
+            }
+            .logo { width: 66px; height: 66px; }
+            .letterhead-text .agency { font-size: 10pt; }
+            .letterhead-text .title { font-size: 15pt; }
+            .letterhead-text .sub { font-size: 9pt; }
+            h1 { font-size: 20pt; margin-bottom: 14px; padding-bottom: 9px; }
+            h2 { font-size: 15pt; margin-top: 24px; }
+            h3 { font-size: 12.5pt; margin-top: 16px; }
+            p { orphans: 3; widows: 3; }
+            .meta-info, .note-box, .card { box-shadow: none; }
+            th, td { padding: 7px 8px; }
+            h2, h3 { page-break-after: avoid; }
+            table, .note-box, .card { page-break-inside: avoid; }
+            .footer {
+                margin-top: 28px;
+                font-size: 10pt;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button onclick="window.print()" class="print-btn no-print">Simpan sebagai PDF</button>
+
+    <main class="report-page">
+    <header class="letterhead">
+        <img class="logo" src="logo_pinrang.png" alt="Logo Kabupaten Pinrang" onerror="this.onerror=null;this.src='/logo_pinrang.png';">
+        <div class="letterhead-text">
+            <div class="agency">Pemerintah Kabupaten Pinrang - Dinas Kesehatan</div>
+            <div class="title">UPT Puskesmas Malimpung</div>
+            <div class="sub">Laporan Teknis Sistem Informasi Cek Kesehatan Gratis TERSANJUNG</div>
+        </div>
+        <img class="logo" src="logo_malimpung.png" alt="Logo Puskesmas Malimpung" onerror="this.onerror=null;this.src='/logo_malimpung.png';">
+    </header>
+
+    <h1>Laporan Komprehensif Pengembangan Aplikasi TERSANJUNG v4.2</h1>
+    <p class="subtitle">Dokumen teknis dan operasional terbaru untuk Sistem Informasi CKG UPT Puskesmas Malimpung</p>
+
+    <div class="meta-info">
+        Nama Sistem: TERSANJUNG (Sistem Informasi Layanan Kesehatan Berbasis Jaringan Terpadu Puskesmas Malimpung)<br>
+        Institusi: UPT Puskesmas Malimpung<br>
+        Status Sistem: Production-ready, real-time, dan siap dipakai di dalam gedung maupun layanan lapangan<br>
+        Pembaruan Laporan: Mei 2026
+    </div>
+
+    <h2>1. Ringkasan Eksekutif</h2>
+    <p>TERSANJUNG adalah aplikasi rekam medis dan dashboard operasional yang dirancang khusus untuk mendukung layanan Cek Kesehatan Gratis (CKG) di UPT Puskesmas Malimpung. Sistem ini menggabungkan registrasi pasien, antrean, skrining klinis per pos, rapor digital, dashboard pemantauan, ekspor laporan, serta alur kunjungan rumah dalam satu aplikasi berbasis web.</p>
+    <p>Pembaruan terkini memperkuat tiga area strategis: <b>Ketahanan Infrastruktur Cloud</b> melalui pembatasan kuota Firebase secara cerdas, <b>Keamanan Data</b> via eksekusi transaksional (Atomicity), serta <b>Optimasi Performa UI</b> dengan arsitektur <i>Code-Splitting</i> dan tabel analitik <i>High-Density</i> yang sangat responsif di perangkat petugas lapangan.</p>
+
+    <div class="grid">
+        <div class="card"><strong>18</strong><span>Form skrining utama</span></div>
+        <div class="card"><strong>1.548</strong><span>Pertanyaan RME</span></div>
+        <div class="card"><strong>Multi-dokumen</strong><span>KTP, KK, BPJS/KIS/JKN</span></div>
+    </div>
+
+    <h2>2. Arsitektur & Tumpukan Teknologi</h2>
+    <table>
+        <thead>
+            <tr><th>Lapisan</th><th>Teknologi</th><th>Peran dalam Sistem</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Frontend</td><td>React 19, Vite 8</td><td>Antarmuka aplikasi cepat, responsif, dan siap PWA.</td></tr>
+            <tr><td>Database real-time</td><td>Firebase Firestore</td><td>Sinkronisasi antrean, kunjungan, pasien, dan dashboard secara langsung.</td></tr>
+            <tr><td>UI dan tata letak</td><td>Tailwind CSS, react-grid-layout</td><td>Antarmuka mobile-friendly dan dashboard yang dapat dikustomisasi.</td></tr>
+            <tr><td>Ekspor laporan</td><td>XLSX, jsPDF, jspdf-autotable</td><td>Generasi Excel/PDF langsung dari browser tanpa template berat.</td></tr>
+            <tr><td>OCR lokal browser</td><td>Tesseract.js</td><td>Fallback offline untuk membaca dokumen identitas saat backend OCR tidak aktif.</td></tr>
+            <tr><td>OCR backend opsional</td><td>PaddleOCR, FastAPI</td><td>Mesin OCR lokal yang lebih kuat untuk foto buram, dokumen lapangan, dan KK/BPJS.</td></tr>
+            <tr><td>PWA</td><td>Service Worker, manifest</td><td>Aplikasi dapat dipasang dan tetap mudah diakses pada perangkat lapangan.</td></tr>
+        </tbody>
+    </table>
+
+    <div class="note-box">
+        <div class="note-title">Prinsip Arsitektur</div>
+        Data klinis tetap berada di Firestore dan workflow utama tetap berjalan di browser. Backend PaddleOCR bersifat opsional: bila aktif, sistem memakainya untuk OCR yang lebih presisi; bila tidak aktif, aplikasi otomatis kembali ke Tesseract.js lokal.
+    </div>
+
+    <h2>3. Modul Operasional Utama</h2>
+    <table>
+        <thead>
+            <tr><th>Modul</th><th>Fungsi Utama</th><th>Pembaruan Relevan</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Login</td><td>Autentikasi staf dengan username/PIN dan role.</td><td>Menjadi gerbang RBAC untuk pembatasan akses modul.</td></tr>
+            <tr><td>Loket</td><td>Pembuatan antrean, tiket, dan pengalihan awal pasien.</td><td>Terhubung ke alur Pos 1 dan status antrean real-time.</td></tr>
+            <tr><td>Pos 1</td><td>Registrasi pasien, validasi NIK, identitas, umur, dan wilayah.</td><td>Scan Identitas multi-dokumen: KTP, KK, BPJS/KIS/JKN.</td></tr>
+            <tr><td>Pos 2 - Pos 6</td><td>Pemeriksaan fisik, lab, skrining risiko, mental, dan geriatri.</td><td>Form dinamis dipilih otomatis berdasarkan umur, jenis kelamin, dan kategori.</td></tr>
+            <tr><td>Pos 7</td><td>Validasi dokter, diagnosis akhir, cetak dan kirim rapor.</td><td>Rapor digital siap cetak/kirim sebagai ringkasan layanan.</td></tr>
+            <tr><td>Kunjungan Rumah</td><td>Alur door-to-door untuk petugas lapangan.</td><td>Scan Identitas multi-dokumen juga tersedia di lapangan.</td></tr>
+            <tr><td>Dashboard</td><td>Monitoring antrean, pasien selesai, demografi, dan indikator risiko.</td><td>Export kolektif memakai data selesai dan filter dashboard aktif.</td></tr>
+            <tr><td>TV Display</td><td>Tampilan antrean publik di ruang tunggu.</td><td>Sinkron dengan status antrean real-time.</td></tr>
+            <tr><td>Mesin Ekspor</td><td>Excel/PDF kolektif dan per klaster.</td><td>Sheet Rekap Keseluruhan dan perbaikan klasifikasi SD/SMP/SMA.</td></tr>
+            <tr><td>SIMPEG Admin</td><td>Manajemen pegawai, role, dan administrasi sistem.</td><td>Fondasi penguatan RBAC dan audit operasional.</td></tr>
+        </tbody>
+    </table>
+
+    <h2>4. Scan Identitas Multi-Dokumen</h2>
+    <p>Fitur pemindaian identitas dikembangkan dari pemindaian KTP menjadi Scan Identitas. Tujuannya adalah mengakomodasi kondisi lapangan: warga dapat kehilangan KTP, hanya membawa Kartu Keluarga, membawa BPJS/KIS/JKN, atau membawa kartu jaminan kesehatan lainnya. Semua hasil tetap dinormalisasi ke format baku registrasi yang sudah dipakai aplikasi.</p>
+
+    <h3>Dokumen yang Diakomodasi</h3>
+    <table>
+        <thead>
+            <tr><th>Jenis Dokumen</th><th>Data yang Dicari</th><th>Perlakuan Sistem</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>KTP</td><td>NIK, nama, tanggal lahir, jenis kelamin, status perkawinan, desa.</td><td>Langsung dipetakan ke form Pos 1 atau Kunjungan Rumah.</td></tr>
+            <tr><td>Kartu Keluarga</td><td>Nomor KK, kandidat NIK anggota keluarga, nama, tanggal lahir, hubungan/indikasi gender bila terbaca.</td><td>Bila lebih dari satu anggota terbaca, petugas wajib memilih anggota yang sedang diperiksa.</td></tr>
+            <tr><td>BPJS/KIS/JKN</td><td>NIK bila tersedia, nomor kartu, nama, tanggal lahir, jenis kelamin bila terbaca.</td><td>Dipakai sebagai identitas pendukung dan tetap diminta verifikasi manual.</td></tr>
+            <tr><td>Dokumen lain</td><td>Kandidat NIK, nama, tanggal lahir.</td><td>Dicoba sebagai mode identitas umum, kemudian ditandai untuk pemeriksaan ulang.</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Normalisasi ke Format Baku</h3>
+    <p>Hasil OCR selalu diarahkan ke struktur yang sudah digunakan aplikasi: <code>nik</code>, <code>nama</code>, <code>tgl_lahir</code>, <code>j_kelamin</code>, <code>status_perkawinan</code>, <code>desa</code>, dan <code>dusun</code>. Dengan demikian, penambahan dokumen tidak merusak alur lama, tidak mengubah struktur database utama, dan tetap kompatibel dengan routing umur serta laporan.</p>
+
+    <div class="note-box amber">
+        <div class="note-title">Kontrol Akurasi Lapangan</div>
+        Untuk Kartu Keluarga, sistem tidak otomatis mengambil anggota pertama bila terdeteksi banyak anggota. Petugas harus memilih kandidat anggota keluarga yang benar. Ini mencegah risiko NIK pasien tertukar dengan NIK kepala keluarga atau anggota lain.
+    </div>
+
+    <h3>Strategi Presisi OCR</h3>
+    <ul>
+        <li>Gambar ditingkatkan sebelum OCR: pembesaran resolusi, grayscale, peningkatan kontras, dan sharpening ringan.</li>
+        <li>Jika hasil awal belum menemukan NIK atau nama, sistem menjalankan OCR ulang dengan mode kontras tinggi.</li>
+        <li>PaddleOCR backend lokal dicoba lebih dulu bila tersedia karena lebih kuat untuk dokumen buram dan teks kecil.</li>
+        <li>Tesseract.js tetap menjadi fallback lokal agar pemindaian tetap berjalan tanpa server OCR.</li>
+        <li>Pesan hasil selalu meminta petugas memeriksa ulang NIK dan nama, terutama pada confidence rendah.</li>
+    </ul>
+
+    <h2>5. Skema Formulir Elektronik RME</h2>
+    <p>TERSANJUNG mendigitalisasi struktur formulir CKG yang besar ke dalam mesin form dinamis berbasis <code>formSchemas.json</code>. Mesin ini memastikan petugas hanya melihat pertanyaan yang relevan dengan kelompok umur, jenis kelamin, dan tahap pos pemeriksaan.</p>
+    <table>
+        <thead>
+            <tr><th>Indikator</th><th>Jumlah</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Total form skrining utama</td><td>18 Form</td></tr>
+            <tr><td>Total pertanyaan</td><td>1.548 Pertanyaan</td></tr>
+            <tr><td>Pertanyaan berbasis pilihan</td><td>991 Pertanyaan</td></tr>
+            <tr><td>Total kemunculan opsi jawaban</td><td>2.582 Pilihan</td></tr>
+            <tr><td>Pilihan jawaban unik</td><td>246 Pilihan Unik</td></tr>
+            <tr><td>Pertanyaan teks/numerik/tanggal</td><td>557 Pertanyaan</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Distribusi Tipe Input</h3>
+    <table>
+        <thead>
+            <tr><th>Tipe Input</th><th>Jumlah Pertanyaan</th><th>Total Opsi</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>text</code></td><td>383</td><td>0</td></tr>
+            <tr><td><code>date</code></td><td>45</td><td>0</td></tr>
+            <tr><td><code>number</code></td><td>129</td><td>0</td></tr>
+            <tr><td><code>select</code></td><td>440</td><td>1.356</td></tr>
+            <tr><td><code>radio</code></td><td>77</td><td>154</td></tr>
+            <tr><td><code>yes_no</code></td><td>412</td><td>824</td></tr>
+            <tr><td><code>dropdown</code></td><td>62</td><td>248</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Jumlah Pertanyaan per Kelompok dan Distribusi Pos</h3>
+    <p>Tabel berikut dihitung dari <code>formSchemas.json</code> dan mengikuti routing mesin form dinamis. Kolom Pos 1 berisi data identitas/demografi dasar, sedangkan Pos 2 sampai Pos 6 menunjukkan beban pertanyaan klinis yang tampil sesuai kategori umur, jenis kelamin, dan logika bertingkat.</p>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Kelompok / Form Schema</th>
+                    <th class="num">Total</th>
+                    <th class="num">Pos 1</th>
+                    <th class="num">Pos 2</th>
+                    <th class="num">Pos 3</th>
+                    <th class="num">Pos 4</th>
+                    <th class="num">Pos 5</th>
+                    <th class="num">Pos 6</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>BBL</td><td class="num">33</td><td class="num">12</td><td class="num">3</td><td class="num">6</td><td class="num">9</td><td class="num">3</td><td class="num">0</td></tr>
+                <tr><td>Balita 1 tahun</td><td class="num">32</td><td class="num">10</td><td class="num">6</td><td class="num">3</td><td class="num">0</td><td class="num">12</td><td class="num">1</td></tr>
+                <tr><td>Balita 2 tahun</td><td class="num">42</td><td class="num">11</td><td class="num">7</td><td class="num">3</td><td class="num">6</td><td class="num">14</td><td class="num">1</td></tr>
+                <tr><td>Balita 3-6 tahun</td><td class="num">53</td><td class="num">10</td><td class="num">14</td><td class="num">4</td><td class="num">8</td><td class="num">13</td><td class="num">4</td></tr>
+                <tr><td>Laki-laki 18-24 tahun</td><td class="num">68</td><td class="num">8</td><td class="num">12</td><td class="num">7</td><td class="num">13</td><td class="num">24</td><td class="num">4</td></tr>
+                <tr><td>Laki-laki 25-39 tahun</td><td class="num">70</td><td class="num">8</td><td class="num">12</td><td class="num">9</td><td class="num">13</td><td class="num">24</td><td class="num">4</td></tr>
+                <tr><td>Laki-laki 40-44 tahun</td><td class="num">95</td><td class="num">8</td><td class="num">14</td><td class="num">10</td><td class="num">23</td><td class="num">36</td><td class="num">4</td></tr>
+                <tr><td>Laki-laki 45-59 tahun</td><td class="num">109</td><td class="num">10</td><td class="num">14</td><td class="num">10</td><td class="num">23</td><td class="num">48</td><td class="num">4</td></tr>
+                <tr><td>Perempuan 18-24 tahun</td><td class="num">68</td><td class="num">8</td><td class="num">12</td><td class="num">7</td><td class="num">13</td><td class="num">24</td><td class="num">4</td></tr>
+                <tr><td>Perempuan 25-29 tahun</td><td class="num">70</td><td class="num">8</td><td class="num">12</td><td class="num">9</td><td class="num">13</td><td class="num">24</td><td class="num">4</td></tr>
+                <tr><td>Perempuan 30-39 tahun</td><td class="num">77</td><td class="num">8</td><td class="num">12</td><td class="num">9</td><td class="num">13</td><td class="num">31</td><td class="num">4</td></tr>
+                <tr><td>Perempuan 40-59 tahun</td><td class="num">102</td><td class="num">8</td><td class="num">14</td><td class="num">10</td><td class="num">23</td><td class="num">43</td><td class="num">4</td></tr>
+                <tr><td>Laki-laki &gt;=60 tahun</td><td class="num">161</td><td class="num">11</td><td class="num">16</td><td class="num">10</td><td class="num">21</td><td class="num">50</td><td class="num">53</td></tr>
+                <tr><td>Perempuan 60-69 tahun</td><td class="num">151</td><td class="num">9</td><td class="num">16</td><td class="num">10</td><td class="num">21</td><td class="num">42</td><td class="num">53</td></tr>
+                <tr><td>Perempuan &gt;=70 tahun</td><td class="num">147</td><td class="num">9</td><td class="num">16</td><td class="num">10</td><td class="num">21</td><td class="num">38</td><td class="num">53</td></tr>
+                <tr><td>SD</td><td class="num">91</td><td class="num">14</td><td class="num">6</td><td class="num">13</td><td class="num">7</td><td class="num">46</td><td class="num">5</td></tr>
+                <tr><td>SMP</td><td class="num">93</td><td class="num">14</td><td class="num">7</td><td class="num">12</td><td class="num">15</td><td class="num">40</td><td class="num">5</td></tr>
+                <tr><td>SMA</td><td class="num">86</td><td class="num">14</td><td class="num">7</td><td class="num">12</td><td class="num">15</td><td class="num">34</td><td class="num">4</td></tr>
+                <tr><th>Total</th><th class="num">1.548</th><th class="num">180</th><th class="num">200</th><th class="num">154</th><th class="num">257</th><th class="num">546</th><th class="num">211</th></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="note-box green">
+        <div class="note-title">Catatan Pembacaan Tabel</div>
+        Angka per pos menunjukkan distribusi pertanyaan berdasarkan kata kunci routing aplikasi. Sebagian pertanyaan bersifat bersyarat, sehingga tidak selalu tampil pada layar petugas bila jawaban sebelumnya normal atau tidak memenuhi pemicu lanjutan. Contohnya, Balita 2 tahun dan Balita 3-6 tahun tetap memiliki pertanyaan Pos 4 terkait talasemia/laboratorium, serta Pos 5 dan Pos 6 untuk TB anak dan tumbuh kembang.
+    </div>
+
+    <h2>6. Fitur Smart Fill CKG</h2>
+    <p><strong>Smart Fill CKG</strong> adalah mekanisme bantuan pengisian otomatis, penyederhanaan label UI, dan tampilan pertanyaan berjenjang pada form pemeriksaan CKG. Fitur ini dibuat untuk mempercepat kerja petugas/nakes tanpa mengubah struktur output resmi. Prinsip utamanya adalah: UI boleh dibuat lebih cerdas dan ringkas, tetapi data akhir tetap mengikuti ID pertanyaan, opsi jawaban, dan format dari <code>formSchemas.json</code>.</p>
+
+    <div class="note-box green">
+        <div class="note-title">Prinsip Kepatuhan Schema</div>
+        Semua hasil yang disimpan tetap difilter agar hanya field resmi dari <code>formSchemas.json</code> yang masuk ke data pos. Field bantu seperti <code>VIRTUAL_PUASA</code>, <code>VIRTUAL_AKTIVITAS_ANAK_STATUS</code>, dan <code>VIRTUAL_LAMA_HT</code> hanya membantu tampilan dan logika UI, bukan menjadi output laporan resmi.
+    </div>
+
+    <h3>Tujuan Smart Fill</h3>
+    <ul>
+        <li>Mempercepat pengisian form CKG oleh petugas di puskesmas maupun layanan lapangan.</li>
+        <li>Mengurangi pertanyaan yang tidak relevan dengan kondisi pasien.</li>
+        <li>Mengurangi input berulang dan mengarahkan petugas pada pertanyaan lanjutan yang memang dibutuhkan.</li>
+        <li>Membantu interpretasi awal untuk field yang memang tersedia di schema.</li>
+        <li>Menjaga hasil akhir tetap kompatibel dengan ekspor PKG/CKG, dashboard, dan rapor digital.</li>
+    </ul>
+
+    <h3>Pola Kerja Smart Fill</h3>
+    <table>
+        <thead>
+            <tr><th>Pola</th><th>Cara Kerja</th><th>Contoh Implementasi</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Pertanyaan berjenjang</td><td>Pertanyaan lanjutan hanya muncul jika ada jawaban pemicu.</td><td>Skoring TB anak muncul bila ada kontak/gejala; konfirmasi SHK/G6PD/HAK muncul bila skrining awal positif.</td></tr>
+            <tr><td>Auto interpretasi</td><td>Sistem mengisi field interpretasi yang tersedia di schema dari jawaban sebelumnya.</td><td>Risiko TB anak, faktor risiko talasemia, keluhan/gejala DM, tingkat aktivitas fisik, dan interpretasi profil lipid.</td></tr>
+            <tr><td>Bahasa UI petugas</td><td>Pertanyaan panjang ditampilkan dengan label pendek yang lebih mudah dibaca.</td><td>Kontak serumah penderita TB, aktif 60 menit, frekuensi olahraga per minggu.</td></tr>
+            <tr><td>Output sanitization</td><td>Data disaring sebelum tersimpan ke Firestore.</td><td>Field virtual tidak ikut masuk ke <code>pos2</code>, <code>pos3</code>, <code>pos4</code>, <code>pos5</code>, atau <code>pos6</code>.</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Rincian Smart Fill per Kelompok</h3>
+    <table>
+        <thead>
+            <tr><th>Kelompok</th><th>Fitur Smart Fill</th><th>Manfaat Operasional</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>BBL</td><td>Hasil Penyakit Jantung Bawaan dibantu dari pulse oximetry tangan kanan dan kaki. Konfirmasi SHK, G6PD, dan HAK hanya muncul jika hasil awal positif.</td><td>Petugas tidak dibebani tindak lanjut yang tidak diperlukan bila hasil awal normal.</td></tr>
+            <tr><td>Balita 1 tahun</td><td>Alur TB anak dibuat berjenjang. Skoring TB anak hanya muncul bila ada kontak TB. KPSP tetap mengikuti field schema.</td><td>Pengisian balita normal lebih cepat, tetapi skrining risiko tetap lengkap bila ada indikasi.</td></tr>
+            <tr><td>Balita 2 tahun</td><td>Risiko TB dibantu dari gejala/kontak. Pemeriksaan lab talasemia seperti Hb, MCV, MCH, RBC, dan RDW tetap diarahkan sesuai schema.</td><td>Petugas lebih mudah membedakan skrining awal dan pemeriksaan lanjutan.</td></tr>
+            <tr><td>Balita 3-6 tahun</td><td>Risiko TB, faktor risiko talasemia, dan gejala DM dibantu otomatis. KMPE/GPPH dan pemeriksaan lab lanjutan muncul bila ada indikasi.</td><td>Alur panjang menjadi lebih pendek untuk pasien normal tanpa menghilangkan capaian pemeriksaan.</td></tr>
+            <tr><td>SD/SMP/SMA</td><td>Aktivitas fisik anak tidak disamakan dengan dewasa. Jawaban memakai jumlah hari aktif minimal 60 menit, dari 0 sampai 7 hari.</td><td>Data aktivitas fisik anak lebih seragam dan mudah diisi.</td></tr>
+            <tr><td>Dewasa 18-39 tahun</td><td>Aktivitas fisik dihitung dari frekuensi dan durasi. Riwayat merokok APCS dirangkum dari lama merokok, batang per hari, riwayat sebelumnya, dan paparan asap.</td><td>Interpretasi tidak dibiarkan kosong dan petugas tidak perlu menyusun ringkasan manual.</td></tr>
+            <tr><td>Dewasa 40-59 tahun</td><td>Ditambah alur risiko paru/PUMA, profil lipid, fungsi ginjal/hati, kanker tertentu, dan indikasi EKG bila ada hipertensi.</td><td>Petugas diarahkan pada pemeriksaan lanjutan yang relevan dengan risiko PTM.</td></tr>
+            <tr><td>Lansia</td><td>Aktivitas fisik lansia memakai interpretasi sesuai kemampuan. Alur kognitif, ADL, risiko jatuh, SPPB, MNA, dan geriatri tetap mengikuti schema.</td><td>Pengisian lansia lebih terarah meski jumlah pertanyaannya besar.</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Contoh Otomatisasi yang Sudah Diterapkan</h3>
+    <ul>
+        <li><strong>TB anak:</strong> jika kontak TB tidak ada, pertanyaan skoring dengan kontak tidak ditampilkan; jika ada kontak, sistem membantu merangkum indikator seperti batuk lama, BB turun, demam, pembesaran kelenjar, dan Mantoux.</li>
+        <li><strong>DM balita:</strong> gejala sering lapar, haus, pipis, mengompol, berat badan turun, dan riwayat orang tua digunakan untuk membantu interpretasi keluhan/gejala DM.</li>
+        <li><strong>Talasemia balita:</strong> riwayat keluarga atau pembawa sifat memicu faktor risiko dan pemeriksaan lanjutan.</li>
+        <li><strong>Aktivitas fisik anak:</strong> memakai hari aktif minimal 60 menit, bukan pola olahraga dewasa.</li>
+        <li><strong>Aktivitas fisik dewasa/lansia:</strong> frekuensi dan durasi dipakai untuk mengisi tingkat aktivitas fisik, dengan interpretasi khusus lansia seperti aktif sesuai kemampuan.</li>
+        <li><strong>Profil lipid:</strong> kolesterol total, HDL, LDL, dan trigliserida membantu mengisi interpretasi dislipidemia.</li>
+        <li><strong>Kanker paru:</strong> riwayat merokok, bungkus-tahun, paparan asap rokok, lingkungan rumah, dan lingkungan tempat tinggal dirangkum menjadi interpretasi risiko.</li>
+        <li><strong>BBL:</strong> pulse oximetry membantu interpretasi PJB, dan hasil skrining positif memicu pertanyaan konfirmasi yang relevan.</li>
+    </ul>
+
+    <h3>Status Implementasi Smart Fill</h3>
+    <table>
+        <thead>
+            <tr><th>Komponen</th><th>Status</th><th>Keterangan</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Smart routing pertanyaan per Pos</td><td>Sudah diterapkan</td><td>Pos 2 sampai Pos 6 membaca schema dan kategori umur.</td></tr>
+            <tr><td>Smart fill TB anak</td><td>Sudah diterapkan</td><td>Termasuk kontak TB dan ringkasan indikator skoring.</td></tr>
+            <tr><td>Smart fill DM balita</td><td>Sudah diterapkan</td><td>Memakai gejala dan riwayat orang tua.</td></tr>
+            <tr><td>Smart fill talasemia balita</td><td>Sudah diterapkan</td><td>Memicu faktor risiko dan lab lanjutan.</td></tr>
+            <tr><td>Smart fill aktivitas fisik anak/dewasa/lansia</td><td>Sudah diterapkan</td><td>Jawaban anak dibedakan dari dewasa; lansia memakai interpretasi sesuai kemampuan.</td></tr>
+            <tr><td>Smart fill BBL</td><td>Sudah diterapkan</td><td>PJB dari pulse oximetry serta konfirmasi SHK/G6PD/HAK.</td></tr>
+            <tr><td>Filter output sesuai schema</td><td>Sudah diterapkan</td><td>Field virtual tidak ikut tersimpan sebagai output resmi.</td></tr>
+        </tbody>
+    </table>
+
+    <div class="note-box amber">
+        <div class="note-title">Batasan Klinis</div>
+        Smart Fill adalah alat bantu pengisian dan interpretasi awal, bukan pengganti keputusan tenaga kesehatan. Diagnosis akhir, rujukan, koreksi hasil otomatis, dan penilaian klinis tetap menjadi kewenangan dokter/nakes sesuai SOP.
+    </div>
+
+    <h2>7. Segmentasi Demografi & Routing Klinis</h2>
+    <p>Penentuan kategori usia dilakukan di Pos 1 dari tanggal lahir. Kategori ini menjadi dasar untuk memilih skema pemeriksaan di Pos 2 sampai Pos 6, serta untuk menentukan sheet laporan yang tepat pada ekspor Excel.</p>
+    <table>
+        <thead>
+            <tr><th>Kategori</th><th>Rentang Usia</th><th>Catatan Routing</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Bayi</td><td>0 - 11 bulan</td><td>Mengarah ke formulir BBL.</td></tr>
+            <tr><td>Balita</td><td>1 - 5 tahun</td><td>Dipecah menjadi Balita 1, 2, dan 3-6 tahun.</td></tr>
+            <tr><td>SD</td><td>6 - 12 tahun</td><td>Masuk kelompok Anak/Siswa dan sheet SD.</td></tr>
+            <tr><td>SMP</td><td>13 - 15 tahun</td><td>Masuk kelompok Anak/Siswa dan sheet SMP.</td></tr>
+            <tr><td>SMA</td><td>16 - 18 tahun</td><td>Masuk kelompok Anak/Siswa dan sheet SMA.</td></tr>
+            <tr><td>Dewasa</td><td>19 - 59 tahun</td><td>Dipisah lagi berdasarkan gender dan rentang usia.</td></tr>
+            <tr><td>Lansia</td><td>60 tahun ke atas</td><td>Dipisah berdasarkan gender dan kelompok usia lansia.</td></tr>
+        </tbody>
+    </table>
+
+    <div class="note-box green">
+        <div class="note-title">Perbaikan Klasifikasi Laporan Anak/Siswa</div>
+        Export Excel kini lebih kuat membaca kategori SD/SMP/SMA. Bila kategori tersimpan sebagai Anak/Siswa atau umur eksplisit tidak tersedia, sistem mencoba fallback dari tanggal lahir sehingga sheet SD, SMP, dan SMA tidak hilang akibat data yang kurang lengkap.
+    </div>
+
+    <h2>8. Distribusi Beban Kerja per POS</h2>
+    <ul>
+        <li><strong>Pos 1:</strong> registrasi identitas, Scan Identitas, validasi NIK, deteksi pasien baru/lama, penentuan kategori usia, dan penguncian data dasar.</li>
+        <li><strong>Pos 2:</strong> antropometri, berat badan, tinggi badan, IMT, tekanan darah, nadi, napas, lingkar perut, dan data pemeriksaan dasar.</li>
+        <li><strong>Pos 3:</strong> pemeriksaan indera, mata, visus, telinga, pendengaran, gigi, mulut, serta komponen skrining spesifik awal.</li>
+        <li><strong>Pos 4:</strong> laboratorium dan penyakit menular/tidak menular seperti gula darah, kolesterol, asam urat, hepatitis, HIV, sifilis, dan malaria.</li>
+        <li><strong>Pos 5:</strong> skrining risiko TB, paru, kanker, kulit, gaya hidup, merokok, alkohol, narkoba, dan lingkungan.</li>
+        <li><strong>Pos 6:</strong> skrining mental, SRQ, SDQ, Mini-Cog, depresi, ADL, SPPB, MNA, dan kerentanan lansia.</li>
+        <li><strong>Pos 7:</strong> validasi dokter, diagnosis akhir, rekomendasi, pencetakan rapor, dan pengiriman hasil.</li>
+    </ul>
+
+    <h2>9. Dashboard & Pelaporan</h2>
+    <p>Dashboard menyajikan kondisi layanan secara real-time: jumlah antrian, pasien selesai, proporsi usia, gender, indikator klinis, dan daftar kunjungan. Ekspor dari dashboard memakai data yang sudah selesai skrining serta mengikuti filter pencarian/wilayah yang aktif pada saat tombol unduh ditekan.</p>
+
+    <h3>Pembaruan Export Excel</h3>
+    <ul>
+        <li>Workbook kolektif kini menambahkan sheet <strong>Rekap Keseluruhan</strong> berisi jumlah data per kategori/sheet.</li>
+        <li>Export klaster juga memiliki rekap keseluruhan untuk klaster yang dipilih.</li>
+        <li>Sheet SD, SMP, dan SMA diklasifikasikan lebih akurat melalui kategori, umur, dan fallback tanggal lahir.</li>
+        <li>Data wilayah <strong>Desa/Kelurahan</strong> dan <strong>Dusun/Lingkungan</strong> ikut terbawa dalam laporan.</li>
+        <li>PDF klaster tetap mengoptimalkan header dan horizontal page break untuk tabel lebar.</li>
+    </ul>
+
+    <div class="note-box">
+        <div class="note-title">Catatan Operasional Export</div>
+        Jika sheet tertentu kosong, penyebab paling umum adalah belum ada pasien pada kategori tersebut yang berstatus Selesai, atau dashboard sedang memakai filter desa/pencarian. Sheet rekap membantu membedakan data kosong dari masalah klasifikasi.
+    </div>
+
+    <h2>10. Keamanan, Privasi, dan Integritas Infrastruktur</h2>
+    <ul>
+        <li>Role-Based Access Control membatasi akses sesuai fungsi petugas, tenaga laboratorium, perawat, dokter, dan admin.</li>
+        <li><b>Firebase Atomic Transactions:</b> Modifikasi status krusial (hapus duplikat, aktivasi pegawai) menggunakan metode <code>runTransaction</code> untuk mencegah data korup saat diakses banyak Nakes secara bersamaan (<i>Race Condition Prevention</i>).</li>
+        <li><b>Firestore Quota Locks:</b> Tarikan data histori dibatasi maksimal 2.500 dokumen terakhir untuk mencegah ledakan tagihan/kuota baca Firebase (<i>Overbilling Protection</i>) dan mencegah browser Nakes hang.</li>
+        <li>Data bayi/anak tanpa NIK diarahkan ke skema NONIK dengan data wali yang wajib dilengkapi.</li>
+        <li>Script <b>Local Backup Automation</b> telah disematkan untuk mencadangkan <i>source-code</i> secara rapi tanpa mengganggu sistem inti.</li>
+    </ul>
+
+    <h2>11. Milestone Pengembangan Terkini</h2>
+    <ol>
+        <li><strong>Restrukturisasi Monolith:</strong> Kode sumber utama telah dipecah (<i>Code Splitting</i>) dan dipisahkan dari skrip <i>backend</i> untuk performa kompilasi <i>Vite</i> yang jauh lebih ringan.</li>
+        <li><strong>High-Density Analytics UI:</strong> Visualisasi grafik dusun dan demografi diganti menjadi tabel analitik padat-karya (High-Density) standar Kemenkes.</li>
+        <li><strong>Firebase Transactional Security:</strong> Menutup kerentanan manipulasi massal dengan implementasi <code>runTransaction</code>.</li>
+        <li><strong>Smart Quota Management:</strong> Menutup kebocoran kuota baca Firebase dengan pembatasan <code>limit()</code> di semua dashboard monitoring.</li>
+        <li><strong>Scan Identitas multi-dokumen:</strong> KTP, KK, BPJS/KIS/JKN, dan dokumen identitas umum didukung dalam satu pipeline OCR.</li>
+        <li><strong>Perbaikan Purity Code:</strong> Aplikasi 100% lulus standar <i>Linting</i> React dengan mengeliminasi fungsi mati (<i>dead code</i>) dan perbaikan manajemen <i>state</i> waktu.</li>
+        <li><strong>Smart Fill CKG:</strong> Pertanyaan dibuat berjenjang, interpretasi dibantu otomatis, dan output tetap dikunci ke <code>formSchemas.json</code>.</li>
+    </ol>
+
+    <h2>12. Rekomendasi Lanjutan</h2>
+    <ul>
+        <li><strong>Uji lapangan OCR:</strong> kumpulkan 20-50 sampel foto KTP, KK, dan BPJS dengan variasi cahaya/buram untuk mengukur akurasi field NIK, nama, dan tanggal lahir.</li>
+        <li><strong>Service PaddleOCR permanen:</strong> jalankan backend OCR pada laptop/server lokal Puskesmas agar akurasi lapangan lebih stabil.</li>
+        <li><strong>Audit trail perubahan identitas:</strong> simpan log ketika hasil OCR dikoreksi manual oleh petugas.</li>
+        <li><strong>Pagination dashboard:</strong> bila volume kunjungan tinggi, dashboard dan export perlu pemuatan bertahap agar browser tetap ringan.</li>
+        <li><strong>Bridging SATUSEHAT:</strong> siapkan pemetaan Encounter, Observation, Condition, dan DiagnosticReport dari data internal.</li>
+        <li><strong>Hardening RBAC:</strong> batasi export massal hanya untuk admin atau role yang diberi mandat.</li>
+    </ul>
+
+    <div class="footer">Laporan disusun oleh Tim Pengembang Aplikasi TERSANJUNG v4.2 (MAROA Project)</div>
+    </main>
+</body>
+</html>
