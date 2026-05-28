@@ -4,6 +4,7 @@ import {
   persistentLocalCache, 
   persistentMultipleTabManager 
 } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 // Konfigurasi Database Firebase CKG Malimpung
 const firebaseConfig = {
@@ -17,6 +18,7 @@ const firebaseConfig = {
 
 // 1. Inisialisasi Firebase App
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 
 /**
  * 2. Inisialisasi Firestore dengan fitur Offline Persistence
@@ -29,5 +31,5 @@ const db = initializeFirestore(app, {
   })
 });
 
-// Export database untuk digunakan di komponen lain (Pos, Dashboard, dll)
-export { db };
+// Export database dan auth untuk digunakan di komponen lain (Pos, Dashboard, dll)
+export { auth, db };

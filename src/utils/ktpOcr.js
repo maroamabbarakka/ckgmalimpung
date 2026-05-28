@@ -354,6 +354,111 @@ export const parseKTPText = (text, sourceConfidence = 0) => {
   return data;
 };
 
+const postToGemini = async (file, apiKey) => {
+  const dataUrl = await fileToDataUrl(file);
+  const base64Data = String(dataUrl).split(',')[1] || '';
+  const mimeType = file.type || 'image/jpeg';
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            {
+              text: "Lakukan OCR dan analisis dokumen identitas Indonesia ini (KTP, Kartu Keluarga, atau Kartu BPJS/KIS/JKN). Ekstrak informasi berikut dengan akurat:\n" +
+                    "1. document_type: Tentukan jenis dokumen ('KTP', 'Kartu Keluarga', atau 'BPJS/KIS/JKN'). Jika dokumen tidak dikenali, gunakan 'KTP' sebagai default.\n" +
+                    "2. nik: Nomor Induk Kependudukan (16 digit angka). Jika dokumen berupa Kartu Keluarga, ekstrak NIK dari anggota keluarga pertama/kepala keluarga atau NIK yang paling dominan/jelas.\n" +
+                    "3. nama: Nama lengkap sesuai dokumen, hilangkan gelar akademis/medis jika ada (misal: 'drg.', 'dr.', 'S.Kep', 'A.Md.Keb' dll), gunakan huruf kapital.\n" +
+                    "4. tgl_lahir: Tanggal lahir dalam format YYYY-MM-DD. Pastikan tahun lahir 4 digit (misal: '1995-08-24'). Jika tidak ada, kosongkan.\n" +
+                    "5. j_kelamin: Jenis kelamin, harus berupa 'L' untuk Laki-laki atau 'P' untuk Perempuan. Jika tidak terdeteksi di dokumen, analisis dari nama atau kosongkan.\n" +
+                    "6. desa: Nama Desa atau Kelurahan, pilih dari daftar berikut yang paling cocok jika ada di dokumen: 'Desa Malimpung', 'Desa Padang Loang', atau 'Kelurahan Maccirinna'. Jika tidak ada yang cocok atau tidak terbaca, kosongkan.\n" +
+                    "7. status_perkawinan: Status pernikahan (misal: 'Belum Kawin', 'Kawin', 'Cerai Hidup', 'Cerai Mati'). Jika tidak ada, kosongkan.\n" +
+                    "8. kk: Nomor Kartu Keluarga (16 digit angka), hanya diisi jika document_type adalah 'Kartu Keluarga', jika tidak kosongkan.\n\n" +
+                    "Harap kembalikan data dalam format JSON murni yang sesuai dengan skema."
+            },
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: base64Data
+              }
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            document_type: {
+              type: "STRING",
+              enum: ["KTP", "Kartu Keluarga", "BPJS/KIS/JKN", "Dokumen Identitas"]
+            },
+            nik: {
+              type: "STRING",
+              description: "16-digit NIK"
+            },
+            nama: {
+              type: "STRING",
+              description: "Full name in uppercase without academic/medical titles"
+            },
+            tgl_lahir: {
+              type: "STRING",
+              description: "Format YYYY-MM-DD"
+            },
+            j_kelamin: {
+              type: "STRING",
+              description: "L or P"
+            },
+            desa: {
+              type: "STRING",
+              description: "Desa Malimpung, Desa Padang Loang, or Kelurahan Maccirinna"
+            },
+            status_perkawinan: {
+              type: "STRING",
+              description: "Belum Kawin, Kawin, Cerai Hidup, or Cerai Mati"
+            },
+            kk: {
+              type: "STRING",
+              description: "16-digit KK number"
+            }
+          },
+          required: ["document_type", "nik", "nama"]
+        }
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini API HTTP Error ${response.status}`);
+  }
+
+  const result = await response.json();
+  const textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!textResponse) {
+    throw new Error('Respons Gemini kosong');
+  }
+
+  const parsedJson = JSON.parse(textResponse);
+  const data = {
+    nik: koreksiNIK(parsedJson.nik || '').slice(0, 16),
+    nama: koreksiNama(parsedJson.nama || ''),
+    tgl_lahir: parsedJson.tgl_lahir || '',
+    j_kelamin: parsedJson.j_kelamin || '',
+    desa: parsedJson.desa || '',
+    status_perkawinan: parsedJson.status_perkawinan || '',
+    document_type: parsedJson.document_type || KTP_TYPE,
+    kk: koreksiNIK(parsedJson.kk || '').slice(0, 16),
+    raw_text: textResponse,
+    candidates: []
+  };
+
+  data.confidence = calculateConfidence(data, 0.85);
+  return { success: true, data, source: 'Google Gemini 2.5 Flash' };
+};
+
 const postToBackend = async (file, backendUrl = DEFAULT_BACKEND_URL) => {
   const dataUrl = await fileToDataUrl(file);
   const base64_image = String(dataUrl).split(',')[1] || '';
@@ -411,8 +516,23 @@ export const runKtpOcr = async (file, {
   onProgress,
   onMode,
   backendUrl = DEFAULT_BACKEND_URL,
-  preferBackend = true
+  preferBackend = true,
+  geminiApiKey = import.meta.env?.VITE_GEMINI_API_KEY || ''
 } = {}) => {
+  if (geminiApiKey) {
+    try {
+      onMode?.('Membaca dokumen via Gemini AI...');
+      onProgress?.(15);
+      const geminiResult = await postToGemini(file, geminiApiKey);
+      if (geminiResult?.data?.nik || geminiResult?.data?.nama) {
+        onProgress?.(100);
+        return geminiResult;
+      }
+    } catch (error) {
+      console.warn('Gemini OCR gagal, dialihkan ke backend/lokal:', error.message);
+    }
+  }
+
   if (preferBackend) {
     try {
       onMode?.('Mencoba PaddleOCR lokal...');

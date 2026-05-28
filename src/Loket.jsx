@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { db } from './firebase'; 
-// TAMBAHAN IMPORT: doc, setDoc
-import { collection, addDoc, serverTimestamp, query, where, getDocs, doc, setDoc, runTransaction } from 'firebase/firestore';
 
 const LOGO_PINRANG = "/logo_pinrang.png";
 const LOGO_MALIMPUNG = "/logo_malimpung.png";
-import { STATUS_MAPPING } from './utils/constants';
+import AppButton from './design-system/components/AppButton';
+import AppCard from './design-system/components/AppCard';
+import SyncStatusBanner from './components/system/SyncStatusBanner';
+import { createQueueTicket } from './services/queueService';
+import { updateActiveLocation } from './services/settingsService';
 
 const WILAYAH_KERJA = {
   "Desa Malimpung": ["Dusun Malimpung", "Dusun Palita", "Dusun Pajalele"],
@@ -29,7 +30,9 @@ function Loket() {
   const [dusunAktif, setDusunAktif] = useState("Dusun Malimpung");
   const [loading, setLoading] = useState(false);
   const [strukAktif, setStrukAktif] = useState(null); 
+  const [lastTicket, setLastTicket] = useState(null);
   const [, setBtDevice] = useState(null); const [btCharacteristic, setBtCharacteristic] = useState(null); const [isBtConnected, setIsBtConnected] = useState(false);
+  const [printerMessage, setPrinterMessage] = useState('');
 
   useEffect(() => {
     setDusunAktif(WILAYAH_KERJA[desaAktif][0]);
@@ -41,9 +44,7 @@ function Loket() {
   useEffect(() => {
     const updateLokasiGlobal = async () => {
       try {
-        await setDoc(doc(db, "pengaturan", "lokasi_aktif"), {
-          nama_lokasi: dusunAktif
-        });
+        await updateActiveLocation(dusunAktif);
         console.log("Lokasi berhasil disinkronkan ke TV:", dusunAktif);
       } catch (error) {
         console.error("Gagal sinkronisasi lokasi:", error);
@@ -56,12 +57,27 @@ function Loket() {
   }, [dusunAktif]);
 
   const connectToPrinter = async () => {
+    if (!navigator.bluetooth) {
+      setPrinterMessage('Bluetooth printer hanya tersedia di browser yang mendukung Web Bluetooth, seperti Chrome di Android atau desktop.');
+      return;
+    }
+
     try {
+      setPrinterMessage('Meminta izin Bluetooth dan mencari printer...');
       const device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2', '49535343-fe7d-4ae5-8fa9-9fafd205e455'] });
       const server = await device.gatt.connect(); const services = await server.getPrimaryServices(); let writeableChar = null;
       for (const service of services) { const characteristics = await service.getCharacteristics(); for (const char of characteristics) { if (char.properties.write || char.properties.writeWithoutResponse) { writeableChar = char; break; } } if (writeableChar) break; }
-      if (writeableChar) { setBtDevice(device); setBtCharacteristic(writeableChar); setIsBtConnected(true); alert(`✅ Berhasil terhubung ke Printer: ${device.name || 'Thermal Printer'}`); device.addEventListener('gattserverdisconnected', () => { setIsBtConnected(false); setBtDevice(null); setBtCharacteristic(null); alert("⚠️ Printer Bluetooth terputus!"); }); } else { alert("❌ Printer tidak memiliki akses penulisan (Write) data."); }
-    } catch (error) { console.error(error); alert("❌ Gagal menghubungkan Bluetooth. Pastikan Chrome & Bluetooth menyala."); }
+      if (writeableChar) { setBtDevice(device); setBtCharacteristic(writeableChar); setIsBtConnected(true); setPrinterMessage(`Printer terhubung: ${device.name || 'Thermal Printer'}`); device.addEventListener('gattserverdisconnected', () => { setIsBtConnected(false); setBtDevice(null); setBtCharacteristic(null); setPrinterMessage("Printer Bluetooth terputus. Hubungkan kembali sebelum mencetak tiket."); }); } else { setPrinterMessage("Printer ditemukan, tetapi tidak memiliki akses tulis data. Coba printer lain atau gunakan cetak browser."); }
+    } catch (error) {
+      console.error(error);
+      if (error.name === 'NotFoundError') {
+        setPrinterMessage('Pemilihan printer dibatalkan. Pilih printer Bluetooth saat dialog muncul, atau gunakan cetak browser.');
+      } else if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+        setPrinterMessage('Aplikasi membutuhkan izin Bluetooth untuk mencetak tiket. Izinkan akses Bluetooth dari browser lalu coba lagi.');
+      } else {
+        setPrinterMessage('Gagal menghubungkan Bluetooth. Pastikan Chrome dan Bluetooth aktif, lalu coba lagi.');
+      }
+    }
   };
 
   const sendToPrinter = async (dataArray) => {
@@ -74,30 +90,16 @@ function Loket() {
     try {
       const tglHariIni = new Date().toISOString().split('T')[0];
       let kodeDesa = "A"; if(desaAktif === "Desa Padang Loang") kodeDesa = "B"; if(desaAktif === "Kelurahan Maccirinna") kodeDesa = "C"; if(desaAktif === "Luar Wilayah") kodeDesa = "Z";
-      const q = query(collection(db, "visits"), where("tanggal_pelaksanaan", "==", tglHariIni), where("tempat_pelaksanaan", "==", dusunAktif));
-      const querySnapshot = await getDocs(q);
-      const counterId = `${tglHariIni}_${dusunAktif}`.replace(/[\\.#$[\]/]/g, "_");
-      const counterRef = doc(db, "queue_counters", counterId);
-      const nomorUrut = await runTransaction(db, async (transaction) => {
-        const counterDoc = await transaction.get(counterRef);
-        const currentNumber = counterDoc.exists()
-          ? Number(counterDoc.data().lastNumber || 0)
-          : querySnapshot.size;
-        const nextNumber = currentNumber + 1;
-        transaction.set(counterRef, {
-          tanggal_pelaksanaan: tglHariIni,
-          tempat_pelaksanaan: dusunAktif,
-          desa_pelaksanaan: desaAktif,
-          lastNumber: nextNumber,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-        return nextNumber;
+      const { dataAntrian } = await createQueueTicket({
+        tanggalPelaksanaan: tglHariIni,
+        desaPelaksanaan: desaAktif,
+        tempatPelaksanaan: dusunAktif,
+        kodeDesa
       });
-      const nomorBaru = `${kodeDesa}${String(nomorUrut).padStart(3, '0')}`;
+      const nomorBaru = dataAntrian.nomor_antrian;
       const waktuLengkap = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-
-      const dataAntrian = { nomor_antrian: nomorBaru, status_antrian: STATUS_MAPPING.POS1, waktu_ambil_tiket: serverTimestamp(), tempat_pelaksanaan: dusunAktif, tanggal_pelaksanaan: tglHariIni, desa_pelaksanaan: desaAktif };
-      await addDoc(collection(db, "visits"), dataAntrian);
+      const dataStruk = { ...dataAntrian, waktu_cetak: waktuLengkap };
+      setLastTicket(dataStruk);
 
       if (isBtConnected && btCharacteristic) {
           const encoder = new TextEncoder(); let receiptBytes = [];
@@ -111,16 +113,19 @@ function Loket() {
           receiptBytes.push(...CMD_LINE_SPACING_DEFAULT); receiptBytes.push(...CMD_TINY_FEED); receiptBytes.push(...CMD_CUT_PAPER);
           await sendToPrinter(receiptBytes); setLoading(false);
       } else {
-          const dataStruk = { ...dataAntrian, waktu_cetak: waktuLengkap }; setStrukAktif(dataStruk);
+          setStrukAktif(dataStruk);
           setTimeout(() => { window.print(); setLoading(false); setTimeout(() => setStrukAktif(null), 1000); }, 500);
       }
-    } catch (error) { console.error("Error ambil antrian:", error); alert("❌ Gagal mengambil antrian. Periksa koneksi internet."); setLoading(false); }
+    } catch (error) { console.error("Error ambil antrian:", error); setPrinterMessage("Gagal mengambil antrian. Periksa koneksi internet, lalu coba lagi."); setLoading(false); }
   };
 
   return (
     <>
       <div className="print:hidden w-full min-h-screen bg-slate-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/40 via-slate-900 to-slate-900 flex flex-col items-center p-3 sm:p-6 relative overflow-y-auto pb-20">
-        <div className="w-full max-w-[95%] sm:max-w-md md:max-w-xl bg-white rounded-2xl md:rounded-[3rem] shadow-2xl overflow-hidden animate-fade-in-up border border-slate-100 mt-4 md:mt-0 mb-4">
+        <div className="fixed left-3 top-3 z-50">
+          <SyncStatusBanner />
+        </div>
+        <AppCard className="w-full max-w-[95%] sm:max-w-md md:max-w-xl bg-white rounded-2xl md:rounded-[3rem] shadow-2xl overflow-hidden animate-fade-in-up border border-slate-100 mt-4 md:mt-0 mb-4">
           <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white p-5 md:p-8 text-center relative overflow-hidden">
               <div className="absolute -top-10 -right-10 text-8xl md:text-9xl opacity-10 pointer-events-none transform rotate-12">🎟️</div>
               <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
@@ -148,6 +153,27 @@ function Loket() {
                   </div>
               </div>
 
+              {printerMessage && (
+                  <div className={`rounded-xl border px-3 py-2 text-xs font-bold ${isBtConnected ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                      {printerMessage}
+                  </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Lokasi Aktif</p>
+                      <p className="mt-1 text-sm font-black leading-snug text-slate-800">{dusunAktif}</p>
+                  </div>
+                  <div className="rounded-2xl border border-teal-200 bg-teal-50 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-teal-700">Nomor Terakhir</p>
+                      <p className="mt-1 text-2xl font-black leading-none text-slate-900">{lastTicket?.nomor_antrian || '-'}</p>
+                  </div>
+                  <div className={`rounded-2xl border p-3 ${isBtConnected ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+                      <p className={`text-[9px] font-black uppercase tracking-[0.16em] ${isBtConnected ? 'text-emerald-700' : 'text-amber-700'}`}>Printer</p>
+                      <p className="mt-1 text-sm font-black leading-snug text-slate-800">{isBtConnected ? 'Tersambung' : 'Cetak Browser'}</p>
+                  </div>
+              </div>
+
               <div className="space-y-3 md:space-y-4">
                   <div>
                       <label className="block text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 md:mb-2 ml-1">Desa / Kelurahan</label>
@@ -170,11 +196,21 @@ function Loket() {
                   </div>
               </div>
 
-              <button onClick={handleAmbilAntrian} disabled={loading} className="w-full mt-2 md:mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-sm sm:text-base md:text-lg tracking-wider py-3.5 md:py-5 rounded-xl md:rounded-2xl shadow-[0_8px_20px_-8px_rgba(37,99,235,0.6)] md:shadow-[0_10px_25px_-10px_rgba(37,99,235,0.6)] hover:shadow-[0_15px_30px_-10px_rgba(37,99,235,0.8)] hover:from-blue-700 hover:to-indigo-700 transition-all duration-300 transform hover:-translate-y-0.5 md:hover:-translate-y-1 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2 md:gap-3">
-                  {loading ? ( <><span className="animate-spin text-lg md:text-xl">⏳</span> SEDANG MENCETAK...</> ) : ( <><span className="text-lg md:text-xl drop-shadow-md">🖨️</span> CETAK TIKET ANTRIAN</> )}
-              </button>
+              <AppButton onClick={handleAmbilAntrian} disabled={loading} size="xl" className="w-full mt-2 md:mt-4 text-sm md:text-lg tracking-wider flex justify-center items-center gap-2 md:gap-3">
+                {loading ? (<><span className="animate-spin text-lg md:text-xl">⏳</span> MEMPROSES ANTREAN...</>) : (<><span className="text-lg md:text-xl drop-shadow-md">🖨️</span> AMBIL NOMOR ANTREAN</>)}
+              </AppButton>
+
+              {lastTicket && (
+                  <div className="rounded-2xl border border-teal-200 bg-teal-50 p-4 text-center shadow-sm">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-teal-700">Nomor Terakhir</p>
+                      <p className="mt-2 text-5xl font-black tracking-tight text-slate-900">{lastTicket.nomor_antrian}</p>
+                      <p className="mt-2 text-xs font-bold text-slate-500">
+                          {lastTicket.tempat_pelaksanaan} - {lastTicket.waktu_cetak} WITA
+                      </p>
+                  </div>
+              )}
           </div>
-        </div>
+        </AppCard>
         <div className="mt-4 md:mt-8 text-center text-slate-500 text-[9px] md:text-[10px] uppercase font-bold tracking-widest print:hidden">Sistem Loket Terpadu TERSANJUNG © 2026</div>
       </div>
       {strukAktif && !isBtConnected && (
@@ -193,3 +229,4 @@ function Loket() {
 }
 
 export default Loket;
+

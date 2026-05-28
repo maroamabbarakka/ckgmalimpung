@@ -1,13 +1,11 @@
-export const STATUS_MAPPING = {
-  POS1: "Antri Pos 1",
-  POS2: "Antri Pos 2",
-  POS3: "Antri Pos 3",
-  POS4: "Antri Pos 4",
-  POS5: "Antri Pos 5",
-  POS6: "Antri Pos 6",
-  POS7: "Antri Pos 7",
-  SELESAI: "Selesai"
-};
+export {
+  STATUS_MAPPING,
+  QUEUE_STATUS_ALIASES,
+  getQueueStatusKey,
+  getQueueStatusValues,
+  isQueueStatus,
+  normalizeQueueStatus
+} from './queueStatus';
 
 export const DESIGN_SYSTEM = {
   colors: {

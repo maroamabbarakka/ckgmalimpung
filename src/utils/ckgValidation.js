@@ -1,5 +1,25 @@
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
+export const normalizeIdentityText = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+export const buildChildIdentityKey = ({ patientName, birthDate, waliNik }) => {
+  const normalizedName = normalizeIdentityText(patientName);
+  if (!normalizedName || !birthDate || !waliNik) return '';
+  return `child:${normalizedName}:${birthDate}:${waliNik}`;
+};
+
+export const buildStableNonNik = ({ patientName, birthDate, waliNik }) => {
+  const normalizedName = normalizeIdentityText(patientName);
+  if (!normalizedName || !birthDate || !waliNik) return '';
+  return `NONIK-${waliNik}-${birthDate}-${normalizedName}`;
+};
+
 const getVisitDate = (visit) => {
   const raw = visit.waktu_selesai_total || visit.tanggal_kunjungan || visit.waktu_ambil_tiket;
   if (raw?.toDate) return raw.toDate();

@@ -1,5 +1,4 @@
-import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { writeAuditLog } from '../services/auditService';
 
 /**
  * Mencatat aktivitas pengguna ke Firestore (koleksi activity_logs)
@@ -8,14 +7,9 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
  */
 export const logActivity = async (aksi, modul) => {
     try {
-        const username = sessionStorage.getItem('username') || 'sistem';
-        const nama = sessionStorage.getItem('namaPegawai') || 'Sistem / Anonim';
-        await addDoc(collection(db, "activity_logs"), {
-            waktu: serverTimestamp(),
-            user: username,
-            nama: nama,
-            aksi: aksi,
-            modul: modul
+        await writeAuditLog({
+            action: aksi,
+            module: modul
         });
     } catch (e) {
         console.error("Gagal mencatat log aktivitas:", e);

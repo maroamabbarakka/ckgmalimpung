@@ -1,8 +1,14 @@
 ﻿import { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
-import { db } from './firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useAuth } from './auth/AuthContext';
 import { createQrDataUrl } from './utils/qrCode';
+import { safeBack } from './utils/navigation';
+import { maskNik } from './utils/privacy';
+import { STATUS_MAPPING } from './utils/constants';
+import { canPrintFinalReport } from './features/workflow/workflowGuards';
+import { getVisitReportById } from './services/reportService';
+import EmptyState from './components/system/EmptyState';
+import LoadingState from './components/system/LoadingState';
 
 const LOGO_MALIMPUNG = "/logo_malimpung.png";
 
@@ -168,18 +174,26 @@ const chunkPrintRows = (rows, firstPageLimit = 13, nextPageLimit = 24) => {
 
 function RaporDigital() {
     const { id } = useParams();
+    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const fallbackPetugas = searchParams.get('petugas') || sessionStorage.getItem('namaPegawai') || '';
+    const { user } = useAuth();
+    const fallbackPetugas = searchParams.get('petugas') || user?.nama || '';
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [qrCodeUrl, setQrCodeUrl] = useState('');
 
     useEffect(() => {
         const fetchRapor = async () => {
+            if (!id) {
+                setData(null);
+                setLoading(false);
+                document.title = `Rapor Tidak Ditemukan - PKM Malimpung`;
+                return;
+            }
+
             try {
-                const docSnap = await getDoc(doc(db, "visits", id));
-                if (docSnap.exists()) {
-                    const docData = docSnap.data();
+                const docData = await getVisitReportById(id);
+                if (docData) {
                     setData(docData);
                     document.title = `Rapor CKG ${docData.pasien_snapshot?.nama || 'Anonim'} - PKM Malimpung`;
                 } else {
@@ -207,8 +221,8 @@ function RaporDigital() {
         };
     }, []);
 
-    if (loading) return <div className="min-h-screen bg-slate-50 flex justify-center items-center font-bold text-[#0f766e] animate-pulse">Menyusun Rapor Kesehatan...</div>;
-    if (!data) return <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center text-slate-500 font-bold gap-4"><span className="text-5xl mb-2">📄❓</span> Data Rapor tidak ditemukan.</div>;
+    if (loading) return <LoadingState title="Menyusun Rapor Kesehatan..." className="min-h-screen" />;
+    if (!data) return <EmptyState icon="?" title="Data Rapor tidak ditemukan." description="Pastikan tautan rapor benar atau buka kembali dari dashboard pemeriksaan." className="min-h-screen" />;
 
     // --- EKSTRAKSI DATA INDIKATOR UTAMA ---
     const directTd = data.pos2?.td;
@@ -283,6 +297,11 @@ function RaporDigital() {
     const printRows = getPrintRows();
     const isKunjunganRumah = String(data.jalur_pemeriksaan || '').toLowerCase().includes('kunjungan rumah');
     const printPages = chunkPrintRows(printRows);
+    const canPrintOfficialReport = canPrintFinalReport(data) || data.status_antrian === STATUS_MAPPING.SELESAI;
+    const handlePrint = () => {
+        if (!canPrintOfficialReport) return;
+        window.print();
+    };
 
     return (
         <div className="min-h-screen bg-slate-100 font-sans relative">
@@ -336,9 +355,18 @@ function RaporDigital() {
                                 <p className="truncate text-[10px] font-semibold text-white/90 md:text-xs">Tanggal diperbarui: {tglPanjang}</p>
                             </div>
                         </div>
-                        <button onClick={() => window.print()} className="shrink-0 rounded-lg bg-white px-3 py-2 text-[10px] font-black text-[#078b78] shadow-sm hover:bg-teal-50 md:px-4">
-                            Unduh
-                        </button>
+                        <div className="flex shrink-0 items-center gap-2">
+                            <button onClick={() => safeBack(navigate, '/dashboard')} className="rounded-lg bg-white/15 px-3 py-2 text-[10px] font-black text-white ring-1 ring-white/35 hover:bg-white/25 md:px-4">
+                                Kembali
+                            </button>
+                            <button
+                                onClick={handlePrint}
+                                disabled={!canPrintOfficialReport}
+                                className="rounded-lg bg-white px-3 py-2 text-[10px] font-black text-[#078b78] shadow-sm hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50 md:px-4"
+                            >
+                                Unduh
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -353,7 +381,7 @@ function RaporDigital() {
                                 <span className="text-[10px] font-bold text-teal-600">Detail data</span>
                             </div>
                             <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-[11px] font-semibold text-slate-600 md:grid-cols-5">
-                                <span>NIK: {data.patientNIK}</span>
+                                <span>NIK: {maskNik(data.patientNIK)}</span>
                                 <span>Tgl lahir: {data.pasien_snapshot?.tgl_lahir || '-'}</span>
                                 <span>Usia: {data.umur_saat_periksa || '-'} tahun</span>
                                 <span>Kategori: {data.kategori_usia_satusehat || '-'}</span>
@@ -374,6 +402,12 @@ function RaporDigital() {
                         <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-800">Kesimpulan & Edukasi</h3>
                         <p className="text-sm font-semibold leading-relaxed text-slate-700">{data.kesimpulan_dokter || data.pos5?.keterangan || 'Tidak ada catatan klinis khusus. Pasien dalam batas normal. Tetap pertahankan pola hidup sehat.'}</p>
                     </section>
+
+                    {!canPrintOfficialReport && (
+                        <section className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
+                            Rapor ini masih mode pratinjau. Cetak/unduh rapor resmi aktif setelah pemeriksaan difinalisasi di Pos 7.
+                        </section>
+                    )}
 
                     <h3 className="mb-3 text-sm font-black text-slate-900">Hasil Pemeriksaan Detail</h3>
 
@@ -432,7 +466,11 @@ function RaporDigital() {
                 </div>
 
                 <div className="fixed bottom-6 left-0 z-40 flex w-full justify-center px-4 md:hidden">
-                    <button onClick={() => window.print()} className="flex w-full max-w-sm items-center justify-center gap-3 rounded-2xl border border-slate-700 bg-slate-900 px-6 py-4 text-sm font-black text-white shadow-2xl transition-transform active:scale-95">
+                    <button
+                        onClick={handlePrint}
+                        disabled={!canPrintOfficialReport}
+                        className="flex w-full max-w-sm items-center justify-center gap-3 rounded-2xl border border-slate-700 bg-slate-900 px-6 py-4 text-sm font-black text-white shadow-2xl transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
                         CETAK LAPORAN (PDF)
                     </button>

@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "ckg-malimpung"
-  }
+    "default": "ckg-malimpung",
+    "ckg-malimpung": "ckg-malimpung"
+  },
+  "targets": {},
+  "etags": {}
 }

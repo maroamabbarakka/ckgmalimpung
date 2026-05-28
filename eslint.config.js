@@ -15,6 +15,8 @@ export default defineConfig([
     'src - ver*',
     'src/pkg_headers.js',
     'public/vendor',
+    'test-results',
+    'playwright-report',
   ]),
   {
     files: ['**/*.{js,jsx}'],

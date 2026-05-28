@@ -1,54 +1,53 @@
-import { useState, useEffect } from 'react';
-import { db } from './firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, serverTimestamp, runTransaction } from 'firebase/firestore';
+import { useState } from 'react';
+import { useAuth } from './auth/AuthContext';
 import formSchemas from './formSchemas.json';
 import DynamicFormRenderer from './DynamicFormRenderer';
 import { STATUS_MAPPING } from './utils/constants';
+import { VISIT_STATUS } from './features/workflow/workflowStatus';
 import { buildQuestionMap, sanitizeFormDataForSchema } from './utils/formSchemaData';
+import { auditQueueTransition } from './services/queueAudit';
+import { buildQueueSpeech, claimVisitForStaff, createTvQueueCall } from './services/queueService';
+import { updateVisit } from './services/visitService';
+import useQueue from './hooks/useQueue';
+import PatientStickyHeader from './components/patient/PatientStickyHeader';
+import PosBottomActionBar from './components/patient/PosBottomActionBar';
+import QueueEmptyState from './components/patient/QueueEmptyState';
 
 function Pos6() {
-  const [antrian, setAntrian] = useState([]);
+  const { user } = useAuth();
+  const antrian = useQueue('POS6');
   const [pasienAktif, setPasienAktif] = useState(null);
   const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(false); 
+  const [callingVisitId, setCallingVisitId] = useState(null);
   const [pesan, setPesan] = useState('');
 
   const umurPasien = pasienAktif?.umur_saat_periksa || 0;
 
-  useEffect(() => {
-    const q = query(collection(db, "visits"), where("status_antrian", "in", [STATUS_MAPPING.POS6, 'Menunggu Pos 6', 'Antri Pos 6', 'Antre Pos 6', 'POS 6', 'Pos 6']));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = []; 
-      snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-      setAntrian(data.sort((a, b) => (a.waktu_ambil_tiket?.toMillis() || 0) - (b.waktu_ambil_tiket?.toMillis() || 0)));
-    });
-    return () => unsubscribe();
-  }, []);
-
   const handlePanggil = async (item) => {
+    if (callingVisitId || pasienAktif) return;
+    setCallingVisitId(item.id);
     try {
-      await runTransaction(db, async (transaction) => {
-        const docRef = doc(db, "visits", item.id);
-        const docSnap = await transaction.get(docRef);
-        if (!docSnap.exists()) throw new Error("Data tidak ditemukan!");
-        const data = docSnap.data();
-        const rawRole = sessionStorage.getItem('rolePegawai') || '';
-        const isAdmin = rawRole.includes('admin');
-        if (!isAdmin && data.petugas_aktif && data.petugas_aktif !== sessionStorage.getItem('namaPegawai')) {
-             throw new Error(`Pasien sedang ditangani oleh ${data.petugas_aktif}`);
-        }
-        transaction.update(docRef, { petugas_aktif: sessionStorage.getItem('namaPegawai') || 'Petugas' });
+      const activeVisit = await claimVisitForStaff({
+        visitId: item.id,
+        staffName: user?.nama || 'Petugas',
+        isAdmin: user?.roles?.includes('admin'),
+        actor: user,
+        module: 'POS6',
+        workflowStatus: VISIT_STATUS.POS6_IN_PROGRESS
       });
-      const activeSchema = getSchemaForVisit(item);
-      setPasienAktif(item); setPesan(''); setFormData(sanitizeFormDataForSchema(activeSchema, item.pos6 || {})); window.scrollTo({ top: 0, behavior: 'smooth' });
-      try { await addDoc(collection(db, "panggilan_tv"), { pos: "POS 6", identitas_layar: item.nomor_antrian, teks_suara: `Nomor antrean... ${item.nomor_antrian.replace(/-/g, ' ')}... Silakan menuju meja Pos Enam.`, waktu: serverTimestamp() }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 6:", e); }
+      const activeSchema = getSchemaForVisit(activeVisit);
+      setPasienAktif(activeVisit); setPesan(''); setFormData(sanitizeFormDataForSchema(activeSchema, activeVisit.pos6 || {})); window.scrollTo({ top: 0, behavior: 'smooth' });
+      try { await createTvQueueCall({ pos: "POS 6", queueNumber: activeVisit.nomor_antrian, speechText: buildQueueSpeech(activeVisit.nomor_antrian, 'Silakan menuju meja Pos Enam.') }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 6:", e); }
     } catch (e) {
       alert("⚠️ " + e.message);
+    } finally {
+      setCallingVisitId(null);
     }
   };
 
   const handleSimpanData = async (e) => {
-    e.preventDefault(); if (!pasienAktif) return; setLoading(true); setPesan('');
+    e.preventDefault(); if (!pasienAktif || loading) return; setLoading(true); setPesan('');
     try {
       // 🚀 Setelah POS 6 selesai, pasien dikirim ke POS 7 (Review Dokter & Rapor)
       const activeSchema = getActiveSchema();
@@ -56,12 +55,20 @@ function Pos6() {
         posNumber: 6,
         kategoriUsia: pasienAktif.kategori_usia_satusehat || '-'
       });
-      await updateDoc(doc(db, "visits", pasienAktif.id), {
+      await updateVisit(pasienAktif.id, {
+          status: VISIT_STATUS.POS6_COMPLETE,
           status_antrian: STATUS_MAPPING.POS7,
-          petugas_pos6: sessionStorage.getItem('namaPegawai') || 'Sistem',
+          petugas_pos6: user?.nama || 'Sistem',
           pos6: sanitizedFormData,
           pos6_question_map: buildQuestionMap(activeSchema),
           petugas_aktif: null
+      });
+      await auditQueueTransition({
+        visit: pasienAktif,
+        module: 'Pos 6',
+        action: 'Simpan Pos 6 dan lanjut ke Pos 7',
+        toStatus: STATUS_MAPPING.POS7,
+        extra: { status: VISIT_STATUS.POS6_COMPLETE, petugas_pos6: user?.nama || 'Sistem' }
       });
       setPesan(`✅ Data terekam.`); setTimeout(() => setPasienAktif(null), 1000); 
     } catch (error) { setPesan("❌ Gagal menyimpan data: " + error.message); } finally { setLoading(false); }
@@ -70,7 +77,7 @@ function Pos6() {
   const handleBatal = async () => {
     if (pasienAktif?.id) {
       try {
-        await updateDoc(doc(db, "visits", pasienAktif.id), { petugas_aktif: null });
+        await updateVisit(pasienAktif.id, { petugas_aktif: null });
       } catch (error) {
         console.error("Gagal melepas pasien:", error);
       }
@@ -85,9 +92,15 @@ function Pos6() {
     setLoading(true);
     setPesan('');
     try {
-      await updateDoc(doc(db, "visits", pasienAktif.id), {
+      await updateVisit(pasienAktif.id, {
         status_antrian: STATUS_MAPPING.POS5,
         petugas_aktif: null
+      });
+      await auditQueueTransition({
+        visit: pasienAktif,
+        module: 'Pos 6',
+        action: 'Kembalikan pasien dari Pos 6 ke Pos 5',
+        toStatus: STATUS_MAPPING.POS5
       });
       setPasienAktif(null);
     } catch (error) {
@@ -129,21 +142,27 @@ function Pos6() {
               <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">POS 6: DIAGNOSIS DOKTER ({antrian.length})</h3>
             </div>
             
-            {antrian.length === 0 ? (<div className="text-center py-16 opacity-50">⚕️ <p className="font-bold text-[10px] uppercase text-slate-400 mt-2">Tidak Ada Antrean</p></div>) : (
+            {antrian.length === 0 ? (<QueueEmptyState accentClass="text-[#059669]" />) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 {antrian.map((item) => (
-                <div key={item.id} onClick={() => handlePanggil(item)} className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col items-center justify-center cursor-pointer hover:border-[#10b981] group shadow-sm transition-all">
+                <button type="button" key={item.id} onClick={() => handlePanggil(item)} disabled={Boolean(callingVisitId)} className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col items-center justify-center cursor-pointer hover:border-[#10b981] group shadow-sm transition-all disabled:cursor-wait disabled:opacity-60">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 group-hover:text-[#10b981]">Antrian</p>
                     <h3 className="text-3xl font-black text-slate-800 mb-3 group-hover:text-[#10b981]">{item.nomor_antrian}</h3>
-                    <div className="bg-slate-100 text-slate-600 text-[8px] font-black px-3 py-1 rounded uppercase tracking-widest group-hover:bg-[#ecfdf5] group-hover:text-[#059669]">{item.kategori_usia_satusehat}</div>
-                </div>
+                    <div className="bg-slate-100 text-slate-600 text-[8px] font-black px-3 py-1 rounded uppercase tracking-widest group-hover:bg-[#ecfdf5] group-hover:text-[#059669]">{callingVisitId === item.id ? 'Memanggil...' : item.kategori_usia_satusehat}</div>
+                </button>
                 ))}
             </div>
             )}
         </div>
       ) : (
       <div className="bg-slate-50 rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
-        <div className="bg-[#10b981] p-6 text-white flex justify-between items-center">
+        <PatientStickyHeader
+          visit={pasienAktif}
+          posLabel="Pos 6: Diagnosis Dokter"
+          accentClass="bg-[#10b981]"
+          onCancel={handleBatal}
+        />
+        <div className="hidden bg-[#10b981] p-6 text-white flex justify-between items-center">
             <div className="flex items-center gap-3">
               <span className="text-3xl">⚕️</span>
               <h2 className="text-4xl font-black">{pasienAktif.nomor_antrian}</h2>
@@ -159,14 +178,13 @@ function Pos6() {
             </div>
 
             <DynamicFormRenderer schema={getActiveSchema()} formData={formData} fullData={pasienAktif} onChange={(id, val) => setFormData(prev => ({ ...prev, [id]: val }))} posNumber={6} primaryColor="emerald" kategoriUsia={pasienAktif.kategori_usia_satusehat || '-'} />            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-6 sticky mobile-safe-submit z-40">
-              <button type="button" onClick={handleKembaliPosSebelumnya} disabled={loading} className="w-full min-h-[60px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-black rounded-2xl shadow-sm active:scale-95 transition-all text-sm uppercase disabled:opacity-50">
-                  ‹ Pos 5
-              </button>
-              <button type="submit" disabled={loading} className="w-full min-h-[60px] bg-[#059669] text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all text-sm uppercase disabled:opacity-50">
-                  {loading ? 'MENYIMPAN...' : 'Simpan & Ke Pos 7 ›'}
-              </button>
-            </div>
+            <PosBottomActionBar
+              backLabel="Kembali ke Pos 5"
+              primaryLabel="Simpan & Lanjut Pos 7"
+              loading={loading}
+              onBack={handleKembaliPosSebelumnya}
+              primaryColorClass="bg-[#059669] hover:bg-emerald-700"
+            />
         </form>
       </div>
       )}

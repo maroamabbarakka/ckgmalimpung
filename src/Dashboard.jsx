@@ -1,9 +1,19 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { db } from './firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { exportToPKGExcel, exportClusterExcel, exportToPKG_PDF, exportClusterPDF } from './utils/exportPKG';
 import { STATUS_MAPPING } from './utils/constants';
+import { useAuth } from './auth/AuthContext';
+import { writeAuditLog } from './services/auditService';
+import { maskNik } from './utils/privacy';
+import QueueStatusBadge from './design-system/components/QueueStatusBadge';
+import {
+  calculateBottleneck,
+  calculateDashboardMetrics,
+  calculateDataQuality,
+  deleteDashboardVisits,
+  subscribeDashboardVisits,
+  updateDashboardVisit
+} from './features/dashboard/dashboardService';
 
 // =====================================================================
 // IMPORT STANDAR VITE: HANYA RESPONSIVE, TANPA WIDTH PROVIDER
@@ -100,6 +110,38 @@ const ProgressBarAge = ({ label, count, total, colorClass }) => {
     );
 };
 
+const DashboardInsightPanel = ({ insights = [] }) => (
+    <section className="mx-4 mb-4 lg:mx-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Yang perlu diperhatikan hari ini</p>
+                <h3 className="text-base font-black text-slate-900 md:text-lg">Prioritas Operasional</h3>
+            </div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Ringkas untuk keputusan cepat</p>
+        </div>
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+            {insights.map((item) => (
+                <div
+                    key={item.label}
+                    className={`rounded-2xl border px-4 py-3 ${
+                        item.tone === 'rose'
+                            ? 'border-rose-200 bg-rose-50 text-rose-800'
+                            : item.tone === 'amber'
+                                ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                : item.tone === 'blue'
+                                    ? 'border-blue-200 bg-blue-50 text-blue-800'
+                                    : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                    }`}
+                >
+                    <p className="text-2xl font-black leading-none">{item.value}</p>
+                    <p className="mt-1 text-[10px] font-black uppercase tracking-widest">{item.label}</p>
+                    <p className="mt-1 text-[11px] font-bold leading-snug opacity-80">{item.detail}</p>
+                </div>
+            ))}
+        </div>
+    </section>
+);
+
 const extractDashboardValue = (posData, keywords, questionMap = {}) => {
     if (!posData) return null;
     const key = Object.keys(posData).find(k => {
@@ -121,17 +163,6 @@ const getVisitGlucose = (visit) => {
     const gds = visit.pos4?.gds || extractDashboardValue(visit.pos4, ['gula darah sewaktu', 'gds'], visit.pos4_question_map) || visit.pos2?.gds || extractDashboardValue(visit.pos2, ['gula darah sewaktu', 'gds'], visit.pos2_question_map);
     const gdp = visit.pos4?.gdp || extractDashboardValue(visit.pos4, ['gula darah puasa', 'gdp'], visit.pos4_question_map) || visit.pos2?.gdp || extractDashboardValue(visit.pos2, ['gula darah puasa', 'gdp'], visit.pos2_question_map);
     return { gds, gdp, label: gds || gdp || '-' };
-};
-
-const getDashboardUserRoles = () => {
-    const rawRole = sessionStorage.getItem('rolePegawai');
-    if (!rawRole) return [];
-    try {
-        const parsed = JSON.parse(rawRole);
-        return Array.isArray(parsed) ? parsed : [String(parsed)];
-    } catch {
-        return rawRole.split(',').map(role => role.trim()).filter(Boolean);
-    }
 };
 
 const POS_QUEUE_OPTIONS = [
@@ -157,6 +188,11 @@ const normalizeEditableQueueStatus = (status) => {
   return POS_QUEUE_OPTIONS.find(pos => pos.key === posKey)?.value || STATUS_MAPPING.POS1;
 };
 
+const getBottleneckLabel = (status) => {
+  if (status === 'UNKNOWN') return 'Status kosong';
+  return POS_QUEUE_OPTIONS.find(pos => pos.value === status)?.trafficLabel || status;
+};
+
 // =====================================================================
 // KONFIGURASI TATA LETAK DESKTOP (MATEMATIKA 24 KOLOM)
 // Mobile tidak lagi menggunakan konfigurasi ini
@@ -178,7 +214,9 @@ const defaultLayouts = {
     { i: 'stat-indera', x: 21, y: 4, w: 3, h: 4, minW: 2, minH: 3 },
     
     { i: 'ekspor', x: 6, y: 8, w: 18, h: 4, minW: 10, minH: 2 },
-    { i: 'tabel', x: 0, y: 12, w: 24, h: 8, minW: 12, minH: 6 }
+    { i: 'quality', x: 0, y: 12, w: 12, h: 5, minW: 8, minH: 4 },
+    { i: 'bottleneck', x: 12, y: 12, w: 12, h: 5, minW: 8, minH: 4 },
+    { i: 'tabel', x: 0, y: 17, w: 24, h: 8, minW: 12, minH: 6 }
   ]
 };
 
@@ -189,8 +227,9 @@ const defaultLayouts = {
 // =====================================================================
 function Dashboard() {
   const navigate = useNavigate();
-  const isAuthenticated = sessionStorage.getItem('isAuthenticated') === 'true';
-  const isAdmin = getDashboardUserRoles().includes('admin');
+  const { isAuthenticated: authIsAuthenticated, hasRole, signOut } = useAuth();
+  const isAuthenticated = authIsAuthenticated;
+  const isAdmin = hasRole('admin');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   const [visits, setVisits] = useState([]);
@@ -207,7 +246,7 @@ function Dashboard() {
 
   const [layouts, setLayouts] = useState(() => {
     try {
-        const saved = localStorage.getItem("dashboardLayout_v20");
+        const saved = localStorage.getItem("dashboardLayout_v21");
         return saved ? JSON.parse(saved) : defaultLayouts;
     } catch { return defaultLayouts; }
   });
@@ -235,7 +274,7 @@ function Dashboard() {
     // Hindari menyimpan layout saat isMobile (karena RGL tidak aktif secara penuh)
     if (isMobile) return;
     setLayouts(allLayouts);
-    localStorage.setItem("dashboardLayout_v20", JSON.stringify(allLayouts));
+    localStorage.setItem("dashboardLayout_v21", JSON.stringify(allLayouts));
   };
 
   const toggleEditMode = () => {
@@ -251,7 +290,7 @@ function Dashboard() {
     if (!isAdmin) return;
     if(window.confirm("Kembalikan tata letak dashboard ke Standar Pabrik?")){
         setLayouts(defaultLayouts);
-        localStorage.removeItem("dashboardLayout_v20");
+        localStorage.removeItem("dashboardLayout_v21");
         setIsEditMode(false);
         setPesan("🔄 Tata letak berhasil di-reset penuh.");
         setTimeout(() => setPesan(""), 3000);
@@ -260,10 +299,7 @@ function Dashboard() {
 
   // --- FETCHING DATA ---
   useEffect(() => {
-    const q = query(collection(db, "visits"), orderBy("waktu_ambil_tiket", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = [];
-      snapshot.forEach((doc) => data.push({ id: doc.id, ...doc.data() }));
+    const unsubscribe = subscribeDashboardVisits((data) => {
       setVisits(data);
       kalkulasiStatistik(data);
       setLoading(false);
@@ -378,6 +414,46 @@ function Dashboard() {
     return filteredVisits.filter(v => v.status_antrian === STATUS_MAPPING.SELESAI);
   }, [filteredVisits]);
 
+  const decisionMetrics = useMemo(() => calculateDashboardMetrics(filteredVisits), [filteredVisits]);
+  const dataQuality = useMemo(() => calculateDataQuality(filteredVisits), [filteredVisits]);
+  const bottleneckRows = useMemo(() => {
+    const bottleneck = calculateBottleneck(filteredVisits);
+    return Object.entries(bottleneck)
+      .map(([status, count]) => ({ status, label: getBottleneckLabel(status), count }))
+      .sort((a, b) => b.count - a.count);
+  }, [filteredVisits]);
+  const maxBottleneckCount = bottleneckRows[0]?.count || 1;
+  const insightRows = useMemo(() => {
+    const qualityIssues = dataQuality.missingNik + dataQuality.missingBirthDate + dataQuality.missingVillage + dataQuality.invalidWorkflow + dataQuality.finalizedWithoutDoctor;
+    const topBottleneck = bottleneckRows[0];
+    return [
+      {
+        value: decisionMetrics.inProgress,
+        label: 'Belum final',
+        detail: decisionMetrics.inProgress > 0 ? 'Pasien masih berjalan di alur layanan.' : 'Semua pasien terfilter sudah final.',
+        tone: decisionMetrics.inProgress > 0 ? 'amber' : 'emerald'
+      },
+      {
+        value: topBottleneck?.count || 0,
+        label: topBottleneck ? topBottleneck.label : 'Bottleneck',
+        detail: topBottleneck ? 'Pos dengan antrean tertahan terbanyak.' : 'Belum ada antrean tertahan.',
+        tone: (topBottleneck?.count || 0) >= 10 ? 'rose' : (topBottleneck?.count || 0) > 0 ? 'blue' : 'emerald'
+      },
+      {
+        value: qualityIssues,
+        label: 'Masalah data',
+        detail: qualityIssues > 0 ? 'Cek identitas, workflow, atau finalisasi dokter.' : 'Data terfilter tampak lengkap.',
+        tone: qualityIssues > 0 ? 'rose' : 'emerald'
+      },
+      {
+        value: stats.klinis.hipertensi + stats.klinis.hiperglikemia + stats.klinis.paru_ppok + stats.klinis.mental,
+        label: 'Risiko dominan',
+        detail: 'Gabungan tensi, gula, paru, dan mental untuk pemantauan cepat.',
+        tone: (stats.klinis.hipertensi + stats.klinis.hiperglikemia + stats.klinis.paru_ppok + stats.klinis.mental) > 0 ? 'amber' : 'emerald'
+      }
+    ];
+  }, [bottleneckRows, dataQuality, decisionMetrics, stats]);
+
   const requestSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
@@ -431,12 +507,40 @@ function Dashboard() {
   // =====================================================================
   // FUNGSI EKSPOR FLAT
   // =====================================================================
-  const exportExcelKategori = (kategori) => {
-      exportClusterExcel(completedFilteredVisits, kategori);
+  const exportExcelKategori = async (kategori) => {
+      await exportClusterExcel(completedFilteredVisits, kategori);
+      await writeAuditLog({
+          action: `Export Excel klaster ${kategori}`,
+          module: 'Dashboard',
+          after: { kategori, total: completedFilteredVisits.length }
+      });
   };
 
-  const exportPdfKategori = (kategori) => {
-      exportClusterPDF(completedFilteredVisits, kategori);
+  const exportPdfKategori = async (kategori) => {
+      await exportClusterPDF(completedFilteredVisits, kategori);
+      await writeAuditLog({
+          action: `Export PDF klaster ${kategori}`,
+          module: 'Dashboard',
+          after: { kategori, total: completedFilteredVisits.length }
+      });
+  };
+
+  const exportExcelKolektif = async () => {
+      await exportToPKGExcel(completedFilteredVisits);
+      await writeAuditLog({
+          action: 'Export Excel kolektif',
+          module: 'Dashboard',
+          after: { total: completedFilteredVisits.length }
+      });
+  };
+
+  const exportPdfKolektif = async () => {
+      await exportToPKG_PDF(completedFilteredVisits);
+      await writeAuditLog({
+          action: 'Export PDF kolektif',
+          module: 'Dashboard',
+          after: { total: completedFilteredVisits.length }
+      });
   };
 
   // --- HANDLER LAINNYA ---
@@ -452,11 +556,14 @@ function Dashboard() {
       if (selectedRows.length === 0) return;
       if (!window.confirm(`Yakin menghapus ${selectedRows.length} data secara permanen?`)) return;
       try {
-          const batch = writeBatch(db);
-          selectedRows.forEach(id => {
-              batch.delete(doc(db, "visits", id));
+          await deleteDashboardVisits(selectedRows);
+          await writeAuditLog({
+              action: 'Hapus data kunjungan massal',
+              module: 'Dashboard',
+              before: { visitIds: selectedRows },
+              after: { totalDeleted: selectedRows.length }
           });
-          await batch.commit(); setSelectedRows([]); alert("Data kunjungan dihapus. Master pasien tetap disimpan untuk menjaga riwayat pasien.");
+          setSelectedRows([]); alert("Data kunjungan dihapus. Master pasien tetap disimpan untuk menjaga riwayat pasien.");
       } catch (e) { alert("Gagal: " + e.message); }
   };
 
@@ -479,19 +586,38 @@ function Dashboard() {
               alert("NIK harus 16 digit angka, atau gunakan format NONIK untuk pasien tanpa NIK.");
               return;
           }
-          await updateDoc(doc(db, "visits", editingVisit.id), {
+          const after = {
               patientNIK: nikTrimmed,
-              "pasien_snapshot.nama": editForm.nama,
+              pasienName: editForm.nama,
               status_antrian: editForm.status_antrian,
+              kesimpulan_dokter: editForm.keterangan_akhir
+          };
+          await updateDashboardVisit(editingVisit.id, {
+              patientNIK: after.patientNIK,
+              "pasien_snapshot.nama": after.pasienName,
+              status_antrian: after.status_antrian,
               petugas_aktif: null,
-              kesimpulan_dokter: editForm.keterangan_akhir,
-              "pos4.keterangan": editForm.keterangan_akhir
+              kesimpulan_dokter: after.kesimpulan_dokter,
+              "pos4.keterangan": after.kesimpulan_dokter
+          });
+          await writeAuditLog({
+              action: 'Edit data kunjungan',
+              module: 'Dashboard',
+              visitId: editingVisit.id,
+              patientKey: editingVisit.patient_identity_key || nikTrimmed || editingVisit.patientNIK,
+              before: {
+                  patientNIK: editingVisit.patientNIK || '',
+                  pasienName: editingVisit.pasien_snapshot?.nama || '',
+                  status_antrian: editingVisit.status_antrian || '',
+                  kesimpulan_dokter: editingVisit.kesimpulan_dokter || editingVisit.pos5?.keterangan || editingVisit.pos4?.keterangan || editingVisit.pos3?.keterangan || ''
+              },
+              after
           });
           setEditingVisit(null); alert("✅ Data diperbarui.");
       } catch (e) { alert("Gagal: " + e.message); }
   };
 
-  const handleLogout = () => { sessionStorage.clear(); navigate('/'); };
+  const handleLogout = () => { signOut(); navigate('/'); };
 
   const handlePublicRestrictedDetail = () => {
       setPesan("Detail pasien disembunyikan pada akses publik. Silakan masuk sebagai Administrator untuk melihat daftar nama dan rapor individual.");
@@ -534,6 +660,58 @@ function Dashboard() {
                 <div style={{ width: `${stats.total ? (stats.gender.L/stats.total)*100 : 0}%` }} className="h-full bg-blue-500 shadow-inner"></div>
                 <div style={{ width: `${stats.total ? (stats.gender.P/stats.total)*100 : 0}%` }} className="h-full bg-pink-500 shadow-inner"></div>
             </div>
+        </div>
+    ),
+    'quality': (
+        <div key="quality" className={`bg-white rounded-[1.5rem] shadow-sm border p-6 flex flex-col h-full ${isEditMode && !isMobile ? 'border-amber-400 cursor-move border-2' : 'border-slate-200'}`}>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3 mb-4">
+                <div>
+                    <h3 className="font-black text-slate-800 text-[11px] uppercase tracking-[0.2em]">Kualitas Data</h3>
+                    <p className="mt-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Validasi kelengkapan operasional</p>
+                </div>
+                <div className={`rounded-2xl px-3 py-2 text-right ${decisionMetrics.incomplete > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                    <p className="text-2xl font-black leading-none">{decisionMetrics.incomplete}</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest">Belum Lengkap</p>
+                </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-[10px] font-black uppercase tracking-widest">
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3"><p className="text-slate-400">NIK Kosong</p><p className="mt-1 text-xl text-slate-800">{dataQuality.missingNik}</p></div>
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3"><p className="text-slate-400">Tgl Lahir</p><p className="mt-1 text-xl text-slate-800">{dataQuality.missingBirthDate}</p></div>
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3"><p className="text-slate-400">Desa</p><p className="mt-1 text-xl text-slate-800">{dataQuality.missingVillage}</p></div>
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3"><p className="text-slate-400">Workflow</p><p className="mt-1 text-xl text-slate-800">{dataQuality.invalidWorkflow}</p></div>
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3 md:col-span-2"><p className="text-slate-400">Final tanpa dokter</p><p className="mt-1 text-xl text-slate-800">{dataQuality.finalizedWithoutDoctor}</p></div>
+            </div>
+        </div>
+    ),
+    'bottleneck': (
+        <div key="bottleneck" className={`bg-white rounded-[1.5rem] shadow-sm border p-6 flex flex-col h-full ${isEditMode && !isMobile ? 'border-amber-400 cursor-move border-2' : 'border-slate-200'}`}>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3 mb-4">
+                <div>
+                    <h3 className="font-black text-slate-800 text-[11px] uppercase tracking-[0.2em]">Bottleneck Antrian</h3>
+                    <p className="mt-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status dengan beban terbanyak</p>
+                </div>
+                <div className={`rounded-2xl px-3 py-2 text-right ${maxBottleneckCount >= 10 ? 'bg-rose-50 text-rose-700' : 'bg-blue-50 text-blue-700'}`}>
+                    <p className="text-2xl font-black leading-none">{bottleneckRows[0]?.count || 0}</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest">Tertahan</p>
+                </div>
+            </div>
+            {bottleneckRows.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center rounded-2xl bg-slate-50 border border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">Belum ada data</div>
+            ) : (
+                <div className="space-y-3 flex-1 flex flex-col justify-center">
+                    {bottleneckRows.slice(0, 4).map(row => (
+                        <div key={row.status} className="space-y-1.5">
+                            <div className="flex justify-between items-end gap-3">
+                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest truncate">{row.label}</span>
+                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${row.count >= 10 ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-700'}`}>{row.count} Org</span>
+                            </div>
+                            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
+                                <div style={{ width: `${Math.max(8, (row.count / maxBottleneckCount) * 100)}%` }} className={`h-full transition-all duration-700 ${row.count >= 10 ? 'bg-rose-500' : 'bg-blue-500'}`}></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     ),
     'tot-antrian': (
@@ -589,8 +767,8 @@ function Dashboard() {
                         <span className="font-black text-[10px] text-slate-800 uppercase tracking-widest">Data Kolektif</span>
                     </div>
                     <div className="flex flex-col gap-2">
-                        <button onClick={() => exportToPKGExcel(completedFilteredVisits)} className="w-full bg-white hover:bg-green-500 hover:text-white border border-slate-200 p-2.5 rounded-xl text-[9px] font-black uppercase transition-all shadow-sm">UNDUH EXCEL</button>
-                        <button onClick={() => exportToPKG_PDF(completedFilteredVisits)} className="w-full bg-white hover:bg-red-500 hover:text-white border border-slate-200 p-2.5 rounded-xl text-[9px] font-black uppercase transition-all shadow-sm">UNDUH PDF</button>
+                        <button onClick={exportExcelKolektif} className="w-full bg-white hover:bg-green-500 hover:text-white border border-slate-200 p-2.5 rounded-xl text-[9px] font-black uppercase transition-all shadow-sm">UNDUH EXCEL</button>
+                        <button onClick={exportPdfKolektif} className="w-full bg-white hover:bg-red-500 hover:text-white border border-slate-200 p-2.5 rounded-xl text-[9px] font-black uppercase transition-all shadow-sm">UNDUH PDF</button>
                     </div>
                 </div>
 
@@ -640,10 +818,10 @@ function Dashboard() {
                                     <input type="checkbox" checked={selectedRows.includes(v.id)} onChange={() => handleSelectRow(v.id)} className="mt-1 w-5 h-5 rounded border-slate-300 cursor-pointer shrink-0" />
                                     <div className="min-w-0 flex-1">
                                         <p className="font-black text-slate-800 text-base leading-tight break-words">{v.pasien_snapshot?.nama || 'Tanpa Nama'}</p>
-                                        <p className="text-[11px] font-mono text-slate-400 mt-1 break-all">NIK: {v.patientNIK || '-'}</p>
+                                        <p className="text-[11px] font-mono text-slate-400 mt-1 break-all">NIK: {maskNik(v.patientNIK)}</p>
                                         <div className="mt-3 flex flex-wrap items-center gap-2">
                                             <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase text-slate-600">{v.kategori_usia_satusehat || 'Dewasa'} · {v.umur_saat_periksa || 0} THN</span>
-                                            <span className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase ${v.status_antrian === 'Selesai' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}>{v.status_antrian || '-'}</span>
+                                            <QueueStatusBadge status={v.status_antrian} className="rounded-lg px-2.5 py-1 text-[10px]" />
                                         </div>
                                         <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] font-black">
                                             <span className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-rose-600">Tensi: {getVisitBloodPressure(v).label}</span>
@@ -679,7 +857,7 @@ function Dashboard() {
                                     <td className="px-4 py-2 text-center"><input type="checkbox" checked={selectedRows.includes(v.id)} onChange={() => handleSelectRow(v.id)} className="w-4 h-4 rounded border-slate-300 cursor-pointer" /></td>
                                     <td className="px-4 py-2">
                                         <p className="font-black text-slate-800 text-sm">{v.pasien_snapshot?.nama}</p>
-                                        <p className="text-[10px] font-mono text-slate-400 mt-0.5 tracking-tighter">NIK: {v.patientNIK}</p>
+                                        <p className="text-[10px] font-mono text-slate-400 mt-0.5 tracking-tighter">NIK: {maskNik(v.patientNIK)}</p>
                                     </td>
                                     <td className="px-4 py-2">
                                         <p className="font-bold text-slate-700 text-xs capitalize">{v.kategori_usia_satusehat || 'Dewasa'}</p>
@@ -692,9 +870,7 @@ function Dashboard() {
                                         </div>
                                     </td>
                                     <td className="px-4 py-2">
-                                        <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border shadow-sm ${v.status_antrian === 'Selesai' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
-                                            {v.status_antrian}
-                                        </span>
+                                        <QueueStatusBadge status={v.status_antrian} className="px-3 py-1.5 text-[9px] shadow-sm" />
                                     </td>
                                     <td className="px-4 py-2 text-center">
                                         <div className="flex justify-center gap-2">
@@ -759,7 +935,7 @@ function Dashboard() {
               
               <div className="relative z-10 flex items-center gap-4">
                   <div className="hidden md:flex w-16 h-16 bg-white rounded-2xl items-center justify-center border-4 border-emerald-400 p-1.5 animate-pulse shadow-lg shadow-emerald-500/50 shrink-0">
-                      <img src="http://localhost:5173/logo_pinrang.png" alt="Logo Pinrang" className="w-full h-full object-contain" />
+                      <img src="/logo_pinrang.png" alt="Logo Pinrang" className="w-full h-full object-contain" />
                   </div>
                   <div className="text-center md:text-left">
                       <h2 className="text-xl md:text-2xl font-black text-white tracking-tight drop-shadow-md leading-none">Dashboard Data TERSANJUNG</h2>
@@ -788,6 +964,7 @@ function Dashboard() {
           </div>
 
           {pesan && <div className="mx-4 lg:mx-6 mb-4 p-3 bg-blue-600 text-white rounded-2xl font-black text-xs text-center shadow-xl animate-bounce shrink-0">{pesan}</div>}
+          <DashboardInsightPanel insights={insightRows} />
 
           {/* AREA WIDGET (CONDITIONAL RENDERING) */}
           <div className={`mx-4 lg:mx-6 mb-10 ${isEditMode && !isMobile ? "bg-slate-200/50 rounded-[2rem] border-2 border-dashed border-amber-400 p-2" : ""}`}>
@@ -802,6 +979,8 @@ function Dashboard() {
                       {widgets['traffic']}
                       {widgets['umur']}
                       {widgets['demografi']}
+                      {widgets['quality']}
+                      {widgets['bottleneck']}
                       {/* Grid khusus untuk 6 Kartu Klinik di Mobile */}
                       <div className="grid grid-cols-2 gap-3 h-56">
                           {widgets['stat-hipertensi']}

@@ -1,9 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
-import { db } from './firebase'; 
-import { collection, query, where, getDocs, getDoc, doc, updateDoc, setDoc, addDoc, serverTimestamp, onSnapshot, runTransaction } from 'firebase/firestore';
+import { useAuth } from './auth/AuthContext';
 import { STATUS_MAPPING } from './utils/constants';
-import { findCkgVisitInYear, formatVisitDate } from './utils/ckgValidation';
-import { runKtpOcr } from './utils/ktpOcr';
+import { VISIT_STATUS } from './features/workflow/workflowStatus';
+import {
+  buildChildIdentityKey,
+  buildStableNonNik,
+  formatVisitDate
+} from './utils/ckgValidation';
+import { writeAuditLog } from './services/auditService';
+import { claimVisitForStaff, createTvQueueCall } from './services/queueService';
+import { buildPatientPayload, findCurrentYearCkgVisit, getPatientByNik, upsertPatient } from './services/patientService';
+import { buildPatientSnapshot, getVisitsByPatientNik, nowTimestamp, updateVisit } from './services/visitService';
+import { runIdentityOcr, toLegacyOcrFormData } from './features/ocr/ocrPipeline';
+import OcrResultReview from './features/ocr/OcrResultReview';
+import useQueue from './hooks/useQueue';
 
 const OPENCV_SCRIPT_ID = 'opencv-script';
 const OPENCV_SCRIPT_SRC = '/vendor/opencv-4.8.0.js';
@@ -72,18 +82,70 @@ const formatTanggalKunjungan = (visit) => {
     return visit.tanggal_pelaksanaan || '-';
 };
 
-const InputCustom = ({ label, name, value, onChange, type="text", placeholder="", required=false, disabled=false, maxLength }) => (
+const NUMERIC_FIELD_NAMES = new Set(['nik', 'nik_wali', 'no_hp', 'no_hp_wali']);
+const CHILD_CATEGORIES = new Set(['Bayi', 'Balita', 'SD', 'SMP', 'SMA']);
+
+const isChildCategory = (kategori) => CHILD_CATEGORIES.has(kategori);
+
+const InputCustom = ({
+  label,
+  name,
+  value,
+  onChange,
+  type = 'text',
+  placeholder = '',
+  required = false,
+  disabled = false,
+  maxLength,
+  error = '',
+  hint = '',
+  inputMode,
+  autoComplete,
+}) => {
+  const fieldId = `pos1-${name}`;
+  const helpId = `${fieldId}-help`;
+  const resolvedInputMode = inputMode || (NUMERIC_FIELD_NAMES.has(name) || type === 'tel' || type === 'number' ? 'numeric' : 'text');
+  const pattern = resolvedInputMode === 'numeric' ? '[0-9]*' : undefined;
+
+  return (
     <div className="w-full">
-      <label className="block text-[11px] md:text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-widest">{label} {required && <span className="text-rose-500">*</span>}</label>
-      <input type={type} name={name} value={value} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} maxLength={maxLength} className="w-full min-h-[44px] rounded-xl border-slate-200 shadow-sm p-3 border focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-colors bg-slate-50 focus:bg-white text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 font-bold text-sm outline-none" />
+      <label htmlFor={fieldId} className="block text-[11px] md:text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-widest">
+        {label} {required && <span className="text-rose-500">*</span>}
+      </label>
+      <input
+        id={fieldId}
+        type={type}
+        name={name}
+        value={value}
+        onChange={onChange}
+        required={required}
+        disabled={disabled}
+        placeholder={placeholder}
+        maxLength={maxLength}
+        inputMode={resolvedInputMode}
+        pattern={pattern}
+        autoComplete={autoComplete}
+        aria-invalid={Boolean(error)}
+        aria-describedby={hint || error ? helpId : undefined}
+        className={`w-full min-h-[44px] rounded-xl shadow-sm p-3 border focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-colors bg-slate-50 focus:bg-white text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 font-bold text-base md:text-sm outline-none ${
+          error ? 'border-rose-300 bg-rose-50' : 'border-slate-200'
+        }`}
+      />
+      {(hint || error) && (
+        <p id={helpId} className={`mt-1.5 text-[11px] font-bold ${error ? 'text-rose-600' : 'text-slate-500'}`}>
+          {error || hint}
+        </p>
+      )}
     </div>
-);
+  );
+};
 
 // ==========================================
 // 🚀 MAIN COMPONENT: POS 1
 // ==========================================
 function Pos1() {
-  const [antrian, setAntrian] = useState([]);
+  const { user, hasRole } = useAuth();
+  const antrian = useQueue('POS1');
   const [pasienAktif, setPasienAktif] = useState(null);
 
   const [cvReady, setCvReady] = useState(false);
@@ -111,6 +173,8 @@ function Pos1() {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrCandidates, setOcrCandidates] = useState([]);
+  const [ocrReview, setOcrReview] = useState(null);
+  const [ocrMeta, setOcrMeta] = useState(null);
   
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [facingMode, setFacingMode] = useState('environment'); 
@@ -136,20 +200,31 @@ function Pos1() {
   });
 
   const [loading, setLoading] = useState(false); 
+  const [callingVisitId, setCallingVisitId] = useState(null);
   const [pesan, setPesan] = useState('');
   const [statusPasien, setStatusPasien] = useState('idle');
   const [riwayatKunjungan, setRiwayatKunjungan] = useState([]);
 
-  useEffect(() => {
-      const q = query(collection(db, "visits"), where("status_antrian", "in", [STATUS_MAPPING.POS1, "Menunggu Pos 1", "Antre Pos 1", "Antri Pos 1"]));
-      const unsubscribe = onSnapshot(q, (querySnapshot) => {
-          const dataAntrian = []; 
-          querySnapshot.forEach((doc) => dataAntrian.push({ id: doc.id, ...doc.data() }));
-          dataAntrian.sort((a, b) => (a.waktu_ambil_tiket?.toMillis() || 0) - (b.waktu_ambil_tiket?.toMillis() || 0));
-          setAntrian(dataAntrian);
-      });
-      return () => unsubscribe();
-  }, []);
+  const getFieldError = (fieldName) => {
+    if (fieldName === 'nik' && !tanpaNik && formData.nik && formData.nik.length !== 16) return 'NIK pasien harus 16 digit angka.';
+    if (fieldName === 'nik_wali' && tanpaNik && formData.nik_wali && formData.nik_wali.length !== 16) return 'NIK wali harus 16 digit angka.';
+    if (fieldName === 'tgl_lahir' && tglLahirView.length === 10 && !isValidIsoDate(formData.tgl_lahir)) return 'Tanggal lahir pasien tidak valid.';
+    if (fieldName === 'tgl_lahir_wali' && tglLahirWaliView.length === 10 && !isValidIsoDate(formData.tgl_lahir_wali)) return 'Tanggal lahir wali tidak valid.';
+    return '';
+  };
+
+  const readinessItems = [
+    { label: 'Pasien aktif dipilih', done: Boolean(pasienAktif?.id) },
+    { label: tanpaNik ? 'NIK wali 16 digit' : 'NIK pasien 16 digit', done: tanpaNik ? formData.nik_wali.length === 16 : formData.nik.length === 16 },
+    { label: 'Nama pasien terisi', done: Boolean(formData.nama.trim()) },
+    { label: 'Tanggal lahir valid', done: isValidIsoDate(formData.tgl_lahir) },
+    { label: 'Kategori usia otomatis', done: dataUmur.kategori !== '-' },
+    { label: 'Domisili lengkap', done: Boolean(formData.desa && formData.dusun) },
+    ...(tanpaNik ? [
+      { label: 'Nama wali terisi', done: Boolean(formData.nama_wali.trim()) },
+      { label: 'Tanggal lahir wali valid', done: isValidIsoDate(formData.tgl_lahir_wali) },
+    ] : []),
+  ];
 
   useEffect(() => {
       if (isValidIsoDate(formData.tgl_lahir)) {
@@ -169,9 +244,8 @@ function Pos1() {
       if (!tanpaNik && formData.nik.length === 16 && !ocrLoading) {
         setLoading(true);
         try {
-          const docRef = doc(db, "patients", formData.nik); const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
+          const data = await getPatientByNik(formData.nik);
+          if (data) {
             const validBirthDate = isValidIsoDate(data.birthDate) ? data.birthDate : '';
             setFormData(prev => ({
               ...prev, nama: data.name || prev.nama, status_perkawinan: data.status_perkawinan || prev.status_perkawinan,
@@ -196,18 +270,14 @@ function Pos1() {
       }
 
       try {
-        const docSnap = await getDoc(doc(db, "patients", formData.nik));
-        if (!docSnap.exists()) {
+        const patient = await getPatientByNik(formData.nik);
+        if (!patient) {
           setStatusPasien('baru');
           setRiwayatKunjungan([]);
           return;
         }
 
-        const riwayatSnap = await getDocs(query(collection(db, "visits"), where("patientNIK", "==", formData.nik)));
-        const riwayat = [];
-        riwayatSnap.forEach((visitDoc) => {
-          if (visitDoc.id !== pasienAktif?.id) riwayat.push({ id: visitDoc.id, ...visitDoc.data() });
-        });
+        const riwayat = (await getVisitsByPatientNik(formData.nik)).filter((visit) => visit.id !== pasienAktif?.id);
         riwayat.sort((a, b) => getVisitMillis(b) - getVisitMillis(a));
         const recentRiwayat = riwayat.slice(0, 5);
         setRiwayatKunjungan(recentRiwayat);
@@ -222,45 +292,45 @@ function Pos1() {
   }, [formData.nik, tanpaNik, ocrLoading, pasienAktif?.id]);
 
   const handlePanggil = async (item) => {
+    if (callingVisitId || pasienAktif) return;
+    setCallingVisitId(item.id);
     try {
-      await runTransaction(db, async (transaction) => {
-        const docRef = doc(db, "visits", item.id);
-        const docSnap = await transaction.get(docRef);
-        if (!docSnap.exists()) throw new Error("Data tidak ditemukan!");
-        const data = docSnap.data();
-        const rawRole = sessionStorage.getItem('rolePegawai') || '';
-        const isAdmin = rawRole.includes('admin');
-        if (!isAdmin && data.petugas_aktif && data.petugas_aktif !== sessionStorage.getItem('namaPegawai')) {
-             throw new Error(`Pasien sedang ditangani oleh ${data.petugas_aktif}`);
-        }
-        transaction.update(docRef, { petugas_aktif: sessionStorage.getItem('namaPegawai') || 'Petugas' });
+      const latestItem = await claimVisitForStaff({
+        visitId: item.id,
+        staffName: user?.nama || 'Petugas',
+        isAdmin: hasRole ? hasRole('admin') : false,
+        actor: user,
+        module: 'POS1',
+        workflowStatus: VISIT_STATUS.POS1_IN_PROGRESS
       });
 
-      setPasienAktif(item); setPesan(''); setStatusPasien('idle'); setRiwayatKunjungan([]); window.scrollTo({ top: 0, behavior: 'smooth' });
-      const snap = item.pasien_snapshot || {}; const isTanpaNik = item.patientNIK?.startsWith('NONIK') || false;
+      setPasienAktif(latestItem); setPesan(''); setStatusPasien('idle'); setRiwayatKunjungan([]); window.scrollTo({ top: 0, behavior: 'smooth' });
+      const snap = latestItem.pasien_snapshot || {}; const isTanpaNik = latestItem.patientNIK?.startsWith('NONIK') || false;
       const validSnapBirthDate = isValidIsoDate(snap.tgl_lahir) ? snap.tgl_lahir : '';
       const tglView = isoToDateView(validSnapBirthDate);
       
       setTanpaNik(isTanpaNik); setTglLahirView(tglView); setTglLahirWaliView(''); 
       setFormData({
-          nik: isTanpaNik ? '' : (item.patientNIK || ''), nama: snap.nama || '',
+          nik: isTanpaNik ? '' : (latestItem.patientNIK || ''), nama: snap.nama || '',
           status_perkawinan: snap.status && snap.status !== '-' ? snap.status : 'Belum Kawin',
           tgl_lahir: validSnapBirthDate, j_kelamin: snap.j_kelamin || 'P', no_hp: snap.no_hp || '',
-          desa: item.desa_pelaksanaan || 'Desa Malimpung', dusun: item.tempat_pelaksanaan || WILAYAH_KERJA[item.desa_pelaksanaan || 'Desa Malimpung'][0],
+          desa: latestItem.desa_pelaksanaan || 'Desa Malimpung', dusun: latestItem.tempat_pelaksanaan || WILAYAH_KERJA[latestItem.desa_pelaksanaan || 'Desa Malimpung'][0],
           nik_wali: '', nama_wali: '', tgl_lahir_wali: '', hubungan_wali: 'Ibu', no_hp_wali: ''
       });
 
       try {
-          let teksPanggilan = `Nomor antrean... ${item.nomor_antrian.replace(/-/g, ' ')}... Silakan menuju ke meja pendaftaran Pos Satu.`;
-          if (item.nomor_antrian.includes('-')) {
-              const parts = item.nomor_antrian.split('-');
+          let teksPanggilan = `Nomor antrean... ${latestItem.nomor_antrian.replace(/-/g, ' ')}... Silakan menuju ke meja pendaftaran Pos Satu.`;
+          if (latestItem.nomor_antrian.includes('-')) {
+              const parts = latestItem.nomor_antrian.split('-');
               const angkaDiucapkan = parts[1].split('').map(n => n === '0' ? 'kosong' : n).join(' ');
               teksPanggilan = `Nomor antrean... ${parts[0]}... ${angkaDiucapkan}... Silakan menuju meja pendaftaran Pos Satu.`;
           }
-          await addDoc(collection(db, "panggilan_tv"), { pos: "POS 1", identitas_layar: item.nomor_antrian, teks_suara: teksPanggilan, waktu: serverTimestamp() });
+          await createTvQueueCall({ pos: 'POS 1', queueNumber: latestItem.nomor_antrian, speechText: teksPanggilan });
       } catch (error) { console.warn("Gagal membuat panggilan TV Pos 1:", error); }
     } catch (e) {
       alert("⚠️ " + e.message);
+    } finally {
+      setCallingVisitId(null);
     }
   };
 
@@ -328,7 +398,7 @@ function Pos1() {
   };
 
   const startCamera = async (mode = facingMode) => {
-    if (!cvReady) return alert("Sistem Pemandu KTP sedang dimuat, mohon tunggu sebentar.");
+    if (!cvReady) return setPesan('Sistem pemindai identitas sedang dimuat. Mohon tunggu sebentar lalu coba lagi.');
     setIsCameraOpen(true); setKameraStatus('focusing'); setIsTorchOn(false);
     alignCountRef.current = 0; isCapturingRef.current = false;
 
@@ -344,7 +414,10 @@ function Pos1() {
             setKameraStatus('ready'); 
             scanRafRef.current = requestAnimationFrame(processVideoFrame);
         }, 1500);
-    } catch (err) { alert("Kamera tidak dapat diakses."); setIsCameraOpen(false); }
+    } catch (err) {
+      setPesan('Aplikasi membutuhkan izin kamera untuk membaca KTP/KK. Silakan izinkan akses kamera di browser.');
+      setIsCameraOpen(false);
+    }
   };
 
   const stopCamera = () => {
@@ -393,28 +466,38 @@ function Pos1() {
         if (newTglView) setTglLahirView(newTglView);
     }
 
+    setOcrMeta({
+      documentType: normalizedData.document_type || 'UNKNOWN',
+      confidence: Math.round(Number(normalizedData.confidence || 0) * 100),
+      usedAt: new Date().toISOString(),
+      usedBy: user?.uid || user?.email || 'unknown',
+      warnings: normalizedData.warnings || [],
+      source
+    });
     const confidence = normalizedData.confidence ? ` (${Math.round(normalizedData.confidence * 100)}%)` : '';
-    setPesan(`⚠️ Data ${normalizedData.document_type || 'identitas'} berhasil dibaca via ${source}${confidence}. Periksa ulang NIK dan nama.`);
+    const warningText = normalizedData.warnings?.length ? ` Ada ${normalizedData.warnings.length} warning OCR.` : '';
+    setPesan(`⚠️ Data ${normalizedData.document_type || 'identitas'} berhasil dibaca via ${source}${confidence}. Periksa ulang NIK dan nama.${warningText}`);
     return true;
   };
 
   const processOCR = async (fileAsli) => {
-    setOcrLoading(true); setPesan(''); setOcrProgress(0); setOcrCandidates([]);
+    setOcrLoading(true); setPesan(''); setOcrProgress(0); setOcrCandidates([]); setOcrReview(null); setOcrMeta(null);
 
     try {
-        const ocrResult = await runKtpOcr(fileAsli, {
+        const ocrResult = await runIdentityOcr(fileAsli, {
             onProgress: setOcrProgress,
             onMode: () => {},
             preferBackend: true
         });
-        const extractedData = ocrResult?.data || {};
+        const extractedData = toLegacyOcrFormData(ocrResult?.data || {});
 
         if (extractedData.nik || extractedData.nama) {
-            if (extractedData.document_type === 'Kartu Keluarga' && extractedData.candidates?.length > 1) {
+            if (['Kartu Keluarga', 'KK'].includes(extractedData.document_type) && extractedData.candidates?.length > 1) {
                 setOcrCandidates(extractedData.candidates.map(c => ({ ...c, confidence: extractedData.confidence })));
                 setPesan(`⚠️ Kartu Keluarga terbaca. Pilih anggota keluarga yang sedang diperiksa agar NIK tidak tertukar.`);
             } else {
-                applyOcrData(extractedData, ocrResult.source);
+                setOcrReview({ ...extractedData, source: ocrResult.source });
+                setPesan('Review hasil OCR, lalu klik Gunakan Data Ini jika NIK dan nama sudah benar.');
             }
         } else {
             setPesan('❌ KTP tidak terbaca. Harap ketik manual.');
@@ -445,8 +528,9 @@ function Pos1() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    const nextValue = NUMERIC_FIELD_NAMES.has(name) ? value.replace(/\D/g, '') : value;
     if (name === "desa") { setFormData({ ...formData, desa: value, dusun: WILAYAH_KERJA[value][0] }); } 
-    else { setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value }); }
+    else { setFormData({ ...formData, [name]: type === 'checkbox' ? checked : nextValue }); }
   };
 
   const handleTanpaNikChange = (e) => {
@@ -460,53 +544,91 @@ function Pos1() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!pasienAktif) return;
+    if (!pasienAktif || loading || ocrLoading) return;
       if (!isValidIsoDate(formData.tgl_lahir)) return setPesan('⚠️ Tanggal Lahir harus valid (DD/MM/YYYY).');
     
     let finalNik = formData.nik;
+    let identityKey = '';
     if (tanpaNik) {
         if (dataUmur.tahun >= 19) return setPesan('⚠️ Pasien Dewasa (19+) WAJIB memiliki NIK sendiri.');
         if (formData.nik_wali.length !== 16) return setPesan('⚠️ NIK Wali/Pendamping wajib 16 digit.');
         if (!isValidIsoDate(formData.tgl_lahir_wali)) return setPesan('⚠️ Tanggal Lahir Wali harus valid.');
-        finalNik = `NONIK-${Date.now()}`; 
+        identityKey = buildChildIdentityKey({
+          patientName: formData.nama,
+          birthDate: formData.tgl_lahir,
+          waliNik: formData.nik_wali
+        });
+        finalNik = buildStableNonNik({
+          patientName: formData.nama,
+          birthDate: formData.tgl_lahir,
+          waliNik: formData.nik_wali
+        });
+        if (!identityKey || !finalNik) return setPesan('Data identitas pasien tanpa NIK belum lengkap.');
     } else {
         if (finalNik.length !== 16) return setPesan('⚠️ NIK Pasien wajib 16 digit angka.'); 
     }
 
     setLoading(true); setPesan('');
-    const namaPetugas = sessionStorage.getItem('namaPegawai') || 'Sistem / Anonim';
+    const namaPetugas = user?.nama || 'Sistem / Anonim';
 
     try {
-      const kunjunganTahunIni = await findCkgVisitInYear(db, finalNik, { excludeVisitId: pasienAktif.id });
+      const kunjunganTahunIni = await findCurrentYearCkgVisit({
+        patientNik: tanpaNik ? null : finalNik,
+        identityKey: tanpaNik ? identityKey : null,
+        excludeVisitId: pasienAktif.id
+      });
       if (kunjunganTahunIni) {
         setPesan(`⚠️ NIK ini sudah mendapatkan layanan CKG pada ${formatVisitDate(kunjunganTahunIni)}. CKG hanya dapat dilakukan 1 kali dalam tahun yang sama.`);
         setLoading(false);
         return;
       }
 
-      const patientRef = doc(db, "patients", finalNik); 
-      let patientData = {
-        nik: finalNik, name: formData.nama, birthDate: formData.tgl_lahir, gender: formData.j_kelamin, 
-        phone: formData.no_hp, status_perkawinan: formData.status_perkawinan, 
-        desa: formData.desa, dusun: formData.dusun, lastUpdated: serverTimestamp()
-      };
-      
-      if (tanpaNik) patientData.data_wali = { nik_wali: formData.nik_wali, nama_wali: formData.nama_wali, tgl_lahir_wali: formData.tgl_lahir_wali, hubungan: formData.hubungan_wali, no_hp_wali: formData.no_hp_wali };
-      await setDoc(patientRef, patientData, { merge: true });
+      const patientData = buildPatientPayload({
+        nik: finalNik,
+        identityKey: identityKey || null,
+        name: formData.nama,
+        birthDate: formData.tgl_lahir,
+        gender: formData.j_kelamin,
+        phone: formData.no_hp,
+        statusPerkawinan: formData.status_perkawinan,
+        desa: formData.desa,
+        dusun: formData.dusun,
+        wali: tanpaNik ? { nik_wali: formData.nik_wali, nama_wali: formData.nama_wali, tgl_lahir_wali: formData.tgl_lahir_wali, hubungan: formData.hubungan_wali, no_hp_wali: formData.no_hp_wali } : null
+      });
+      await upsertPatient(finalNik, patientData);
 
-      const visitRef = doc(db, "visits", pasienAktif.id);
-      await updateDoc(visitRef, {
-        patientNIK: finalNik, 
+      await updateVisit(pasienAktif.id, {
+        patientNIK: finalNik,
+        patient_identity_key: identityKey || null,
         kategori_usia_satusehat: dataUmur.kategori, 
         umur_saat_periksa: dataUmur.tahun,
+        status: VISIT_STATUS.POS1_COMPLETE,
         status_antrian: STATUS_MAPPING.POS2, 
-        tanggal_kunjungan: serverTimestamp(),
-        pasien_snapshot: { 
-            nama: formData.nama, j_kelamin: formData.j_kelamin, tgl_lahir: formData.tgl_lahir, desa: formData.desa, dusun: formData.dusun, no_hp: formData.no_hp,
+        tanggal_kunjungan: nowTimestamp(),
+        pasien_snapshot: buildPatientSnapshot({
+            nama: formData.nama,
+            gender: formData.j_kelamin,
+            birthDate: formData.tgl_lahir,
+            desa: formData.desa,
+            dusun: formData.dusun,
+            phone: formData.no_hp,
             status: (dataUmur.kategori === 'Bayi' || dataUmur.kategori === 'Balita' || dataUmur.kategori === 'SD' || dataUmur.kategori === 'SMP' || dataUmur.kategori === 'SMA') ? '-' : formData.status_perkawinan
-        }, 
+        }), 
         petugas_pos1: namaPetugas,
-        petugas_aktif: null
+        petugas_aktif: null,
+        ...(ocrMeta ? { ocrMeta } : {})
+      });
+      await writeAuditLog({
+        action: 'Registrasi pasien Pos 1 dan lanjut ke Pos 2',
+        module: 'Pos 1',
+        visitId: pasienAktif.id,
+        patientKey: identityKey || finalNik,
+        after: {
+          patientNIK: finalNik,
+          patient_identity_key: identityKey || null,
+          status: VISIT_STATUS.POS1_COMPLETE,
+          status_antrian: STATUS_MAPPING.POS2
+        }
       });
       
       setPesan(`✅ Registrasi berhasil! Pasien diarahkan ke POS 2.`);
@@ -516,6 +638,8 @@ function Pos1() {
         nik_wali: '', nama_wali: '', tgl_lahir_wali: '', hubungan_wali: 'Ibu', no_hp_wali: ''
       });
       setTglLahirView(''); setTglLahirWaliView(''); setTanpaNik(false);
+      setOcrReview(null);
+      setOcrMeta(null);
       setDataUmur({ tahun: 0, bulan: 0, totalBulan: 0, kategori: '-' });
       setStatusPasien('idle'); setRiwayatKunjungan([]);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -593,11 +717,11 @@ function Pos1() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                   {antrian.map((item) => (
-                    <div key={item.id} className="border border-slate-200/60 p-5 rounded-3xl flex flex-col justify-between items-center bg-white hover:border-blue-400 hover:shadow-lg transition-all cursor-pointer group" onClick={() => handlePanggil(item)}>
+                    <button type="button" key={item.id} disabled={Boolean(callingVisitId)} className="border border-slate-200/60 p-5 rounded-3xl flex flex-col justify-between items-center bg-white hover:border-blue-400 hover:shadow-lg transition-all cursor-pointer group disabled:cursor-wait disabled:opacity-60" onClick={() => handlePanggil(item)}>
                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest group-hover:text-blue-500">Antrean</p>
                       <p className="font-black text-slate-800 group-hover:text-blue-600 text-4xl font-mono my-2">{item.nomor_antrian}</p>
-                      <div className="w-full bg-slate-100 group-hover:bg-blue-600 text-slate-500 group-hover:text-white text-center py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm">Panggil ➔</div>
-                    </div>
+                      <div className="w-full bg-slate-100 group-hover:bg-blue-600 text-slate-500 group-hover:text-white text-center py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm">{callingVisitId === item.id ? 'Memanggil...' : 'Panggil ➔'}</div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -689,6 +813,14 @@ function Pos1() {
                   </div>
               )}
 
+              <OcrResultReview
+                  result={ocrReview}
+                  onUse={() => {
+                      if (applyOcrData(ocrReview, ocrReview?.source || 'OCR')) setOcrReview(null);
+                  }}
+                  onCancel={() => setOcrReview(null)}
+              />
+
               {ocrCandidates.length > 0 && (
                   <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl shadow-sm">
                       <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3">Pilih Anggota dari Kartu Keluarga</p>
@@ -697,11 +829,12 @@ function Pos1() {
                               <button
                                   key={`${candidate.nik || 'nik'}-${index}`}
                                   type="button"
-                                  onClick={() => { applyOcrData(candidate, 'OCR Kartu Keluarga'); setOcrCandidates([]); }}
+                                  onClick={() => { applyOcrData(candidate, 'OCR Kartu Keluarga'); setOcrCandidates([]); setOcrReview(null); }}
                                   className="w-full text-left bg-white hover:bg-amber-100 border border-amber-200 rounded-xl p-3 transition active:scale-[0.99]"
                               >
                                   <span className="block text-sm font-black text-slate-800">{candidate.nama || 'Nama belum terbaca'}</span>
-                                  <span className="block text-[11px] font-bold text-slate-500 mt-1">NIK: {candidate.nik || '-'} • Lahir: {candidate.tgl_lahir || '-'}</span>
+                                  <span className="block text-[11px] font-bold text-slate-500 mt-1">NIK: {candidate.nik || '-'} • Lahir: {candidate.tgl_lahir || candidate.tanggalLahir || '-'}</span>
+                                  <span className="mt-1 block text-[10px] font-black uppercase tracking-widest text-amber-700">Confidence: {Math.round(Number(candidate.confidence || 0) * (Number(candidate.confidence || 0) <= 1 ? 100 : 1))}%</span>
                               </button>
                           ))}
                       </div>
@@ -710,7 +843,7 @@ function Pos1() {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
                   <div>
-                      <InputCustom type="tel" label={dataUmur.kategori === 'Bayi' || dataUmur.kategori === 'Balita' || dataUmur.kategori === 'SD' || dataUmur.kategori === 'SMP' || dataUmur.kategori === 'SMA' ? "NIK WALI (16 Digit) *" : "NIK PASIEN (16 Digit) *"} name="nik" value={formData.nik} onChange={handleChange} disabled={tanpaNik} placeholder={tanpaNik ? "Auto-Generate..." : "16 Digit NIK..."} required={!tanpaNik} maxLength="16" />
+                      <InputCustom type="tel" label={isChildCategory(dataUmur.kategori) ? "NIK Wali (16 digit)" : "NIK Pasien (16 digit)"} name="nik" value={formData.nik} onChange={handleChange} disabled={tanpaNik} placeholder={tanpaNik ? "Auto-generate setelah simpan" : "16 digit NIK"} required={!tanpaNik} maxLength="16" autoComplete="off" error={getFieldError('nik')} hint={tanpaNik ? 'Untuk bayi/anak tanpa NIK, sistem memakai data wali.' : 'Ketik angka saja. Data master pasien dicari otomatis.'} />
                       <label className="flex items-center space-x-3 mt-3 cursor-pointer bg-white p-3 rounded-xl border border-slate-200 hover:bg-slate-100 transition shadow-sm w-max">
                           <input type="checkbox" checked={tanpaNik} onChange={handleTanpaNikChange} className="rounded border-slate-300 text-teal-600 w-4 h-4"/>
                           <div>
@@ -720,7 +853,7 @@ function Pos1() {
                       </label>
                   </div>
                   
-                  <div><InputCustom label="Nama Lengkap *" name="nama" value={formData.nama} onChange={handleChange} required={true} placeholder="Sesuai KTP..." /></div>
+                  <div><InputCustom label="Nama Lengkap" name="nama" value={formData.nama} onChange={handleChange} required={true} placeholder="Sesuai KTP..." autoComplete="name" /></div>
 
                   {tanpaNik && (
                       <div className="md:col-span-2 bg-gradient-to-br from-amber-50 to-orange-50 p-5 md:p-6 rounded-2xl border border-amber-200 space-y-4 shadow-inner mt-2 animate-fade-in-up">
@@ -732,11 +865,12 @@ function Pos1() {
                               </div>
                           </div>
                           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                              <div><InputCustom type="tel" label="NIK Wali (16 Digit) *" name="nik_wali" value={formData.nik_wali} onChange={handleChange} required={true} placeholder="16 digit..." maxLength="16" /></div>
-                              <div><InputCustom label="Nama Wali *" name="nama_wali" value={formData.nama_wali} onChange={handleChange} required={true} placeholder="Nama lengkap wali..." /></div>
+                              <div><InputCustom type="tel" label="NIK Wali (16 digit)" name="nik_wali" value={formData.nik_wali} onChange={handleChange} required={true} placeholder="16 digit" maxLength="16" autoComplete="off" error={getFieldError('nik_wali')} /></div>
+                              <div><InputCustom label="Nama Wali" name="nama_wali" value={formData.nama_wali} onChange={handleChange} required={true} placeholder="Nama lengkap wali..." autoComplete="name" /></div>
                               <div>
                                   <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-widest">Tgl Lahir Wali *</label>
-                                  <input type="tel" value={tglLahirWaliView} onChange={(e) => handleDateMaskChange(e, 'tgl_lahir_wali')} placeholder="DD/MM/YYYY" maxLength="10" required={true} className="w-full min-h-[44px] rounded-xl border-slate-200 p-3 border focus:border-teal-500 bg-white font-bold text-sm outline-none" />
+                                  <input type="tel" inputMode="numeric" pattern="[0-9/]*" value={tglLahirWaliView} onChange={(e) => handleDateMaskChange(e, 'tgl_lahir_wali')} placeholder="DD/MM/YYYY" maxLength="10" required={true} aria-invalid={Boolean(getFieldError('tgl_lahir_wali'))} className={`w-full min-h-[44px] rounded-xl p-3 border focus:border-teal-500 bg-white font-bold text-base md:text-sm outline-none ${getFieldError('tgl_lahir_wali') ? 'border-rose-300' : 'border-slate-200'}`} />
+                                  {getFieldError('tgl_lahir_wali') && <p className="mt-1.5 text-[11px] font-bold text-rose-600">{getFieldError('tgl_lahir_wali')}</p>}
                               </div>
                               <div>
                                   <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-widest">Hubungan</label>
@@ -749,7 +883,8 @@ function Pos1() {
                   <div className="md:col-span-2 bg-blue-50/50 p-5 rounded-2xl border border-blue-100 flex flex-col md:flex-row gap-5 items-center mt-2">
                       <div className="w-full md:w-1/2">
                           <label className="block text-[11px] font-black text-blue-600 mb-2 uppercase tracking-widest">Tanggal Lahir Pasien *</label>
-                          <input type="tel" value={tglLahirView} onChange={(e) => handleDateMaskChange(e, 'tgl_lahir')} placeholder="DD/MM/YYYY" maxLength="10" required={true} className="w-full min-h-[50px] rounded-xl border-blue-200 shadow-inner p-3 md:p-4 border focus:border-blue-500 font-black text-blue-700 text-xl text-center tracking-widest bg-white outline-none" />
+                          <input type="tel" inputMode="numeric" pattern="[0-9/]*" value={tglLahirView} onChange={(e) => handleDateMaskChange(e, 'tgl_lahir')} placeholder="DD/MM/YYYY" maxLength="10" required={true} aria-invalid={Boolean(getFieldError('tgl_lahir'))} className={`w-full min-h-[50px] rounded-xl shadow-inner p-3 md:p-4 border focus:border-blue-500 font-black text-blue-700 text-xl text-center tracking-widest bg-white outline-none ${getFieldError('tgl_lahir') ? 'border-rose-300' : 'border-blue-200'}`} />
+                          {getFieldError('tgl_lahir') && <p className="mt-1.5 text-center text-[11px] font-bold text-rose-600">{getFieldError('tgl_lahir')}</p>}
                       </div>
                       <div className="w-full md:w-1/2 md:border-l border-blue-200 md:pl-6 flex flex-col justify-center">
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 text-center md:text-left">Kalkulasi Usia Otomatis:</p>
@@ -778,7 +913,7 @@ function Pos1() {
                         </select>
                     </div>
                   )}
-                  <div><InputCustom label="No. HP / WhatsApp" name="no_hp" value={formData.no_hp} onChange={handleChange} type="tel" placeholder="08..." /></div>
+                  <div><InputCustom label="No. HP / WhatsApp" name="no_hp" value={formData.no_hp} onChange={handleChange} type="tel" placeholder="08..." autoComplete="tel" hint="Opsional, angka saja." /></div>
                   
                   <div className="md:col-span-2 grid grid-cols-1 gap-4 bg-white p-5 rounded-2xl border border-slate-200 mt-2 shadow-sm md:grid-cols-2">
                       <div>
@@ -795,6 +930,17 @@ function Pos1() {
                       </div>
                   </div>
               </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Checklist sebelum lanjut</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {readinessItems.map((item) => (
+                <div key={item.label} className={`rounded-xl border px-3 py-2 text-[11px] font-black uppercase tracking-wider ${item.done ? 'border-teal-100 bg-teal-50 text-teal-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+                  {item.done ? 'OK' : 'Perlu'} - {item.label}
+                </div>
+              ))}
+            </div>
           </div>
 
           <button type="submit" disabled={loading || ocrLoading} className="w-full bg-teal-600 hover:bg-teal-700 text-white font-black text-sm uppercase tracking-widest py-5 rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">

@@ -1,0 +1,33 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "visits",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status_antrian",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waktu_ambil_tiket",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "visits",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "patientNIK",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tanggal_kunjungan",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

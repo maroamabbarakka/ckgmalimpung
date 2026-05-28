@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from './auth/AuthContext';
 import PusatBantuan from './components/PusatBantuan';
-import { addDoc, collection, doc, getDocs, limit, onSnapshot, orderBy, query, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore';
+import ConnectionStatus from './components/system/ConnectionStatus';
 import {
   Bar,
   BarChart,
@@ -15,11 +16,26 @@ import {
   XAxis,
   YAxis
 } from 'recharts';
-import { db } from './firebase';
 import { STATUS_MAPPING } from './utils/constants';
 import { exportClusterExcel, exportClusterPDF, exportToPKGExcel, exportToPKG_PDF, exportJsonToExcel } from './utils/exportPKG';
 import { openIntegratedHtmlReport } from './utils/htmlReport';
 import { logActivity } from './utils/logger';
+import { maskNik } from './utils/privacy';
+import { safeBack } from './utils/navigation';
+import { syncUserProfileFromStaff } from './services/userProfileService';
+import {
+  deleteSchool,
+  fetchCollectionBackup,
+  removeDuplicateSchools,
+  resetStaffPin,
+  saveSchool,
+  saveStaff,
+  subscribeActivityLogs,
+  subscribeAdminSchools,
+  subscribeAdminStaff,
+  subscribeAdminVisits,
+  toggleStaffActive
+} from './services/adminService';
 
 const LOGO_PINRANG = '/logo_pinrang.png';
 const LOGO_MALIMPUNG = '/logo_malimpung.png';
@@ -286,8 +302,9 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
     kelas: 'Semua',
     usia: 'Semua'
   });
+  const { user, signOut } = useAuth();
 
-  const userName = sessionStorage.getItem('namaPegawai') || 'Administrator';
+  const userName = user?.nama || 'Administrator';
   
   const getHeaderTitle = () => {
     switch(activeMenu) {
@@ -307,11 +324,9 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
 
   useEffect(() => {
     // Membatasi pengambilan data hingga 2500 kunjungan terakhir untuk mencegah Firebase Out of Quota
-    const q = query(collection(db, 'visits'), orderBy('waktu_ambil_tiket', 'desc'), limit(2500));
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        setVisits(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+    const unsubscribe = subscribeAdminVisits(
+      (data) => {
+        setVisits(data);
         setLoading(false);
       },
       () => setLoading(false)
@@ -320,22 +335,15 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
   }, []);
 
   useEffect(() => {
-    const unsubscribeSchools = onSnapshot(collection(db, 'schools'), (snapshot) => {
-      const data = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
-      data.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
-      setSchoolList(data);
-    });
+    const unsubscribeSchools = subscribeAdminSchools(setSchoolList);
 
-    const unsubscribeStaff = onSnapshot(collection(db, 'staff'), (snapshot) => {
-      const data = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
-      data.sort((a, b) => String(a.nama || '').localeCompare(String(b.nama || '')));
+    const unsubscribeStaff = subscribeAdminStaff((data) => {
       setStaffList(data);
       setStaffLoading(false);
     });
 
-    const logsQuery = query(collection(db, 'activity_logs'), orderBy('waktu', 'desc'), limit(200));
-    const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
-      setActivityLogs(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+    const unsubscribeLogs = subscribeActivityLogs((data) => {
+      setActivityLogs(data);
       setLogsLoading(false);
     });
 
@@ -647,35 +655,8 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
   const cleanDuplicates = async () => {
     if (!window.confirm('Bersihkan data ganda? (Total db: ' + schoolList.length + ')')) return;
     try {
-      const snap = await getDocs(collection(db, 'schools'));
-      const unique = new Set();
-      const duplicatesToDelete = [];
-      
-      for (const item of snap.docs) {
-        const data = item.data();
-        const name = String(data.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
-        const npsn = String(data.npsn || '').trim();
-        const key = (npsn && npsn !== '-' && npsn.length > 3) ? `npsn_${npsn}` : `name_${name}`;
-        
-        if (unique.has(key)) {
-          duplicatesToDelete.push(item.ref);
-        } else {
-          unique.add(key);
-        }
-      }
-
-      if (duplicatesToDelete.length > 0) {
-        await runTransaction(db, async (transaction) => {
-          // Memastikan data dibaca dulu agar status transaksional atomik terpenuhi (bukan sebatas batched write)
-          for (const ref of duplicatesToDelete) {
-             const docSnap = await transaction.get(ref);
-             if (docSnap.exists()) {
-                transaction.delete(ref);
-             }
-          }
-        });
-      }
-      alert(`Berhasil membersihkan ${duplicatesToDelete.length} data ganda!`);
+      const deletedCount = await removeDuplicateSchools();
+      alert(`Berhasil membersihkan ${deletedCount} data ganda!`);
     } catch (e) {
       alert('Error: ' + e.message);
     }
@@ -693,12 +674,13 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
   const handleSaveSchool = async (e) => {
     e.preventDefault();
     try {
+      const schoolName = editSchool.name;
       if (editSchool.id) {
-        await updateDoc(doc(db, 'schools', editSchool.id), { ...editSchool, lastUpdated: new Date().toISOString() });
-        await logActivity(`Edit Sekolah: ${editSchool.name}`, 'Admin Dashboard');
+        await saveSchool(editSchool);
+        await logActivity(`Edit Sekolah: ${schoolName}`, 'Admin Dashboard');
       } else {
-        await addDoc(collection(db, 'schools'), { ...editSchool, lastUpdated: new Date().toISOString() });
-        await logActivity(`Tambah Sekolah: ${editSchool.name}`, 'Admin Dashboard');
+        await saveSchool(editSchool);
+        await logActivity(`Tambah Sekolah: ${schoolName}`, 'Admin Dashboard');
       }
       setIsSchoolModalOpen(false);
     } catch (error) {
@@ -710,7 +692,7 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
   const handleDeleteSchool = async (schoolId) => {
     if (!window.confirm('Yakin ingin menghapus data sekolah ini secara permanen?')) return;
     try {
-      await deleteDoc(doc(db, 'schools', schoolId));
+      await deleteSchool(schoolId);
       await logActivity('Hapus Sekolah', 'Admin Dashboard');
       setIsSchoolModalOpen(false);
       setEditSchool(null);
@@ -730,8 +712,8 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
   };
 
   const openActiveUserProfile = () => {
-    const activeUsername = normalizeText(sessionStorage.getItem('username'));
-    const activeName = normalizeText(sessionStorage.getItem('namaPegawai'));
+const activeUsername = normalizeText(user?.username);
+  const activeName = normalizeText(user?.nama);
     const activeStaff = staffList.find((staff) =>
       (activeUsername && normalizeText(staff.username) === activeUsername) ||
       (activeName && normalizeText(staff.nama) === activeName)
@@ -801,12 +783,16 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
     try {
       const payload = { ...editStaff, username };
       if (payload.id) {
-        const { id, ...dataToUpdate } = payload;
-        await updateDoc(doc(db, 'staff', id), dataToUpdate);
+        await saveStaff(payload);
+        const syncResult = await syncUserProfileFromStaff(payload);
         await logActivity(`Mengubah data profil/hak akses pegawai: ${payload.nama}`, 'Admin Dashboard');
+        if (!syncResult.synced && syncResult.reason === 'user-profile-not-found') {
+          alert('Data staff tersimpan. Profil Firebase Auth belum ditemukan; jalankan migrasi Auth agar hak akses produksi ikut tersinkron.');
+        }
       } else {
-        await addDoc(collection(db, 'staff'), { ...payload, isActive: true });
+        await saveStaff(payload);
         await logActivity(`Menambahkan pegawai baru: ${payload.nama}`, 'Admin Dashboard');
+        alert('Data staff tersimpan. Buat akun Firebase Auth atau jalankan migrasi Auth agar pegawai bisa login di mode produksi.');
       }
       setIsStaffModalOpen(false);
     } catch (error) {
@@ -818,28 +804,23 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
     const actionText = staff.isActive ? 'menonaktifkan' : 'mengaktifkan';
     if (!window.confirm(`Yakin ingin ${actionText} akun ${staff.nama}?`)) return;
     try {
-      const staffRef = doc(db, 'staff', staff.id);
-      let newStatus = false;
-      await runTransaction(db, async (transaction) => {
-        const staffDoc = await transaction.get(staffRef);
-        if (!staffDoc.exists()) {
-          throw new Error("Data pegawai tidak ditemukan!");
-        }
-        newStatus = !staffDoc.data().isActive;
-        transaction.update(staffRef, { isActive: newStatus });
-      });
+      const newStatus = await toggleStaffActive(staff);
+      const syncResult = await syncUserProfileFromStaff({ ...staff, isActive: newStatus });
       await logActivity(`Mengubah status akun ${staff.nama} menjadi ${newStatus ? 'Aktif' : 'Non-Aktif'}`, 'Admin Dashboard');
+      if (!syncResult.synced && syncResult.reason === 'user-profile-not-found') {
+        alert('Status staff tersimpan. Profil Firebase Auth belum ditemukan; jalankan migrasi Auth agar status produksi ikut tersinkron.');
+      }
     } catch (error) {
       alert(`Gagal mengubah status: ${error.message}`);
     }
   };
 
   const handleResetPIN = async (staff) => {
-    if (!window.confirm(`Reset PIN ${staff.nama} menjadi 123456?`)) return;
+    if (!window.confirm(`Reset PIN legacy ${staff.nama} menjadi 123456? Untuk akun Firebase Auth, reset password tetap dilakukan dari Firebase Console.`)) return;
     try {
-      await updateDoc(doc(db, 'staff', staff.id), { pin: '123456' });
+      await resetStaffPin(staff.id);
       await logActivity(`Mereset PIN pegawai: ${staff.nama}`, 'Admin Dashboard');
-      alert('PIN berhasil direset menjadi 123456.');
+      alert('PIN legacy berhasil direset menjadi 123456. Jika login produksi memakai Firebase Auth, reset password akun Auth dari Firebase Console.');
     } catch (error) {
       alert(`Gagal mereset PIN: ${error.message}`);
     }
@@ -848,8 +829,7 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
   const handleBackup = async (collectionName) => {
     setBackupLoading(collectionName);
     try {
-      const snapshot = await getDocs(collection(db, collectionName));
-      const data = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+      const data = await fetchCollectionBackup(collectionName);
       if (data.length === 0) {
         alert(`Tabel ${collectionName} kosong.`);
         return;
@@ -872,11 +852,36 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
   };
 
   const handleLogout = () => {
-    sessionStorage.clear();
-    navigate('/');
+    signOut();
+    navigate('/login', { replace: true });
   };
 
   const completedVisits = filteredVisits.filter(isCompleted);
+
+  const handleOpenIntegratedReport = async (visits, context = 'terfilter') => {
+    openIntegratedHtmlReport(visits, filters);
+    await logActivity(`Membuka laporan HTML terpadu ${context} (${visits.length} data)`, 'Admin Dashboard');
+  };
+
+  const handleExportPkgExcel = async (visits, context = 'terfilter') => {
+    await exportToPKGExcel(visits);
+    await logActivity(`Export PKG Excel ${context} (${visits.length} data)`, 'Admin Dashboard');
+  };
+
+  const handleExportPkgPdf = async (visits, context = 'terfilter') => {
+    await exportToPKG_PDF(visits);
+    await logActivity(`Export PKG PDF ${context} (${visits.length} data)`, 'Admin Dashboard');
+  };
+
+  const handleExportClusterExcel = async (visits, cluster, context = 'terfilter') => {
+    await exportClusterExcel(visits, cluster);
+    await logActivity(`Export Excel klaster ${cluster} ${context} (${visits.length} data)`, 'Admin Dashboard');
+  };
+
+  const handleExportClusterPdf = async (visits, cluster, context = 'terfilter') => {
+    await exportClusterPDF(visits, cluster);
+    await logActivity(`Export PDF klaster ${cluster} ${context} (${visits.length} data)`, 'Admin Dashboard');
+  };
 
   const sidebarItemClass = (isActive, isDisabled = false) =>
     `flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-[13px] font-semibold transition ${
@@ -931,6 +936,9 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
 
   return (
     <div className="fixed inset-0 z-[70] bg-white text-slate-950 font-sans overflow-y-auto">
+      <div className="fixed right-3 top-3 z-[80] hidden md:block">
+        <ConnectionStatus />
+      </div>
             {sidebarOpen && (
         <div className="fixed inset-0 z-[15] bg-slate-900/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
@@ -981,9 +989,9 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
           </div>
         </div>
         <div className="mt-auto border-t border-slate-200 p-4 bg-white space-y-1">
-          <Link to="/" className="w-full text-left px-4 py-2.5 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-50 hover:text-teal-600 transition-colors block">
+          <button type="button" onClick={() => safeBack(navigate, '/dashboard')} className="w-full text-left px-4 py-2.5 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-50 hover:text-teal-600 transition-colors block">
             <span className="flex items-center gap-2">← Kembali ke Beranda</span>
-          </Link>
+          </button>
           <button type="button" onClick={handleLogout} className="w-full text-left px-4 py-2.5 rounded-lg text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors block">
             <span className="flex items-center gap-2">
                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
@@ -999,6 +1007,9 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
           <div className="flex items-center gap-4 py-2">
             <button type="button" onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+            </button>
+            <button type="button" onClick={() => safeBack(navigate, '/dashboard')} className="lg:hidden min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 shadow-sm">
+              Kembali
             </button>
             
             {/* Dynamic Title Moved to Header */}
@@ -1205,7 +1216,7 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
                           <span className="text-5xl mb-4">📄</span>
                           <h3 className="text-lg font-black text-slate-900 mb-2">Laporan HTML Terpadu</h3>
                           <p className="text-xs text-slate-500 mb-6 px-4">Laporan dinamis sesuai filter aktif: ringkasan eksekutif, capaian, tren, risiko, wilayah prioritas, dan rekomendasi tindak lanjut.</p>
-                          <button onClick={() => openIntegratedHtmlReport(filteredVisits, filters)} className="w-full sm:w-auto bg-slate-900 text-white hover:bg-slate-800 px-6 py-3 rounded-xl font-bold shadow-md hover:-translate-y-0.5 transition-all">Buka Laporan Digital</button>
+                          <button onClick={() => handleOpenIntegratedReport(filteredVisits, 'filter aktif')} className="w-full sm:w-auto bg-slate-900 text-white hover:bg-slate-800 px-6 py-3 rounded-xl font-bold shadow-md hover:-translate-y-0.5 transition-all">Buka Laporan Digital</button>
                       </div>
 
                       <div className="bg-gradient-to-br from-emerald-500 to-teal-700 rounded-xl shadow-md border border-emerald-400 p-6 flex flex-col items-center justify-center text-center text-white relative overflow-hidden">
@@ -1213,10 +1224,10 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
                           <span className="text-5xl mb-4 relative z-10">📥</span>
                           <h3 className="text-lg font-black text-white mb-2 relative z-10">Ekspor Data Raw (Excel)</h3>
                           <p className="text-xs text-emerald-100 mb-6 px-4 relative z-10">Unduh master data tabel kunjungan dalam format MS Excel yang sesuai dengan format pelaporan SIMPUS.</p>
-                          <button onClick={() => exportToPKGExcel(filteredVisits)} className="w-full sm:w-auto bg-white text-teal-700 hover:bg-emerald-50 border border-emerald-100 px-6 py-3 rounded-xl font-black shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all relative z-10 flex items-center gap-2 justify-center">
+                          <button onClick={() => handleExportPkgExcel(filteredVisits, 'filter aktif')} className="w-full sm:w-auto bg-white text-teal-700 hover:bg-emerald-50 border border-emerald-100 px-6 py-3 rounded-xl font-black shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all relative z-10 flex items-center gap-2 justify-center">
                               <span className="text-lg">📊</span> Unduh Kolektif Excel
                           </button>
-                          <button onClick={() => exportToPKG_PDF(filteredVisits)} className="mt-3 w-full sm:w-auto bg-white text-red-700 hover:bg-red-50 border border-red-100 px-6 py-3 rounded-xl font-black shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all relative z-10 flex items-center gap-2 justify-center">
+                          <button onClick={() => handleExportPkgPdf(filteredVisits, 'filter aktif')} className="mt-3 w-full sm:w-auto bg-white text-red-700 hover:bg-red-50 border border-red-100 px-6 py-3 rounded-xl font-black shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all relative z-10 flex items-center gap-2 justify-center">
                               <span className="text-lg">PDF</span> Unduh Kolektif PDF
                           </button>
                       </div>
@@ -1229,8 +1240,8 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
                               <div key={k} className="flex flex-col items-center gap-2 bg-slate-50 border border-slate-200 p-4 rounded-xl">
                                   <span className="text-2xl group-hover:scale-110 transition-transform">{k === 'Balita' ? '🍼' : k === 'Anak/Siswa' ? '🎒' : k === 'Dewasa' ? '💼' : '🧓'}</span>
                                   <span className="font-bold text-slate-700 text-xs">{k}</span>
-                                  <button onClick={() => exportClusterExcel(filteredVisits, k)} className="w-full rounded-lg bg-white px-3 py-2 text-[10px] font-black text-teal-700 ring-1 ring-teal-100 hover:bg-teal-50">Excel</button>
-                                  <button onClick={() => exportClusterPDF(filteredVisits, k)} className="w-full rounded-lg bg-white px-3 py-2 text-[10px] font-black text-red-700 ring-1 ring-red-100 hover:bg-red-50">PDF</button>
+                                  <button onClick={() => handleExportClusterExcel(filteredVisits, k, 'filter aktif')} className="w-full rounded-lg bg-white px-3 py-2 text-[10px] font-black text-teal-700 ring-1 ring-teal-100 hover:bg-teal-50">Excel</button>
+                                  <button onClick={() => handleExportClusterPdf(filteredVisits, k, 'filter aktif')} className="w-full rounded-lg bg-white px-3 py-2 text-[10px] font-black text-red-700 ring-1 ring-red-100 hover:bg-red-50">PDF</button>
                               </div>
                           ))}
                       </div>
@@ -1985,11 +1996,11 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
                        <div className="flex flex-col sm:flex-row gap-6 items-center sm:items-end -mt-12 mb-8">
                           <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-white p-2 shadow-lg z-10">
                              <div className="w-full h-full rounded-full bg-gradient-to-br from-teal-400 to-emerald-600 flex items-center justify-center text-white font-black text-4xl border-2 border-white">
-                                {(sessionStorage.getItem('namaPegawai') || 'Administrator').charAt(0).toUpperCase()}
+                                {(user?.nama || 'Administrator').charAt(0).toUpperCase()}
                              </div>
                           </div>
                           <div className="text-center sm:text-left mb-2">
-                             <h3 className="text-2xl font-black text-slate-900">{sessionStorage.getItem('namaPegawai') || 'Administrator'}</h3>
+                             <h3 className="text-2xl font-black text-slate-900">{user?.nama || 'Administrator'}</h3>
                              <p className="text-sm font-bold text-teal-600">Administrator CKG</p>
                           </div>
                           <div className="sm:ml-auto flex gap-3 mb-2">
@@ -2005,7 +2016,7 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
                                 <div className="space-y-4">
                                    <div className="flex flex-col">
                                       <span className="text-[10px] font-bold text-slate-400">Nama Lengkap</span>
-                                      <span className="text-sm font-semibold text-slate-800">{sessionStorage.getItem('namaPegawai') || 'Administrator'}</span>
+                                      <span className="text-sm font-semibold text-slate-800">{user?.nama || 'Administrator'}</span>
                                    </div>
                                    <div className="flex flex-col">
                                       <span className="text-[10px] font-bold text-slate-400">Nomor Induk Pegawai (NIP) / NIK</span>
@@ -2506,18 +2517,18 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={() => exportToPKGExcel(completedVisits)} className="rounded-lg bg-teal-500 px-4 py-2 text-xs font-black text-white hover:bg-teal-600">
+                    <button type="button" onClick={() => handleExportPkgExcel(completedVisits, 'data selesai')} className="rounded-lg bg-teal-500 px-4 py-2 text-xs font-black text-white hover:bg-teal-600">
                       Unduh Excel Terfilter
                     </button>
-                    <button type="button" onClick={() => exportToPKG_PDF(completedVisits)} className="rounded-lg bg-red-500 px-4 py-2 text-xs font-black text-white hover:bg-red-600">
+                    <button type="button" onClick={() => handleExportPkgPdf(completedVisits, 'data selesai')} className="rounded-lg bg-red-500 px-4 py-2 text-xs font-black text-white hover:bg-red-600">
                       Unduh PDF Terfilter
                     </button>
                     {['Balita', 'Anak/Siswa', 'Dewasa', 'Lansia'].map((cluster) => (
                       <div key={cluster} className="flex overflow-hidden rounded-lg border border-slate-300">
-                        <button type="button" onClick={() => exportClusterExcel(completedVisits, cluster)} className="px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">
+                        <button type="button" onClick={() => handleExportClusterExcel(completedVisits, cluster, 'data selesai')} className="px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">
                           {cluster} Excel
                         </button>
-                        <button type="button" onClick={() => exportClusterPDF(completedVisits, cluster)} className="border-l border-slate-300 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-50">
+                        <button type="button" onClick={() => handleExportClusterPdf(completedVisits, cluster, 'data selesai')} className="border-l border-slate-300 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-50">
                           PDF
                         </button>
                       </div>
@@ -2542,10 +2553,10 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
                         {openMonth === index && (
                           <div className="bg-slate-50 px-4 py-4 text-sm text-slate-600">
                             <p className="font-semibold">{formatNumber(monthVisits.length)} data selesai tersedia untuk bulan ini.</p>
-                            <button type="button" onClick={() => exportToPKGExcel(monthVisits)} className="mt-3 rounded-lg bg-white px-4 py-2 text-xs font-black text-teal-700 ring-1 ring-teal-200 hover:bg-teal-50">
+                            <button type="button" onClick={() => handleExportPkgExcel(monthVisits, `bulan ${month}`)} className="mt-3 rounded-lg bg-white px-4 py-2 text-xs font-black text-teal-700 ring-1 ring-teal-200 hover:bg-teal-50">
                               Unduh laporan bulan {month}
                             </button>
-                            <button type="button" onClick={() => exportToPKG_PDF(monthVisits)} className="ml-2 mt-3 rounded-lg bg-white px-4 py-2 text-xs font-black text-red-700 ring-1 ring-red-200 hover:bg-red-50">
+                            <button type="button" onClick={() => handleExportPkgPdf(monthVisits, `bulan ${month}`)} className="ml-2 mt-3 rounded-lg bg-white px-4 py-2 text-xs font-black text-red-700 ring-1 ring-red-200 hover:bg-red-50">
                               Unduh PDF bulan {month}
                             </button>
                           </div>
@@ -2616,7 +2627,7 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
                 </div>
                 <div>
                   <p className="text-[10px] font-black uppercase text-slate-400">NIK / ID</p>
-                  <p className="font-bold text-slate-900">{selectedRiskPatient.patientNIK || '-'}</p>
+                  <p className="font-bold text-slate-900">{maskNik(selectedRiskPatient.patientNIK)}</p>
                 </div>
                 <div>
                   <p className="text-[10px] font-black uppercase text-slate-400">Alamat</p>
@@ -2707,8 +2718,8 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {selectedSchoolPatients.patients.map(visit => (
                      <div key={visit.id} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:border-teal-300 transition">
-                        <p className="font-black text-slate-900 text-sm truncate">{visit.pasien_snapshot?.nama || visit.patientNIK || 'Tanpa Nama'}</p>
-                        <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-wider">{visit.pasien_snapshot?.nik || visit.patientNIK}</p>
+                        <p className="font-black text-slate-900 text-sm truncate">{visit.pasien_snapshot?.nama || maskNik(visit.patientNIK) || 'Tanpa Nama'}</p>
+                        <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-wider">{maskNik(visit.pasien_snapshot?.nik || visit.patientNIK)}</p>
                         
                         <div className="mt-3 space-y-1 text-xs">
                            <p><span className="font-semibold text-slate-400">Kelas:</span> <span className="font-bold text-slate-700">{visit.pos1?.kelas || '-'}</span></p>
@@ -2802,7 +2813,7 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
                       
                       {!editStaff.id && (
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold text-slate-500">PIN Awal</span>
+                          <span className="mb-1 block text-xs font-bold text-slate-500">PIN Legacy / Password Awal Migrasi</span>
                           <input value={editStaff.pin} onChange={(e) => setEditStaff({...editStaff, pin: e.target.value})} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold focus:border-teal-500 focus:outline-none" placeholder="Masukkan PIN 6 angka" required />
                         </label>
                       )}
@@ -2810,8 +2821,8 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
                       {editStaff.id && (
                         <div className="flex items-center justify-between rounded-md bg-slate-50 p-3">
                           <div>
-                            <span className="block text-xs font-bold text-slate-900">Kata Sandi / PIN</span>
-                            <span className="block text-[10px] font-medium text-slate-500">Reset PIN menjadi 123456 jika lupa.</span>
+                            <span className="block text-xs font-bold text-slate-900">PIN Legacy / Firebase Auth</span>
+                            <span className="block text-[10px] font-medium text-slate-500">Reset di sini hanya mengubah PIN legacy staff. Password Firebase Auth diatur dari Firebase Console.</span>
                           </div>
                           <button type="button" onClick={() => handleResetPIN(editStaff)} className="rounded text-xs font-black text-rose-600 hover:text-rose-700 hover:underline">
                             Reset PIN

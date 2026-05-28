@@ -1,69 +1,96 @@
-import { useState, useEffect } from 'react';
-import { db } from './firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, serverTimestamp, runTransaction } from 'firebase/firestore';
+import { useState } from 'react';
+import { useAuth } from './auth/AuthContext';
 import formSchemas from './formSchemas.json';
 import DynamicFormRenderer from './DynamicFormRenderer';
 import { STATUS_MAPPING } from './utils/constants';
+import { VISIT_STATUS } from './features/workflow/workflowStatus';
 import { buildQuestionMap, sanitizeFormDataForSchema } from './utils/formSchemaData';
+import { auditQueueTransition } from './services/queueAudit';
+import { buildQueueSpeech, claimVisitForStaff, createTvQueueCall } from './services/queueService';
+import { updateVisit } from './services/visitService';
+import useQueue from './hooks/useQueue';
+import { useAutosaveDraft } from './hooks/useAutosaveDraft';
+import { clearDraft, loadDraft } from './utils/draftStorage';
+import { MobileQueueDrawer } from './features/pos/shared/MobileQueueDrawer';
+import PatientStickyHeader from './components/patient/PatientStickyHeader';
+import PosBottomActionBar from './components/patient/PosBottomActionBar';
+import QueueEmptyState from './components/patient/QueueEmptyState';
 
 function Pos2() {
-  const [antrian, setAntrian] = useState([]);
+  const { user } = useAuth();
+  const antrian = useQueue('POS2');
   const [pasienAktif, setPasienAktif] = useState(null);
   const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(false); 
+  const [callingVisitId, setCallingVisitId] = useState(null);
+  const [draftSavedAt, setDraftSavedAt] = useState('');
+  const [queueDrawerOpen, setQueueDrawerOpen] = useState(false);
+
+  useAutosaveDraft({
+    moduleName: 'pos2',
+    visitId: pasienAktif?.id,
+    data: formData,
+    enabled: Boolean(pasienAktif?.id && Object.keys(formData).length),
+    onSaved: () => setDraftSavedAt(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }))
+  });
 
   // 🛡️ PENGAMAN VARIABEL YANG HILANG
   const umurPasien = pasienAktif?.umur_saat_periksa || 0;
   const kategoriPasien = pasienAktif?.kategori_usia_satusehat || '-';
 
-  useEffect(() => {
-    const q = query(collection(db, "visits"), where("status_antrian", "in", [STATUS_MAPPING.POS2, 'Menunggu Pos 2', 'Antri Pos 2', 'Antre Pos 2', 'POS 2', 'Pos 2']));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = []; 
-      snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-      setAntrian(data.sort((a, b) => (a.waktu_ambil_tiket?.toMillis() || 0) - (b.waktu_ambil_tiket?.toMillis() || 0)));
-    });
-    return () => unsubscribe();
-  }, []);
-
   const handlePanggil = async (item) => {
+    if (callingVisitId || pasienAktif) return;
+    setCallingVisitId(item.id);
     try {
-      await runTransaction(db, async (transaction) => {
-        const docRef = doc(db, "visits", item.id);
-        const docSnap = await transaction.get(docRef);
-        if (!docSnap.exists()) throw new Error("Data tidak ditemukan!");
-        const data = docSnap.data();
-        const rawRole = sessionStorage.getItem('rolePegawai') || '';
-        const isAdmin = rawRole.includes('admin');
-        if (!isAdmin && data.petugas_aktif && data.petugas_aktif !== sessionStorage.getItem('namaPegawai')) {
-             throw new Error(`Pasien sedang ditangani oleh ${data.petugas_aktif}`);
-        }
-        transaction.update(docRef, { petugas_aktif: sessionStorage.getItem('namaPegawai') || 'Petugas' });
+      const activeVisit = await claimVisitForStaff({
+        visitId: item.id,
+        staffName: user?.nama || 'Petugas',
+        isAdmin: user?.roles?.includes('admin'),
+        actor: user,
+        module: 'POS2',
+        workflowStatus: VISIT_STATUS.POS2_IN_PROGRESS
       });
-      const activeSchema = getSchemaForVisit(item);
-      setPasienAktif(item); setFormData(sanitizeFormDataForSchema(activeSchema, item.pos2 || {})); window.scrollTo({ top: 0, behavior: 'smooth' });
-      try { await addDoc(collection(db, "panggilan_tv"), { pos: "POS 2", identitas_layar: item.nomor_antrian, teks_suara: `Nomor antrean... ${item.nomor_antrian.replace(/-/g, ' ')}... Silakan menuju Pos Dua.`, waktu: serverTimestamp() }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 2:", e); }
+      const activeSchema = getSchemaForVisit(activeVisit);
+      const serverFormData = sanitizeFormDataForSchema(activeSchema, activeVisit.pos2 || {});
+      const draft = loadDraft('pos2', activeVisit.id);
+      const shouldRestoreDraft = draft?.data && window.confirm(`Ada draft Pos 2 tersimpan pada ${draft.savedAt}. Pulihkan draft ini?`);
+      setPasienAktif(activeVisit);
+      setDraftSavedAt(draft?.savedAt ? new Date(draft.savedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '');
+      setFormData(shouldRestoreDraft ? draft.data : serverFormData);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      try { await createTvQueueCall({ pos: "POS 2", queueNumber: activeVisit.nomor_antrian, speechText: buildQueueSpeech(activeVisit.nomor_antrian, 'Silakan menuju Pos Dua.') }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 2:", e); }
     } catch (e) {
       alert("⚠️ " + e.message);
+    } finally {
+      setCallingVisitId(null);
     }
   };
 
   const handleSimpanData = async (e) => {
-    e.preventDefault(); if (!pasienAktif) return; setLoading(true);
+    e.preventDefault(); if (!pasienAktif || loading) return; setLoading(true);
     try {
       const activeSchema = getActiveSchema();
       const sanitizedFormData = sanitizeFormDataForSchema(activeSchema, formData, {
         posNumber: 2,
         kategoriUsia: pasienAktif.kategori_usia_satusehat || '-'
       });
-      await updateDoc(doc(db, "visits", pasienAktif.id), { status_antrian: STATUS_MAPPING.POS3, petugas_pos2: sessionStorage.getItem('namaPegawai') || 'Sistem', pos2: sanitizedFormData, pos2_question_map: buildQuestionMap(activeSchema), petugas_aktif: null });
+      await updateVisit(pasienAktif.id, { status: VISIT_STATUS.POS2_COMPLETE, status_antrian: STATUS_MAPPING.POS3, petugas_pos2: user?.nama || 'Sistem', pos2: sanitizedFormData, pos2_question_map: buildQuestionMap(activeSchema), petugas_aktif: null });
+      clearDraft('pos2', pasienAktif.id);
+      setDraftSavedAt('');
+      await auditQueueTransition({
+        visit: pasienAktif,
+        module: 'Pos 2',
+        action: 'Simpan Pos 2 dan lanjut ke Pos 3',
+        toStatus: STATUS_MAPPING.POS3,
+        extra: { status: VISIT_STATUS.POS2_COMPLETE, petugas_pos2: user?.nama || 'Sistem' }
+      });
       setTimeout(() => setPasienAktif(null), 1000); 
     } catch (error) { console.error("Gagal menyimpan data Pos 2:", error); alert("Gagal menyimpan data!"); } finally { setLoading(false); }
   };
 
   const handleBatal = async () => {
     if (pasienAktif?.id) {
-      try { await updateDoc(doc(db, "visits", pasienAktif.id), { petugas_aktif: null }); }
+      try { await updateVisit(pasienAktif.id, { petugas_aktif: null }); }
       catch (error) { console.error("Gagal melepas pasien:", error); }
     }
     setPasienAktif(null);
@@ -75,9 +102,15 @@ function Pos2() {
     if (!lanjut) return;
     setLoading(true);
     try {
-      await updateDoc(doc(db, "visits", pasienAktif.id), {
+      await updateVisit(pasienAktif.id, {
         status_antrian: STATUS_MAPPING.POS1,
         petugas_aktif: null
+      });
+      await auditQueueTransition({
+        visit: pasienAktif,
+        module: 'Pos 2',
+        action: 'Kembalikan pasien dari Pos 2 ke Pos 1',
+        toStatus: STATUS_MAPPING.POS1
       });
       setPasienAktif(null);
     } catch (error) {
@@ -117,41 +150,71 @@ function Pos2() {
       {!pasienAktif ? (
         <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-6 border-b border-slate-100 pb-3">POS 2: ANTROPOMETRI, TENSI & GULA DARAH ({antrian.length})</h3>
+            {antrian.length === 0 ? (
+              <QueueEmptyState accentClass="text-[#4f46e5]" />
+            ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 {antrian.map((item) => (
-                <div key={item.id} onClick={() => handlePanggil(item)} className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col items-center justify-center cursor-pointer hover:border-[#4f46e5] group shadow-sm">
+                <button type="button" key={item.id} onClick={() => handlePanggil(item)} disabled={Boolean(callingVisitId)} className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col items-center justify-center cursor-pointer hover:border-[#4f46e5] group shadow-sm disabled:cursor-wait disabled:opacity-60">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 group-hover:text-[#4f46e5]">Antrian</p>
                     <h3 className="text-3xl font-black text-slate-800 mb-3 group-hover:text-[#4f46e5]">{item.nomor_antrian}</h3>
-                    <div className="bg-slate-100 text-slate-600 text-[8px] font-black px-3 py-1 rounded uppercase tracking-widest">{item.kategori_usia_satusehat}</div>
-                </div>
+                    <div className="bg-slate-100 text-slate-600 text-[8px] font-black px-3 py-1 rounded uppercase tracking-widest">{callingVisitId === item.id ? 'Memanggil...' : item.kategori_usia_satusehat}</div>
+                </button>
                 ))}
             </div>
+            )}
         </div>
       ) : (
       <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
-        <div className="bg-[#4f46e5] p-6 text-white flex justify-between items-center">
+        <PatientStickyHeader
+          visit={pasienAktif}
+          posLabel="Pos 2: Antropometri, Tensi & Gula Darah"
+          accentClass="bg-[#4f46e5]"
+          onCancel={handleBatal}
+        />
+        <div className="hidden bg-[#4f46e5] p-6 text-white flex justify-between items-center">
             <h2 className="text-4xl font-black">{pasienAktif.nomor_antrian}</h2>
             <button type="button" onClick={handleBatal} className="bg-white/20 text-white px-4 py-2 rounded-xl font-bold text-xs">✕ Batal</button>
         </div>
         <form onSubmit={handleSimpanData} className="p-4 md:p-6 bg-[#f8fafc] mobile-safe-page">
+            <div className="mb-3 md:hidden">
+              <button
+                type="button"
+                onClick={() => setQueueDrawerOpen(true)}
+                className="min-h-12 w-full rounded-2xl border border-[#4f46e5]/20 bg-white px-4 text-sm font-black uppercase text-[#4f46e5] shadow-sm"
+              >
+                Lihat Antrean ({antrian.length})
+              </button>
+            </div>
             <div className="bg-white px-6 py-5 rounded-2xl shadow-sm border border-slate-200">
                 <h3 className="font-black text-lg">{pasienAktif.pasien_snapshot?.nama || "Tanpa Nama"}</h3>
                 <p className="text-[10px] font-bold text-slate-400 uppercase">{umurPasien} THN • {kategoriPasien}</p>
+                <p className="mt-2 text-[10px] font-bold uppercase text-emerald-600">
+                  {draftSavedAt ? `Draft lokal tersimpan ${draftSavedAt}` : 'Draft lokal aktif'}
+                </p>
             </div>
             
             <DynamicFormRenderer schema={getActiveSchema()} formData={formData} fullData={pasienAktif} onChange={(id, val) => setFormData(prev => ({ ...prev, [id]: val }))} posNumber={2} kategoriUsia={pasienAktif.kategori_usia_satusehat || '-'} />
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-6 sticky mobile-safe-submit z-40">
-              <button type="button" onClick={handleKembaliPosSebelumnya} disabled={loading} className="w-full min-h-[60px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-black rounded-2xl shadow-sm active:scale-95 transition-all text-sm uppercase disabled:opacity-50">
-                  ‹ Pos 1
-              </button>
-              <button type="submit" disabled={loading} className="w-full min-h-[60px] bg-[#4f46e5] text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all text-sm uppercase disabled:opacity-50">
-                  {loading ? 'MENYIMPAN...' : 'Simpan & Ke Pos 3 ›'}
-              </button>
-            </div>
+            <PosBottomActionBar
+              backLabel="Kembali ke Pos 1"
+              primaryLabel="Simpan & Lanjut Pos 3"
+              loading={loading}
+              onBack={handleKembaliPosSebelumnya}
+              primaryColorClass="bg-[#4f46e5] hover:bg-indigo-700"
+            />
         </form>
       </div>
       )}
+      <MobileQueueDrawer
+        open={queueDrawerOpen}
+        onClose={() => setQueueDrawerOpen(false)}
+        queue={antrian}
+        activeVisitId={pasienAktif?.id}
+        onSelect={handlePanggil}
+        callingVisitId={callingVisitId}
+        title="Antrean Pos 2"
+      />
     </div>
   );
 }

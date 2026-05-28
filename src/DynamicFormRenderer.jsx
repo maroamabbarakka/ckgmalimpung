@@ -1,4 +1,4 @@
-yimport { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 
 // ==========================================
 // 🚀 THE MASTER ENGINE V22.2 (TENSI & MNA FIX)
@@ -690,8 +690,89 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
     return normalized === 'tidak' || normalized === 'tdk' || normalized === 'no' || normalized.includes('negatif') || normalized.includes('non reaktif');
   };
 
+  const getNumberProfile = (question) => {
+    const text = String(question?.question_text || '').toLowerCase();
+    const hasAny = (keywords) => keywords.some(keyword => text.includes(keyword));
 
-  const VoiceInput = ({ value, onChange, placeholder, type="text", inputMode }) => {
+    if (hasAny(['sistolik'])) return { mode: 'integer', min: 60, max: 260, unit: 'mmHg', hint: 'Periksa ulang bila di luar 60-260.' };
+    if (hasAny(['diastolik'])) return { mode: 'integer', min: 30, max: 160, unit: 'mmHg', hint: 'Periksa ulang bila di luar 30-160.' };
+    if (hasAny(['nadi'])) return { mode: 'integer', min: 30, max: 220, unit: 'x/menit', hint: 'Periksa ulang bila di luar 30-220.' };
+    if (hasAny(['napas'])) return { mode: 'integer', min: 5, max: 80, unit: 'x/menit', hint: 'Periksa ulang bila di luar 5-80.' };
+    if (hasAny(['suhu'])) return { mode: 'decimal', min: 30, max: 45, unit: 'C', hint: 'Periksa ulang bila di luar 30-45 C.' };
+    if (hasAny(['tinggi', 'panjang'])) return { mode: 'decimal', min: 30, max: 230, unit: 'cm', hint: 'Gunakan cm. Periksa ulang nilai ekstrem.' };
+    if (hasAny(['berat badan'])) return { mode: 'decimal', min: 1, max: 250, unit: 'kg', hint: 'Gunakan kg. Periksa ulang nilai ekstrem.' };
+    if (hasAny(['lingkar', 'lila'])) return { mode: 'decimal', min: 5, max: 200, unit: 'cm', hint: 'Gunakan cm. Periksa ulang nilai ekstrem.' };
+    if (hasAny(['gula darah', 'gds', 'gdp'])) return { mode: 'integer', min: 20, max: 700, unit: 'mg/dL', hint: 'Periksa ulang bila di luar 20-700.' };
+    if (hasAny(['kolesterol', 'hdl', 'ldl', 'trigliserida'])) return { mode: 'integer', min: 10, max: 1000, unit: 'mg/dL', hint: 'Periksa ulang nilai laboratorium ekstrem.' };
+    if (hasAny(['asam urat', 'kreatinin', 'hba1c', 'hb1ac', 'hemoglobin', 'imt', 'apri'])) return { mode: 'decimal', min: 0, max: 100, unit: '', hint: 'Gunakan angka desimal bila perlu.' };
+    if (hasAny(['skor', 'score', 'nilai', 'lama', 'tahun', 'bulan', 'batang', 'jumlah'])) return { mode: 'integer', min: 0, max: 999, unit: '', hint: 'Isi angka tanpa huruf.' };
+
+    return { mode: 'decimal', min: null, max: null, unit: '', hint: 'Isi angka saja.' };
+  };
+
+  const sanitizeNumberValue = (rawValue, mode = 'decimal') => {
+    const normalized = String(rawValue || '').replace(',', '.');
+    const cleaned = normalized.replace(mode === 'integer' ? /\D/g : /[^0-9.]/g, '');
+    if (mode === 'integer') return cleaned;
+    const [first, ...rest] = cleaned.split('.');
+    return rest.length ? `${first}.${rest.join('')}` : first;
+  };
+
+  const getNumberWarning = (value, profile) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const numeric = Number(raw);
+    if (Number.isNaN(numeric)) return 'Masukkan angka yang valid.';
+    if (profile.min !== null && numeric < profile.min) return profile.hint;
+    if (profile.max !== null && numeric > profile.max) return profile.hint;
+    return '';
+  };
+
+  const getAnswerProfile = (question, options = []) => {
+    const text = String(question?.question_text || '').toLowerCase();
+    const type = String(question?.answer_type || '').toLowerCase();
+    const parsedOptions = Array.isArray(options) ? options.map(opt => parseOption(opt)) : [];
+    const longestOption = parsedOptions.reduce((max, opt) => Math.max(max, String(opt).length), 0);
+    const hasAny = (keywords) => keywords.some(keyword => text.includes(keyword));
+
+    if (type === 'number') {
+      if (hasAny(['sistolik', 'diastolik', 'nadi', 'napas', 'suhu', 'skor', 'score', 'nilai', 'lama', 'tahun', 'bulan', 'batang', 'jumlah'])) {
+        return { inputClass: 'max-w-36', spanClass: '' };
+      }
+
+      if (hasAny(['tinggi', 'panjang', 'berat', 'lingkar', 'lila', 'imt', 'gula darah', 'gds', 'gdp', 'hba1c', 'hb1ac', 'hemoglobin', 'kolesterol', 'hdl', 'ldl', 'trigliserida', 'asam urat', 'kreatinin', 'trombosit', 'sgot', 'apri'])) {
+        return { inputClass: 'max-w-48 sm:max-w-44', spanClass: '' };
+      }
+
+      return { inputClass: 'max-w-52', spanClass: text.length > 90 ? 'md:col-span-2' : '' };
+    }
+
+    if (options.length > 5) {
+      return {
+        inputClass: longestOption > 32 ? 'sm:max-w-xl' : 'sm:max-w-sm',
+        spanClass: longestOption > 32 || text.length > 90 ? 'md:col-span-2' : ''
+      };
+    }
+
+    if (options.length > 0) {
+      return {
+        inputClass: '',
+        spanClass: longestOption > 18 || text.length > 95 ? 'md:col-span-2' : ''
+      };
+    }
+
+    return {
+      inputClass: '',
+      spanClass: 'md:col-span-2'
+    };
+  };
+
+  const getQuestionSpanClass = (question, options = []) => {
+    const profile = getAnswerProfile(question, options);
+    return profile.spanClass || '';
+  };
+
+  const VoiceInput = ({ value, onChange, placeholder, type="text", inputMode, fieldClassName = "" }) => {
     const [isListening, setIsListening] = useState(false);
     const [interimText, setInterimText] = useState("");
     const recognitionRef = useRef(null);
@@ -789,7 +870,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
     const displayValue = isListening && interimText ? (value ? value + " " + interimText : interimText) : value;
 
     return (
-      <div className="relative mt-2 flex w-full items-center">
+      <div className={`relative mt-2 flex w-full items-center ${fieldClassName}`}>
         <input 
           type={type} 
           value={displayValue || ''} 
@@ -800,7 +881,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
           required={false} 
           placeholder={isListening ? "Mendengarkan... (bisa jeda/napas)" : placeholder}
           inputMode={inputMode}
-          className={`w-full bg-white border font-bold text-xs py-4 pl-4 pr-12 rounded-xl outline-none focus:ring-2 shadow-sm transition-all ${isListening ? 'border-rose-500 ring-2 ring-rose-200 placeholder-rose-400 text-rose-700' : 'border-slate-200 text-slate-800'}`}
+          className={`w-full min-h-[50px] bg-white border font-bold text-sm py-3.5 pl-4 pr-12 rounded-xl outline-none focus:ring-2 shadow-sm transition-all ${isListening ? 'border-rose-500 ring-2 ring-rose-200 placeholder-rose-400 text-rose-700' : 'border-slate-200 text-slate-800'}`}
         />
         {isSupported && (
             <button 
@@ -816,6 +897,40 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
                )}
             </button>
         )}
+      </div>
+    );
+  };
+
+  const SmartNumberInput = ({ question, value, onChange: handleValueChange, placeholder = "0", className = "", compact = false, showUnit = true }) => {
+    const profile = getNumberProfile(question);
+    const warning = getNumberWarning(value, profile);
+    const fieldId = `number-${question.id}`;
+    const helpId = `${fieldId}-help`;
+
+    return (
+      <div className={compact ? "w-full" : "w-full"}>
+        <div className="relative">
+          <input
+            id={fieldId}
+            type="text"
+            value={value || ''}
+            onChange={(event) => handleValueChange(sanitizeNumberValue(event.target.value, profile.mode))}
+            placeholder={placeholder}
+            inputMode={profile.mode === 'integer' ? 'numeric' : 'decimal'}
+            pattern={profile.mode === 'integer' ? '[0-9]*' : '[0-9.]*'}
+            aria-invalid={Boolean(warning)}
+            aria-describedby={helpId}
+            className={`${className} ${warning ? 'border-amber-300 bg-amber-50 focus:ring-amber-400' : ''}`}
+          />
+          {showUnit && profile.unit && (
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-500">
+              {profile.unit}
+            </span>
+          )}
+        </div>
+        <p id={helpId} className={`mt-1 px-1 text-[10px] font-bold ${warning ? 'text-amber-700' : 'text-slate-400'}`}>
+          {warning || profile.hint}
+        </p>
       </div>
     );
   };
@@ -927,6 +1042,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
       ? ['Normal', ...baseOptions]
       : baseOptions;
     const isBool = safeOptions.length === 2 || safeOptions.length === 3;
+    const answerProfile = getAnswerProfile(question, safeOptions);
 
     if (questionText.includes('e-tumbling') || questionText.includes('visus mata')) {
        return (
@@ -937,7 +1053,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
        )
     }
 
-    if (isBool) return <CustomToggle question={question} options={safeOptions} variant={variant === "card" ? "radio" : "segmented"} />;
+    if (isBool) return <CustomToggle question={question} options={safeOptions} variant="segmented" />;
     
     if (safeOptions.length > 0 && safeOptions.length <= 5) {
         const hasLongOption = safeOptions.some(opt => parseOption(opt).length > 18);
@@ -986,7 +1102,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
     if (safeOptions.length > 5) {
         return (
           <select value={value} onChange={(e) => onChange(question.id, e.target.value)} required={false} 
-            className="w-full bg-white border border-slate-200 text-slate-800 font-bold text-[11px] py-4 px-4 rounded-xl mt-2 outline-none focus:ring-2 shadow-sm appearance-none">
+            className={`w-full ${answerProfile.inputClass} bg-white border border-slate-200 text-slate-800 font-bold text-[11px] py-4 px-4 rounded-xl mt-2 outline-none focus:ring-2 shadow-sm appearance-none`}>
             <option value="" disabled>-- Pilih Hasil --</option>
             {safeOptions.map((opt, idx) => <option key={idx} value={opt}>{opt}</option>)}
           </select>
@@ -994,13 +1110,12 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
     }
     if (question.answer_type === 'number') {
        return (
-         <input 
-            type="number"
+         <SmartNumberInput
+            question={question}
             value={value}
-            onChange={(e) => onChange(question.id, e.target.value)}
-            placeholder="Ketik angka..."
-            inputMode="decimal"
-            className={`w-full border border-slate-200 text-slate-800 font-bold text-sm py-4 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#0f766e] ${variant === "card" ? 'mt-4 bg-white shadow-sm placeholder-slate-400' : 'mt-2 bg-slate-50 shadow-inner'}`}
+            onChange={(nextValue) => onChange(question.id, nextValue)}
+            placeholder="0"
+            className={`w-full ${answerProfile.inputClass} border border-slate-200 text-slate-800 font-black text-base text-center py-4 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#0f766e] ${variant === "card" ? 'mt-4 bg-white shadow-sm placeholder-slate-400' : 'mt-2 bg-slate-50 shadow-inner'}`}
          />
        );
     }
@@ -1011,9 +1126,18 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
         value={value} 
         onChange={(val) => onChange(question.id, val)} 
         placeholder="Ketik hasil..." 
+        fieldClassName={answerProfile.inputClass}
       />
     );
   };
+
+  const clinicalInputClass = "w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-4 sm:px-5 py-3.5 sm:py-4 font-black text-slate-800 text-xl sm:text-2xl outline-none focus:ring-2 focus:ring-[#4f46e5] focus:bg-white transition-all";
+  const clinicalInputCompactClass = `${clinicalInputClass} max-w-52`;
+  const unitLabelClass = "shrink-0 rounded-lg bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500";
+  const clinicalInputRowClass = "flex w-full flex-col gap-2 sm:ml-2 sm:w-[calc(100%-0.5rem)] sm:flex-row sm:items-center sm:gap-3";
+  const interpretationRowClass = "mt-4 flex flex-wrap items-center justify-between gap-2 sm:ml-2";
+  const interpretationLabelClass = "text-[9px] font-bold text-slate-400 uppercase tracking-widest";
+  const interpretationBadgeClass = "max-w-full break-words px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm";
 
   const renderCards = () => {
     const usedIds = new Set();
@@ -1188,7 +1312,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
         const useQuestionCards = ['Risiko Paru & Tuberkulosis', 'Skrining Kanker & Jantung', 'Skrining Kulit Khusus', 'Gaya Hidup & Risiko', 'Kesehatan Jiwa & Kognitif', 'Fisik Geriatri & Gizi'].includes(title);
 
         return (
-          <div key={title} className="bg-slate-50/50 rounded-2xl md:rounded-[2rem] p-4 md:p-6 border border-slate-200 shadow-sm animate-fade-in-up mb-6">
+          <div key={title} className="bg-slate-50/50 rounded-2xl md:rounded-[2rem] p-3 sm:p-4 md:p-6 border border-slate-200 shadow-sm animate-fade-in-up mb-6">
             <div className="flex flex-wrap items-start justify-between gap-3 mb-5 border-b border-slate-200/60 pb-3">
               <h4 className="min-w-0 flex flex-1 items-center gap-3 text-slate-800 font-black leading-tight"><span className="shrink-0 text-xl">{icon}</span> <span className="break-words">{title}</span></h4>
               <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
@@ -1233,7 +1357,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
                   const questionIndex = visibleQs.findIndex(item => item.id === q.id) + 1;
                   if (useQuestionCards) {
                     return (
-                      <div key={q.id} className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div key={q.id} className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 sm:p-4 shadow-sm">
                         <div className="flex items-start gap-2">
                           <span className="mt-0.5 w-6 shrink-0 text-right text-xs font-black text-slate-300">{questionIndex}.</span>
                           <label className="min-w-0 flex-1 text-[15px] font-black leading-snug text-slate-800 normal-case break-words">
@@ -1241,14 +1365,15 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
                             {q.required && <span className="text-rose-500"> *</span>}
                           </label>
                         </div>
-                        <div className="pl-8">
+                        <div className="mt-3 sm:pl-8">
                           {renderInput(q, opts, "card")}
                         </div>
                       </div>
                     );
                   }
+                  const spanClass = getQuestionSpanClass(q, opts);
                   return (
-                    <div key={q.id} className="min-w-0">
+                    <div key={q.id} className={`min-w-0 ${spanClass}`}>
                       <label className="text-[11px] md:text-[10px] font-black text-slate-500 uppercase tracking-wide px-1 block mb-1 leading-snug break-words">{parseQuestion(q.question_text, kategoriUsia)}</label>
                       {renderInput(q, opts)}
                     </div>
@@ -1273,35 +1398,35 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
         
         {/* CUSTOM BLOK: ANTROPOMETRI */}
         {(qBB || qTB || qBetis) && (
-          <div className="bg-slate-50/50 rounded-2xl md:rounded-[2rem] p-4 md:p-6 border border-slate-200 shadow-sm mb-6">
+          <div className="bg-slate-50/50 rounded-2xl md:rounded-[2rem] p-3 sm:p-4 md:p-6 border border-slate-200 shadow-sm mb-6">
             <h4 className="flex items-center gap-3 text-slate-800 font-black mb-5 border-b border-slate-200/60 pb-3"><span className="text-xl">📏</span> Antropometri Dasar</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6 mb-6">
               {qTB && <div>
                 <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-0.5">Tinggi/Panjang <span className="text-rose-500">*</span></label>
                 <p className="text-[9px] text-slate-500 mb-2">Dalam sentimeter (cm)</p>
-                    <input type="number" inputMode="decimal" value={getValue(qTB.id)} onChange={(e) => onChange(qTB.id, e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-500 text-lg" />
+                    <SmartNumberInput question={qTB} value={getValue(qTB.id)} onChange={(nextValue) => onChange(qTB.id, nextValue)} className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-16 font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-500 text-lg" />
               </div>}
               {qBB && <div>
                 <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-0.5">Berat Badan <span className="text-rose-500">*</span></label>
                 <p className="text-[9px] text-slate-500 mb-2">Dalam kilogram (kg)</p>
-                <input type="number" inputMode="decimal" value={getValue(qBB.id)} onChange={(e) => onChange(qBB.id, e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-500 text-lg" />
+                <SmartNumberInput question={qBB} value={getValue(qBB.id)} onChange={(nextValue) => onChange(qBB.id, nextValue)} className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-16 font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-500 text-lg" />
               </div>}
               {qLP && <div>
                 <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-0.5">Lingkar Perut <span className="text-rose-500">*</span></label>
                 <p className="text-[9px] text-slate-500 mb-2">cm</p>
-                <input type="number" inputMode="decimal" value={getValue(qLP.id)} onChange={(e) => onChange(qLP.id, e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-500 text-lg" />
+                <SmartNumberInput question={qLP} value={getValue(qLP.id)} onChange={(nextValue) => onChange(qLP.id, nextValue)} className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-16 font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-500 text-lg" />
               </div>}
               {qLiLA && <div>
                 <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-0.5">LiLA <span className="text-rose-500">*</span></label>
                 <p className="text-[9px] text-slate-500 mb-2">Lingkar Lengan (cm)</p>
                 {qLiLA.answer_type === 'number' ? (
-                  <input type="number" inputMode="decimal" value={getValue(qLiLA.id)} onChange={(e) => onChange(qLiLA.id, e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-500 text-lg" />
+                  <SmartNumberInput question={qLiLA} value={getValue(qLiLA.id)} onChange={(nextValue) => onChange(qLiLA.id, nextValue)} className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-16 font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-500 text-lg" />
                 ) : renderInput(qLiLA)}
               </div>}
-              {qBetis && isQVisible(qBetis) && <div className="col-span-2">
+              {qBetis && isQVisible(qBetis) && <div className="sm:col-span-2">
                 <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-0.5 text-orange-600">{parseQuestion(qBetis.question_text, kategoriUsia)}</label>
                 <p className="text-[9px] text-orange-400 mb-2">Lingkar Betis (cm)</p>
-                <input type="number" inputMode="decimal" value={getValue(qBetis.id)} onChange={(e) => onChange(qBetis.id, e.target.value)} className="w-full border border-orange-200 rounded-xl px-4 py-3 font-bold bg-orange-50 outline-none focus:ring-2 focus:ring-orange-500 text-lg" />
+                <SmartNumberInput question={qBetis} value={getValue(qBetis.id)} onChange={(nextValue) => onChange(qBetis.id, nextValue)} className="w-full border border-orange-200 rounded-xl px-4 py-3 pr-16 font-bold bg-orange-50 outline-none focus:ring-2 focus:ring-orange-500 text-lg" />
               </div>}
             </div>
             
@@ -1338,12 +1463,12 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
                <div className="grid w-full md:w-2/3 grid-cols-[1fr_auto_1fr] items-end gap-3">
                  <div>
                    <span className="mb-1 block px-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Sistolik</span>
-                   <input type="number" inputMode="numeric" value={getValue(qSys.id)} onChange={(e) => onChange(qSys.id, e.target.value)} placeholder="120" className="w-full border border-slate-200 rounded-xl px-5 py-4 font-black text-slate-800 text-lg tracking-widest bg-white outline-none focus:ring-2 focus:ring-[#4f46e5]" />
+                   <SmartNumberInput question={qSys} value={getValue(qSys.id)} onChange={(nextValue) => onChange(qSys.id, nextValue)} placeholder="120" className="w-full border border-slate-200 rounded-xl px-5 py-4 pr-20 font-black text-slate-800 text-lg tracking-widest bg-white outline-none focus:ring-2 focus:ring-[#4f46e5]" />
                  </div>
                  <div className="pb-4 text-2xl font-black text-slate-300">/</div>
                  <div>
                    <span className="mb-1 block px-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Diastolik</span>
-                   <input type="number" inputMode="numeric" value={getValue(qDia?.id)} onChange={(e) => qDia && onChange(qDia.id, e.target.value)} placeholder="80" className="w-full border border-slate-200 rounded-xl px-5 py-4 font-black text-slate-800 text-lg tracking-widest bg-white outline-none focus:ring-2 focus:ring-[#4f46e5]" />
+                   {qDia && <SmartNumberInput question={qDia} value={getValue(qDia.id)} onChange={(nextValue) => onChange(qDia.id, nextValue)} placeholder="80" className="w-full border border-slate-200 rounded-xl px-5 py-4 pr-20 font-black text-slate-800 text-lg tracking-widest bg-white outline-none focus:ring-2 focus:ring-[#4f46e5]" />}
                  </div>
                </div>
             </div>
@@ -1384,10 +1509,14 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
 
             <div className="mb-4 animate-fade-in-up">
                {metodeGula === 'sewaktu' && qGDS && (
-                 <input type="number" inputMode="decimal" value={getValue(qGDS.id)} onChange={(e) => onChange(qGDS.id, e.target.value)} placeholder="GDS mg/dL" className="w-full md:w-2/3 border border-slate-200 rounded-2xl px-6 py-6 font-black text-slate-300 placeholder-slate-300 focus:text-slate-800 text-3xl tracking-wider bg-white outline-none focus:ring-4 focus:ring-[#4f46e5]/20 shadow-inner transition-all" />
+                 <div className="relative w-full max-w-72 md:max-w-sm">
+                   <SmartNumberInput question={qGDS} value={getValue(qGDS.id)} onChange={(nextValue) => onChange(qGDS.id, nextValue)} placeholder="0" className="w-full border border-slate-200 rounded-2xl px-6 py-6 pr-24 font-black text-slate-800 placeholder-slate-300 focus:text-slate-800 text-3xl tracking-wider bg-white outline-none focus:ring-4 focus:ring-[#4f46e5]/20 shadow-inner transition-all" />
+                 </div>
                )}
                {metodeGula === 'puasa' && qGDP && (
-                 <input type="number" inputMode="decimal" value={getValue(qGDP.id)} onChange={(e) => onChange(qGDP.id, e.target.value)} placeholder="GDP mg/dL" className="w-full md:w-2/3 border border-slate-200 rounded-2xl px-6 py-6 font-black text-slate-300 placeholder-slate-300 focus:text-slate-800 text-3xl tracking-wider bg-white outline-none focus:ring-4 focus:ring-[#4f46e5]/20 shadow-inner transition-all" />
+                 <div className="relative w-full max-w-72 md:max-w-sm">
+                   <SmartNumberInput question={qGDP} value={getValue(qGDP.id)} onChange={(nextValue) => onChange(qGDP.id, nextValue)} placeholder="0" className="w-full border border-slate-200 rounded-2xl px-6 py-6 pr-24 font-black text-slate-800 placeholder-slate-300 focus:text-slate-800 text-3xl tracking-wider bg-white outline-none focus:ring-4 focus:ring-[#4f46e5]/20 shadow-inner transition-all" />
+                 </div>
                )}
             </div>
 
@@ -1409,7 +1538,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
                         <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-0.5 px-1">{parseQuestion(qHbA1c.question_text, kategoriUsia)} <span className="text-rose-500">*</span></label>
                         <p className="text-[9px] text-slate-500 mb-2 px-1">Persentase (%)</p>
                         <div className="relative">
-                          <input type="number" value={getValue(qHbA1c.id)} onChange={(e) => onChange(qHbA1c.id, e.target.value)} placeholder="0.0" step="0.1" className="w-full border border-slate-200 rounded-xl px-5 py-4 font-black text-slate-800 text-lg bg-white outline-none focus:ring-2 focus:ring-rose-500 pr-16" />
+                          <SmartNumberInput question={qHbA1c} value={getValue(qHbA1c.id)} onChange={(nextValue) => onChange(qHbA1c.id, nextValue)} placeholder="0.0" className="w-full border border-slate-200 rounded-xl px-5 py-4 font-black text-slate-800 text-lg bg-white outline-none focus:ring-2 focus:ring-rose-500 pr-16" />
                           <span className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">%</span>
                         </div>
                       </div>
@@ -1430,17 +1559,17 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Kolesterol Total */}
               {qKolesterol && (
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
                   <div className={`absolute left-0 top-0 w-1.5 h-full transition-all ${getValue(qIntKolesterol?.id) === 'Normal' ? 'bg-emerald-400' : (getValue(qIntKolesterol?.id) ? 'bg-rose-400' : 'bg-slate-200')}`}></div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 ml-2">Kolesterol Total <span className="text-rose-500">*</span></label>
-                  <div className="flex items-center gap-3 ml-2">
-                    <input type="number" inputMode="decimal" value={getValue(qKolesterol.id)} onChange={(e) => onChange(qKolesterol.id, e.target.value)} placeholder="mg/dL" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 font-black text-slate-800 text-2xl outline-none focus:ring-2 focus:ring-[#4f46e5] focus:bg-white transition-all" />
-                    <span className="text-[10px] font-black text-slate-400">mg/dL</span>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 sm:ml-2">Kolesterol Total <span className="text-rose-500">*</span></label>
+                  <div className={clinicalInputRowClass}>
+                    <SmartNumberInput question={qKolesterol} value={getValue(qKolesterol.id)} onChange={(nextValue) => onChange(qKolesterol.id, nextValue)} placeholder="0" className={clinicalInputCompactClass} showUnit={false} />
+                    <span className={unitLabelClass}>mg/dL</span>
                   </div>
                   {getValue(qKolesterol.id) && qIntKolesterol && (
-                    <div className="mt-4 ml-2 flex items-center justify-between">
-                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Interpretasi AI:</span>
-                       <div className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm ${getValue(qIntKolesterol.id) === 'Normal' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100 animate-pulse'}`}>
+                    <div className={interpretationRowClass}>
+                       <span className={interpretationLabelClass}>Interpretasi AI:</span>
+                       <div className={`${interpretationBadgeClass} ${getValue(qIntKolesterol.id) === 'Normal' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100 animate-pulse'}`}>
                           {getValue(qIntKolesterol.id)}
                        </div>
                     </div>
@@ -1450,17 +1579,17 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
 
               {/* HDL */}
               {qHdl && (
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
                   <div className={`absolute left-0 top-0 w-1.5 h-full transition-all ${getValue(qIntHdl?.id) === 'Normal' ? 'bg-emerald-400' : (getValue(qIntHdl?.id) ? 'bg-rose-400' : 'bg-slate-200')}`}></div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 ml-2">HDL (High-Density Lipoprotein) <span className="text-rose-500">*</span></label>
-                  <div className="flex items-center gap-3 ml-2">
-                    <input type="number" inputMode="decimal" value={getValue(qHdl.id)} onChange={(e) => onChange(qHdl.id, e.target.value)} placeholder="mg/dL" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 font-black text-slate-800 text-2xl outline-none focus:ring-2 focus:ring-[#4f46e5] focus:bg-white transition-all" />
-                    <span className="text-[10px] font-black text-slate-400">mg/dL</span>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 sm:ml-2">HDL (High-Density Lipoprotein) <span className="text-rose-500">*</span></label>
+                  <div className={clinicalInputRowClass}>
+                    <SmartNumberInput question={qHdl} value={getValue(qHdl.id)} onChange={(nextValue) => onChange(qHdl.id, nextValue)} placeholder="0" className={clinicalInputCompactClass} showUnit={false} />
+                    <span className={unitLabelClass}>mg/dL</span>
                   </div>
                   {getValue(qHdl.id) && qIntHdl && (
-                    <div className="mt-4 ml-2 flex items-center justify-between">
-                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Interpretasi AI:</span>
-                       <div className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm ${getValue(qIntHdl.id) === 'Normal' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100 animate-pulse'}`}>
+                    <div className={interpretationRowClass}>
+                       <span className={interpretationLabelClass}>Interpretasi AI:</span>
+                       <div className={`${interpretationBadgeClass} ${getValue(qIntHdl.id) === 'Normal' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100 animate-pulse'}`}>
                           {getValue(qIntHdl.id)}
                        </div>
                     </div>
@@ -1470,17 +1599,17 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
 
               {/* LDL */}
               {qLdl && (
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
                   <div className={`absolute left-0 top-0 w-1.5 h-full transition-all ${getValue(qIntLdl?.id) === 'Optimal' || getValue(qIntLdl?.id) === 'Mendekati Optimal' ? 'bg-emerald-400' : (getValue(qIntLdl?.id) ? 'bg-rose-400' : 'bg-slate-200')}`}></div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 ml-2">LDL (Low-Density Lipoprotein) <span className="text-rose-500">*</span></label>
-                  <div className="flex items-center gap-3 ml-2">
-                    <input type="number" inputMode="decimal" value={getValue(qLdl.id)} onChange={(e) => onChange(qLdl.id, e.target.value)} placeholder="mg/dL" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 font-black text-slate-800 text-2xl outline-none focus:ring-2 focus:ring-[#4f46e5] focus:bg-white transition-all" />
-                    <span className="text-[10px] font-black text-slate-400">mg/dL</span>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 sm:ml-2">LDL (Low-Density Lipoprotein) <span className="text-rose-500">*</span></label>
+                  <div className={clinicalInputRowClass}>
+                    <SmartNumberInput question={qLdl} value={getValue(qLdl.id)} onChange={(nextValue) => onChange(qLdl.id, nextValue)} placeholder="0" className={clinicalInputCompactClass} showUnit={false} />
+                    <span className={unitLabelClass}>mg/dL</span>
                   </div>
                   {getValue(qLdl.id) && qIntLdl && (
-                    <div className="mt-4 ml-2 flex items-center justify-between">
-                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Interpretasi AI:</span>
-                       <div className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm ${getValue(qIntLdl.id) === 'Optimal' || getValue(qIntLdl.id) === 'Mendekati Optimal' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100 animate-pulse'}`}>
+                    <div className={interpretationRowClass}>
+                       <span className={interpretationLabelClass}>Interpretasi AI:</span>
+                       <div className={`${interpretationBadgeClass} ${getValue(qIntLdl.id) === 'Optimal' || getValue(qIntLdl.id) === 'Mendekati Optimal' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100 animate-pulse'}`}>
                           {getValue(qIntLdl.id)}
                        </div>
                     </div>
@@ -1490,17 +1619,17 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
 
               {/* Trigliserida */}
               {qTrigliserida && (
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
                   <div className={`absolute left-0 top-0 w-1.5 h-full transition-all ${getValue(qIntTrigliserida?.id) === 'Normal' ? 'bg-emerald-400' : (getValue(qIntTrigliserida?.id) ? 'bg-rose-400' : 'bg-slate-200')}`}></div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 ml-2">Trigliserida <span className="text-rose-500">*</span></label>
-                  <div className="flex items-center gap-3 ml-2">
-                    <input type="number" inputMode="decimal" value={getValue(qTrigliserida.id)} onChange={(e) => onChange(qTrigliserida.id, e.target.value)} placeholder="mg/dL" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 font-black text-slate-800 text-2xl outline-none focus:ring-2 focus:ring-[#4f46e5] focus:bg-white transition-all" />
-                    <span className="text-[10px] font-black text-slate-400">mg/dL</span>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 sm:ml-2">Trigliserida <span className="text-rose-500">*</span></label>
+                  <div className={clinicalInputRowClass}>
+                    <SmartNumberInput question={qTrigliserida} value={getValue(qTrigliserida.id)} onChange={(nextValue) => onChange(qTrigliserida.id, nextValue)} placeholder="0" className={clinicalInputCompactClass} showUnit={false} />
+                    <span className={unitLabelClass}>mg/dL</span>
                   </div>
                   {getValue(qTrigliserida.id) && qIntTrigliserida && (
-                    <div className="mt-4 ml-2 flex items-center justify-between">
-                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Interpretasi AI:</span>
-                       <div className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm ${getValue(qIntTrigliserida.id) === 'Normal' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100 animate-pulse'}`}>
+                    <div className={interpretationRowClass}>
+                       <span className={interpretationLabelClass}>Interpretasi AI:</span>
+                       <div className={`${interpretationBadgeClass} ${getValue(qIntTrigliserida.id) === 'Normal' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100 animate-pulse'}`}>
                           {getValue(qIntTrigliserida.id)}
                        </div>
                     </div>
@@ -1510,12 +1639,12 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
 
               {/* Asam Urat */}
               {qAsamUrat && (
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden md:col-span-2 group">
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden md:col-span-2 group">
                   <div className="absolute left-0 top-0 w-1.5 h-full bg-[#4f46e5]"></div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 ml-2">Asam Urat <span className="text-rose-500">*</span></label>
-                  <div className="flex items-center gap-3 ml-2">
-                    <input type="number" inputMode="decimal" value={getValue(qAsamUrat.id)} onChange={(e) => onChange(qAsamUrat.id, e.target.value)} placeholder="mg/dL" className="w-full md:w-1/2 bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 font-black text-slate-800 text-2xl outline-none focus:ring-2 focus:ring-[#4f46e5] focus:bg-white transition-all" />
-                    <span className="text-[10px] font-black text-slate-400">mg/dL</span>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 sm:ml-2">Asam Urat <span className="text-rose-500">*</span></label>
+                  <div className={clinicalInputRowClass}>
+                    <SmartNumberInput question={qAsamUrat} value={getValue(qAsamUrat.id)} onChange={(nextValue) => onChange(qAsamUrat.id, nextValue)} placeholder="0" className={clinicalInputCompactClass} showUnit={false} />
+                    <span className={unitLabelClass}>mg/dL</span>
                   </div>
                 </div>
               )}

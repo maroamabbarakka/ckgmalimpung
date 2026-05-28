@@ -1,0 +1,42 @@
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+:where(a, button, input, select, textarea, [role='button']) {
+  outline: none;
+}
+
+:where(a, button, input, select, textarea, [role='button']):focus-visible {
+  outline: 3px solid rgba(15, 118, 110, 0.36);
+  outline-offset: 2px;
+}
+
+:where(button, [role='button'], input, select, textarea) {
+  min-height: 44px;
+}
+
+:where(input, select, textarea) {
+  border-radius: var(--radius-input);
+}
+
+@media (max-width: 639px) {
+  :where(input, select, textarea) {
+    font-size: 16px;
+  }
+
+  .smart-mobile-content {
+    padding-bottom: calc(136px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

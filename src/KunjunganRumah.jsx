@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { db } from './firebase';
-import { collection, doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { findCkgVisitByIdentityKeyInYear, findCkgVisitInYear, formatVisitDate } from './utils/ckgValidation';
-import { runKtpOcr } from './utils/ktpOcr';
+import { useAuth } from './auth/AuthContext';
+import { formatVisitDate } from './utils/ckgValidation';
+import { runIdentityOcr, toLegacyOcrFormData } from './features/ocr/ocrPipeline';
 import { createQrDataUrl } from './utils/qrCode';
+import { STATUS_MAPPING } from './utils/constants';
+import { writeAuditLog } from './services/auditService';
+import { buildPatientPayload, findCurrentYearCkgVisit, upsertPatient } from './services/patientService';
+import { buildPatientSnapshot, createVisitDocRef, createVisitWithRef, nowTimestamp } from './services/visitService';
+import OcrResultReview from './features/ocr/OcrResultReview';
 
 const OPENCV_SCRIPT_ID = 'opencv-script';
 const OPENCV_SCRIPT_SRC = '/vendor/opencv-4.8.0.js';
@@ -260,6 +264,9 @@ function KunjunganRumah() {
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrMode, setOcrMode] = useState('');
   const [ocrCandidates, setOcrCandidates] = useState([]);
+  const [ocrReview, setOcrReview] = useState(null);
+  const [ocrMeta, setOcrMeta] = useState(null);
+  const [ocrDuplicateWarning, setOcrDuplicateWarning] = useState('');
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [facingMode, setFacingMode] = useState('environment');
   const [kameraStatus, setKameraStatus] = useState('idle');
@@ -332,6 +339,28 @@ function KunjunganRumah() {
       setDataUmur({ tahun: 0, bulan: 0, totalBulan: 0, kategori: '-' });
     }
   }, [formData.tgl_lahir]);
+
+  useEffect(() => {
+    let ignore = false;
+    const nik = String(formData.nik || '').trim();
+    if (tanpaNik || !/^\d{16}$/.test(nik)) {
+      setOcrDuplicateWarning('');
+      return undefined;
+    }
+
+    findCurrentYearCkgVisit({ patientNik: nik })
+      .then((visit) => {
+        if (ignore) return;
+        setOcrDuplicateWarning(visit ? `Peringatan: NIK ini sudah mendapatkan layanan CKG pada ${formatVisitDate(visit)}.` : '');
+      })
+      .catch(() => {
+        if (!ignore) setOcrDuplicateWarning('');
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [formData.nik, tanpaNik]);
 
   const kategoriPasien = dataUmur.kategori;
   const umurPasien = dataUmur.tahun;
@@ -475,10 +504,13 @@ function KunjunganRumah() {
     navigate('/');
   };
 
+  const { user } = useAuth();
+
   const handleSimpanKeDatabase = async () => {
+    if (loading || ocrLoading) return;
     setLoading(true);
     setPesan('');
-    const namaPetugas = sessionStorage.getItem('namaPegawai') || 'Sistem Nakes';
+    const namaPetugas = user?.nama || 'Sistem Nakes';
 
     const validationMessage = validateStepOne();
     if (validationMessage) {
@@ -495,22 +527,36 @@ function KunjunganRumah() {
     const alamatPasien = [formData.dusun, formData.desa].filter(Boolean).join(', ');
 
     try {
-      const kunjunganTahunIni = tanpaNik
-        ? await findCkgVisitByIdentityKeyInYear(db, identityKey)
-        : await findCkgVisitInYear(db, finalNik);
+      const kunjunganTahunIni = await findCurrentYearCkgVisit(
+        tanpaNik ? { identityKey } : { patientNik: finalNik }
+      );
       if (kunjunganTahunIni) {
         setPesan(`Peringatan: Identitas pasien ini sudah mendapatkan layanan CKG pada ${formatVisitDate(kunjunganTahunIni)}. CKG hanya dapat dilakukan 1 kali dalam tahun yang sama.`);
         setLoading(false);
         return;
       }
 
-      const patientRef = doc(db, "patients", finalNik);
-      let patientData = {
-        nik: finalNik, patient_identity_key: identityKey, name: formData.nama, birthDate: formData.tgl_lahir, gender: formData.j_kelamin, phone: kontakPasien,
-        status_perkawinan: formData.status_perkawinan, desa: formData.desa, dusun: formData.dusun, lastUpdated: serverTimestamp()
-      };
-      if (tanpaNik) patientData.data_wali = { nik_wali: formData.nik_wali, nama_wali: formData.nama_wali, tgl_lahir_wali: formData.tgl_lahir_wali, hubungan: formData.hubungan_wali, no_hp_wali: formData.no_hp_wali };
-      await setDoc(patientRef, patientData, { merge: true });
+      const patientData = buildPatientPayload({
+        nik: finalNik,
+        identityKey,
+        name: formData.nama,
+        birthDate: formData.tgl_lahir,
+        gender: formData.j_kelamin,
+        phone: kontakPasien,
+        statusPerkawinan: formData.status_perkawinan,
+        desa: formData.desa,
+        dusun: formData.dusun,
+        wali: tanpaNik
+          ? {
+              nik_wali: formData.nik_wali,
+              nama_wali: formData.nama_wali,
+              tgl_lahir_wali: formData.tgl_lahir_wali,
+              hubungan: formData.hubungan_wali,
+              no_hp_wali: formData.no_hp_wali
+            }
+          : null
+      });
+      await upsertPatient(finalNik, patientData);
 
       const nomorAntrianDtd = `DTD-${Math.floor(100 + Math.random() * 900)}`;
 
@@ -582,25 +628,49 @@ function KunjunganRumah() {
         payloadPos5.ppok = { nafas_pendek: ppokNafas, sulit_dahak: ppokDahak };
       }
 
-      const visitDoc = doc(collection(db, "visits"));
-      await setDoc(visitDoc, {
+      const visitDoc = createVisitDocRef();
+      await createVisitWithRef(visitDoc, {
         jalur_pemeriksaan: "Kunjungan Rumah",
         nomor_antrian: nomorAntrianDtd,
         patientNIK: finalNik,
         patient_identity_key: identityKey,
         kategori_usia_satusehat: dataUmur.kategori,
         umur_saat_periksa: dataUmur.tahun,
-        status_antrian: "Selesai",
-        waktu_ambil_tiket: serverTimestamp(),
-        waktu_selesai_total: serverTimestamp(),
-        pasien_snapshot: { nama: formData.nama, j_kelamin: formData.j_kelamin, tgl_lahir: formData.tgl_lahir, desa: formData.desa, dusun: formData.dusun, alamat: alamatPasien, no_hp: kontakPasien, status: isBayiAtauAnak(dataUmur.kategori) ? '-' : formData.status_perkawinan },
+        status_antrian: STATUS_MAPPING.SELESAI,
+        waktu_ambil_tiket: nowTimestamp(),
+        waktu_selesai_total: nowTimestamp(),
+        pasien_snapshot: buildPatientSnapshot({
+          nama: formData.nama,
+          gender: formData.j_kelamin,
+          birthDate: formData.tgl_lahir,
+          desa: formData.desa,
+          dusun: formData.dusun,
+          alamat: alamatPasien,
+          phone: kontakPasien,
+          status: isBayiAtauAnak(dataUmur.kategori) ? '-' : formData.status_perkawinan
+        }),
         petugas_pos1: namaPetugas, petugas_pos2: namaPetugas, petugas_pos3: namaPetugas, petugas_pos4: namaPetugas, petugas_pos5: namaPetugas, petugas_pos6: namaPetugas, petugas_pos7: namaPetugas,
         dokter_pemeriksa: namaPetugas,
         kesimpulan_dokter: catatanAkhir,
+        ...(ocrMeta ? { ocrMeta } : {}),
         pos2: payloadPos2, pos3: payloadPos3, pos4: payloadPos4, pos5: payloadPos5, pos6: payloadPos6
+      });
+      await writeAuditLog({
+        action: 'Input dan selesaikan CKG jalur Kunjungan Rumah',
+        module: 'Kunjungan Rumah',
+        visitId: visitDoc.id,
+        patientKey: identityKey,
+        after: {
+          patientNIK: finalNik,
+          patient_identity_key: identityKey,
+          nomor_antrian: nomorAntrianDtd,
+          status_antrian: STATUS_MAPPING.SELESAI,
+          kategori_usia_satusehat: dataUmur.kategori
+        }
       });
 
       setVisitId(visitDoc.id); 
+      setOcrMeta(null);
       setStep(5); window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
       setPesan('❌ Gagal sinkronisasi data: ' + error.message);
@@ -685,7 +755,7 @@ function KunjunganRumah() {
 
   const startCamera = async (mode = facingMode) => {
     if (!cvReady) {
-      alert("Tunggu sebentar, sedang memuat modul AI Pemindai KTP...");
+      setPesan('Sistem pemindai identitas sedang dimuat. Mohon tunggu sebentar lalu coba lagi.');
       return;
     }
     setIsCameraOpen(true); setKameraStatus('focusing'); setIsTorchOn(false);
@@ -705,7 +775,8 @@ function KunjunganRumah() {
         scanRafRef.current = requestAnimationFrame(processVideoFrame);
       }, 1500);
     } catch (err) {
-      alert("Kamera tidak dapat diakses."); setIsCameraOpen(false);
+      setPesan('Aplikasi membutuhkan izin kamera untuk membaca KTP/KK. Silakan izinkan akses kamera di browser.');
+      setIsCameraOpen(false);
     }
   };
 
@@ -780,6 +851,9 @@ function KunjunganRumah() {
     setOcrProgress(0);
     setOcrMode('');
     setOcrCandidates([]);
+    setOcrReview(null);
+    setOcrMeta(null);
+    setOcrDuplicateWarning('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -811,8 +885,17 @@ function KunjunganRumah() {
       if (validOcrNik) setTanpaNik(false);
     }
 
+    setOcrMeta({
+      documentType: normalizedData.document_type || 'UNKNOWN',
+      confidence: Math.round(Number(normalizedData.confidence || 0) * 100),
+      usedAt: new Date().toISOString(),
+      usedBy: user?.uid || user?.email || 'unknown',
+      warnings: normalizedData.warnings || [],
+      source
+    });
     const confidence = normalizedData.confidence ? ` (${Math.round(normalizedData.confidence * 100)}%)` : '';
-    setPesan(`✅ Data ${normalizedData.document_type || 'identitas'} dibaca via ${source}${confidence}. Periksa ulang NIK dan nama.`);
+    const warningText = normalizedData.warnings?.length ? ` Ada ${normalizedData.warnings.length} warning OCR.` : '';
+    setPesan(`✅ Data ${normalizedData.document_type || 'identitas'} dibaca via ${source}${confidence}. Periksa ulang NIK dan nama.${warningText}`);
     return true;
   };
 
@@ -821,17 +904,17 @@ function KunjunganRumah() {
     ocrJobRef.current = jobId;
     const isCurrentJob = () => ocrJobRef.current === jobId;
 
-    setOcrLoading(true); setPesan(''); setOcrProgress(0); setOcrCandidates([]); let extractedData = null;
+    setOcrLoading(true); setPesan(''); setOcrProgress(0); setOcrCandidates([]); setOcrReview(null); setOcrMeta(null); setOcrDuplicateWarning(''); let extractedData = null;
     
     setOcrMode('Mempersiapkan foto KTP...');
     try {
-      const ocrResult = await runKtpOcr(fileAsli, {
+      const ocrResult = await runIdentityOcr(fileAsli, {
         onProgress: (progress) => { if (isCurrentJob()) setOcrProgress(progress); },
         onMode: (mode) => { if (isCurrentJob()) setOcrMode(mode); },
         preferBackend: true
       });
       if (!isCurrentJob()) return;
-      extractedData = ocrResult?.data || null;
+      extractedData = toLegacyOcrFormData(ocrResult?.data || {});
       if (extractedData) extractedData.source = ocrResult.source;
     } catch (localError) {
       if (!isCurrentJob()) return;
@@ -839,12 +922,13 @@ function KunjunganRumah() {
     }
     
     if (!isCurrentJob()) return;
-    if (extractedData) {
-      if (extractedData.document_type === 'Kartu Keluarga' && extractedData.candidates?.length > 1) {
+    if (extractedData?.nik || extractedData?.nama) {
+      if (['Kartu Keluarga', 'KK'].includes(extractedData.document_type) && extractedData.candidates?.length > 1) {
         setOcrCandidates(extractedData.candidates.map(c => ({ ...c, confidence: extractedData.confidence })));
         setPesan(`⚠️ Kartu Keluarga terbaca. Pilih anggota keluarga yang sedang diperiksa agar NIK tidak tertukar.`);
       } else {
-        applyOcrData(extractedData, extractedData.source || 'OCR');
+        setOcrReview(extractedData);
+        setPesan('Review hasil OCR, lalu klik Gunakan Data Ini jika NIK dan nama sudah benar.');
       }
     } else {
       setPesan('❌ KTP tidak terbaca. Harap input manual.');
@@ -911,7 +995,7 @@ function KunjunganRumah() {
   if (kategoriPasien === 'Lansia' && (lansia.dep_sedih === 'Ya' || lansia.kog_ingat_3_kata === 'Tidak')) statusMental = 'Indikasi Risiko Kognitif/Emosi';
   if (kategoriPasien === 'Dewasa' && (jiwaSrqSemangat === 'Ya' || jiwaSrqMurung === 'Ya')) statusMental = 'Indikasi Stres/Kecemasan';
   if (isAnakSekolah(kategoriPasien) && jiwaFokusAnak === 'Ya') statusMental = 'Perlu Pendampingan Fokus';
-  const namaPetugas = sessionStorage.getItem('namaPegawai') || 'Nakes Kunjungan';
+  const namaPetugas = user?.nama || 'Nakes Kunjungan';
 
   return (
     <div className="space-y-4 max-w-4xl mx-auto pb-40 md:pb-10 bg-[#f8fafc] min-h-screen">
@@ -1034,6 +1118,20 @@ function KunjunganRumah() {
               </div>
             )}
 
+            <OcrResultReview
+              result={ocrReview}
+              onUse={() => {
+                if (applyOcrData(ocrReview, ocrReview?.source || 'OCR', 'patient')) setOcrReview(null);
+              }}
+              onCancel={() => setOcrReview(null)}
+            />
+
+            {ocrDuplicateWarning && (
+              <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-bold text-rose-700">
+                {ocrDuplicateWarning}
+              </div>
+            )}
+
             {ocrCandidates.length > 0 && (
               <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl shadow-sm">
                 <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3">Pilih Anggota dari Kartu Keluarga</p>
@@ -1042,11 +1140,12 @@ function KunjunganRumah() {
                     <button
                       key={`${candidate.nik || 'nik'}-${index}`}
                       type="button"
-                      onClick={() => { applyOcrData(candidate, 'OCR Kartu Keluarga', 'patient'); setOcrCandidates([]); }}
+                      onClick={() => { applyOcrData(candidate, 'OCR Kartu Keluarga', 'patient'); setOcrCandidates([]); setOcrReview(null); }}
                       className="w-full text-left bg-white hover:bg-amber-100 border border-amber-200 rounded-xl p-3 transition active:scale-[0.99]"
                     >
                       <span className="block text-sm font-black text-slate-800">{candidate.nama || 'Nama belum terbaca'}</span>
-                      <span className="block text-[11px] font-bold text-slate-500 mt-1">NIK: {candidate.nik || '-'} • Lahir: {candidate.tgl_lahir || '-'}</span>
+                      <span className="block text-[11px] font-bold text-slate-500 mt-1">NIK: {candidate.nik || '-'} • Lahir: {candidate.tgl_lahir || candidate.tanggalLahir || '-'}</span>
+                      <span className="mt-1 block text-[10px] font-black uppercase tracking-widest text-amber-700">Confidence: {Math.round(Number(candidate.confidence || 0) * (Number(candidate.confidence || 0) <= 1 ? 100 : 1))}%</span>
                     </button>
                   ))}
                 </div>
@@ -1596,7 +1695,7 @@ function KunjunganRumah() {
             <div className="fixed bottom-[72px] left-0 right-0 p-3 bg-white/95 backdrop-blur-sm border-t border-slate-200 md:static md:bg-transparent md:border-none md:p-0 md:mt-8 z-30 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] md:shadow-none flex justify-center no-print">
               <div className="grid grid-cols-2 gap-3 w-[90%] md:w-full max-w-md md:max-w-none">
                 <button type="button" onClick={handlePrevStep} className="w-full min-h-[48px] bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-[10px] md:text-xs uppercase tracking-widest rounded-xl transition-all active:scale-95 border border-slate-200 shadow-sm">‹ Kembali Ke-3</button>
-                <button type="button" onClick={handleSimpanKeDatabase} disabled={loading} className="w-full min-h-[48px] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs md:text-sm uppercase tracking-widest rounded-xl shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
+                <button type="button" onClick={handleSimpanKeDatabase} disabled={loading || ocrLoading} className="w-full min-h-[48px] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs md:text-sm uppercase tracking-widest rounded-xl shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
                   {loading ? <><span className="animate-spin text-lg">⚙️</span> MEMPROSES...</> : '🎯 SIMPAN & RAPOR'}
                 </button>
               </div>

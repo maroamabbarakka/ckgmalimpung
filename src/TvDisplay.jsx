@@ -1,6 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import { db } from './firebase'; 
-import { collection, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { DEFAULT_ACTIVE_LOCATION, subscribeActiveLocation } from './services/settingsService';
+import { subscribeLatestTvQueueCall } from './services/queueService';
+import { subscribePublicTvQueueGrid } from './services/publicQueueService';
+import { enterFullscreen } from './features/tv/tvService';
+import { HealthEducationPanel } from './features/tv/HealthEducationPanel';
+import { QueueTicker } from './features/tv/QueueTicker';
 
 const LOGO_PINRANG = "/logo_pinrang.png";
 const LOGO_MALIMPUNG = "/logo_malimpung.png";
@@ -21,7 +25,12 @@ function TvDisplay() {
   const [waktuSekarang, setWaktuSekarang] = useState(new Date());
   const [isStarted, setIsStarted] = useState(false); 
   const [panggilanTerbaru, setPanggilanTerbaru] = useState(null);
+  const [audioMessage, setAudioMessage] = useState('');
+  const [online, setOnline] = useState(navigator.onLine);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0); 
+  const [lokasiAktif, setLokasiAktif] = useState(DEFAULT_ACTIVE_LOCATION);
+  const [lastSyncAt, setLastSyncAt] = useState(null);
+  const [tvQueueError, setTvQueueError] = useState('');
   const [antrianGrid, setAntrianGrid] = useState({
       pos1: [], pos2: [], pos3: [], pos4: [], pos5: [], pos6: [], pos7: []
   });
@@ -29,6 +38,13 @@ function TvDisplay() {
   const lastCallId = useRef(null);
   const initialLoadRef = useRef(true); 
   const callTimeoutRef = useRef(null);
+  const antreanBerikutnya = useMemo(() => (
+    Object.values(antrianGrid)
+      .flat()
+      .sort((a, b) => (a.waktu_ambil_tiket?.toMillis?.() || 0) - (b.waktu_ambil_tiket?.toMillis?.() || 0))
+      .slice(0, 8)
+  ), [antrianGrid]);
+  const totalAntreanAktif = useMemo(() => Object.values(antrianGrid).reduce((total, items) => total + items.length, 0), [antrianGrid]);
 
   // 1. JAM DIGITAL REAL-TIME
   useEffect(() => {
@@ -36,12 +52,26 @@ function TvDisplay() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    return subscribeActiveLocation(setLokasiAktif);
+  }, []);
+
   // 2. LISTENER PANGGILAN TV (Voice Announcer)
   useEffect(() => {
     if (!isStarted) return; 
 
-    const q = query(collection(db, "panggilan_tv"), orderBy("waktu", "desc"), limit(1));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = subscribeLatestTvQueueCall((snapshot) => {
       snapshot.docChanges().forEach((change) => {
         if (change.type === "added") {
           const data = change.doc.data();
@@ -77,22 +107,13 @@ function TvDisplay() {
   useEffect(() => {
       if (!isStarted) return;
 
-      const q = query(collection(db, "visits"), where("status_antrian", "!=", "Selesai"));
-
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-          const data = [];
-          snapshot.forEach(doc => data.push(doc.data()));
-          data.sort((a, b) => (a.waktu_ambil_tiket?.toMillis() || 0) - (b.waktu_ambil_tiket?.toMillis() || 0));
-
-          setAntrianGrid({
-              pos1: data.filter(v => ['Menunggu Pos 1', 'Antri Pos 1', 'Antre Pos 1'].includes(v.status_antrian)),
-              pos2: data.filter(v => ['Menunggu Pos 2', 'Antri Pos 2', 'Antre Pos 2'].includes(v.status_antrian)),
-              pos3: data.filter(v => ['Menunggu Pos 3', 'Antri Pos 3', 'Antre Pos 3'].includes(v.status_antrian)),
-              pos4: data.filter(v => ['Menunggu Pos 4', 'Antri Pos 4', 'Antre Pos 4'].includes(v.status_antrian)),
-              pos5: data.filter(v => ['Menunggu Pos 5', 'Antri Pos 5', 'Antre Pos 5'].includes(v.status_antrian)),
-              pos6: data.filter(v => ['Menunggu Pos 6', 'Antri Pos 6', 'Antre Pos 6'].includes(v.status_antrian)),
-              pos7: data.filter(v => ['Menunggu Pos 7', 'Antri Pos 7', 'Antre Pos 7'].includes(v.status_antrian))
-          });
+      const unsubscribe = subscribePublicTvQueueGrid((nextGrid) => {
+          setAntrianGrid(nextGrid);
+          setLastSyncAt(new Date());
+          setTvQueueError('');
+      }, (error) => {
+          console.error('Gagal memuat antrean TV:', error);
+          setTvQueueError('Koneksi data antrean sedang tidak stabil. Menampilkan data terakhir yang tersedia.');
       });
 
       return () => unsubscribe();
@@ -101,6 +122,7 @@ function TvDisplay() {
   // --- LOGIKA: SYNTHESIZER BEL ---
   const putarBelSynthesizerLaluBicara = (teks) => {
       if ('speechSynthesis' in window) {
+          setAudioMessage('');
           window.speechSynthesis.cancel(); 
           try {
               const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -124,8 +146,11 @@ function TvDisplay() {
               playNote(659.25, now + 0.5);
               setTimeout(() => suaraAI(teks), 1500);
           } catch (e) {
+              setAudioMessage('Suara otomatis belum aktif. Pastikan audio browser diizinkan, lalu aktifkan ulang layar TV.');
               suaraAI(teks); 
           }
+      } else {
+          setAudioMessage('Browser ini belum mendukung suara otomatis untuk panggilan antrean.');
       }
   };
 
@@ -153,6 +178,11 @@ function TvDisplay() {
                   </div>
                   <h1 className="text-3xl font-black mb-4 uppercase tracking-widest text-teal-400">Layar TV TERSANJUNG</h1>
                   <p className="text-slate-300 mb-8 leading-relaxed">Sistem Bel Digital dan Voice Announcer siap digunakan. Silakan klik tombol di bawah untuk mengaktifkan Layar.</p>
+                  {audioMessage && (
+                      <p className="mb-4 rounded-2xl border border-amber-300/50 bg-amber-400/10 px-4 py-3 text-sm font-bold text-amber-100">
+                          {audioMessage}
+                      </p>
+                  )}
                   <button 
                       onClick={() => {
                           setIsStarted(true);
@@ -160,7 +190,7 @@ function TvDisplay() {
                       }}
                       className="bg-emerald-500 hover:bg-emerald-400 text-white text-xl font-black px-10 py-5 rounded-full shadow-[0_0_30px_rgba(16,185,129,0.5)] transition-all hover:scale-105"
                   >
-                      🚀 AKTIFKAN LAYAR TV SEKARANG
+                      AKTIFKAN LAYAR TV SEKARANG
                   </button>
               </div>
           </div>
@@ -193,7 +223,7 @@ function TvDisplay() {
                   </>
               ) : (
                   <div className="text-center opacity-30 flex flex-col items-center justify-center h-full">
-                      <span className="text-4xl mb-2">☕</span>
+                      <span className="mb-3 h-8 w-8 rounded-full border-4 border-slate-300 bg-slate-100 shadow-inner"></span>
                       <p className="font-bold text-[9px] xl:text-[10px] text-slate-500 uppercase tracking-widest">Antrean Kosong</p>
                   </div>
               )}
@@ -205,7 +235,9 @@ function TvDisplay() {
     <div className="h-screen w-screen bg-[#e2e8f0] flex flex-col overflow-hidden font-sans select-none cursor-default">
         {/* IMPORT FONT BEBAS NEUE DARI GOOGLE FONTS */}
         <style>
-            {`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');`}
+            {`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+              @keyframes tvTicker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+              .tv-ticker-track { animation: tvTicker 38s linear infinite; }`}
         </style>
         
         {/* HEADER */}
@@ -216,9 +248,19 @@ function TvDisplay() {
             </div>
             
             <div className="flex items-center gap-6 2xl:gap-8">
+                <button
+                    type="button"
+                    onClick={() => enterFullscreen()}
+                    className="rounded-full border border-white/30 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-white hover:bg-white/20"
+                >
+                    Fullscreen
+                </button>
+                <div className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-widest ${online ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                    {online ? 'Online' : 'Offline'}
+                </div>
                 <div className="text-right">
                     <p className="text-[9px] 2xl:text-[10px] font-bold text-teal-200 tracking-[0.2em] uppercase mb-1">LOKASI PEMERIKSAAN</p>
-                    <p className="text-sm 2xl:text-base font-black tracking-widest drop-shadow-md uppercase leading-none">DUSUN MALIMPUNG</p>
+                    <p className="text-sm 2xl:text-base font-black tracking-widest drop-shadow-md uppercase leading-none">{lokasiAktif}</p>
                 </div>
                 <div className="w-px h-10 bg-teal-600"></div>
                 <div className="text-right">
@@ -229,15 +271,31 @@ function TvDisplay() {
                 </div>
             </div>
         </header>
+        {audioMessage && (
+            <div className="absolute left-1/2 top-[10vh] z-30 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50 px-5 py-2 text-sm font-black text-amber-800 shadow-lg">
+                {audioMessage}
+            </div>
+        )}
+        <section className={`flex min-h-[5vh] shrink-0 items-center justify-between gap-4 px-6 lg:px-10 text-xs font-black uppercase tracking-widest shadow-inner ${online && !tvQueueError ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>
+            <div className="flex min-w-0 items-center gap-3">
+                <span className={`h-3 w-3 rounded-full ${online && !tvQueueError ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`}></span>
+                <span className="truncate">
+                    {tvQueueError || (totalAntreanAktif > 0 ? `${totalAntreanAktif} antrean aktif sedang dipantau` : 'Tidak ada antrean aktif. Layar tetap siaga.')}
+                </span>
+            </div>
+            <div className="shrink-0 text-right">
+                Sinkron terakhir: {lastSyncAt ? lastSyncAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Menunggu data'}
+            </div>
+        </section>
 
         {/* MAIN LAYOUT */}
-        <main className="flex-1 flex flex-col p-4 2xl:p-6 gap-4 2xl:gap-6 h-[81vh] bg-[#e2e8f0]">
+        <main className="flex-1 flex flex-col p-3 xl:p-4 2xl:p-6 gap-3 xl:gap-4 2xl:gap-6 bg-[#e2e8f0] min-h-0">
             
             {/* Sektor Atas: Info Panggilan & Video Edukasi */}
-            <div className="flex-1 flex gap-4 2xl:gap-6 min-h-0">
+            <div className="grid flex-1 grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-3 xl:gap-4 2xl:gap-6 min-h-0">
                 
                 {/* Kotak Kiri: Info Panggilan / Standby */}
-                <div className="w-1/2 bg-white rounded-3xl shadow-xl border border-white flex flex-col justify-center items-center p-8 relative overflow-hidden">
+                <div className="bg-white rounded-3xl shadow-xl border border-white flex flex-col justify-center items-center p-6 xl:p-8 relative overflow-hidden min-w-0">
                     {panggilanTerbaru ? (
                         <div className="text-center w-full animate-fade-in-up">
                             <p className="text-2xl font-black text-slate-500 uppercase tracking-[0.3em] mb-2">Nomor Antrean</p>
@@ -263,30 +321,38 @@ function TvDisplay() {
                             <p className="text-xl font-bold text-slate-400 uppercase tracking-[0.3em] mb-10">Sistem Informasi CKG</p>
                             
                             <div className="px-10 py-3 bg-teal-50 border border-teal-100 rounded-full shadow-inner">
-                                <p className="font-bold text-teal-600 uppercase tracking-[0.2em] text-sm animate-pulse">
-                                    ✨ Menunggu Panggilan Pasien... ✨
+                                <p className="font-bold text-teal-600 uppercase tracking-[0.2em] text-xs xl:text-sm animate-pulse">
+                                    Menunggu Panggilan Pasien...
                                 </p>
                             </div>
                         </div>
                     )}
                 </div>
 
-                {/* Kotak Kanan: Video Edukasi Cloudinary */}
-                <div className="w-1/2 bg-black rounded-3xl shadow-xl overflow-hidden relative flex items-center justify-center">
-                    <video 
-                        src={VIDEO_PLAYLIST[currentVideoIndex]} 
-                        className="w-full h-full object-cover"
-                        autoPlay 
-                        muted 
-                        playsInline
-                        onEnded={() => setCurrentVideoIndex((prev) => (prev + 1) % VIDEO_PLAYLIST.length)} 
-                    />
-                    <div className="absolute inset-0 shadow-[inset_0_0_50px_rgba(0,0,0,0.5)] pointer-events-none"></div>
+                {/* Kotak Kanan: Video, edukasi, dan antrean berikutnya */}
+                <div className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 xl:grid-cols-5 xl:grid-rows-none xl:gap-4 2xl:gap-6">
+                    <div className="hidden bg-black rounded-3xl shadow-xl overflow-hidden relative items-center justify-center min-h-0 xl:col-span-3 xl:flex">
+                        <video 
+                            src={VIDEO_PLAYLIST[currentVideoIndex]} 
+                            className="w-full h-full object-cover"
+                            autoPlay 
+                            muted 
+                            playsInline
+                            onEnded={() => setCurrentVideoIndex((prev) => (prev + 1) % VIDEO_PLAYLIST.length)} 
+                        />
+                        <div className="absolute inset-0 shadow-[inset_0_0_50px_rgba(0,0,0,0.5)] pointer-events-none"></div>
+                    </div>
+                    <div className="flex min-h-0 flex-col gap-3 xl:col-span-2 xl:gap-4 2xl:gap-6">
+                        <HealthEducationPanel />
+                        <div className="min-h-0 flex-1 overflow-hidden">
+                            <QueueTicker visits={antreanBerikutnya} limit={6} />
+                        </div>
+                    </div>
                 </div>
             </div>
 
             {/* Sektor Bawah: Grid 7 Kotak POS Sejajar */}
-            <div className="h-[35%] xl:h-[38%] min-h-[200px] shrink-0 grid grid-cols-7 gap-3 2xl:gap-4">
+            <div className="h-[35%] xl:h-[38%] min-h-[190px] shrink-0 grid grid-cols-7 gap-2 xl:gap-3 2xl:gap-4">
                 <BoxPos namaPos="POS 1" dataAntrian={antrianGrid.pos1} headerClass="bg-[#2563eb]" textClass="text-[#2563eb]" borderClass="border-[#2563eb]" />
                 <BoxPos namaPos="POS 2" dataAntrian={antrianGrid.pos2} headerClass="bg-[#4f46e5]" textClass="text-[#4f46e5]" borderClass="border-[#4f46e5]" />
                 <BoxPos namaPos="POS 3" dataAntrian={antrianGrid.pos3} headerClass="bg-[#e11d48]" textClass="text-[#e11d48]" borderClass="border-[#e11d48]" />
@@ -301,15 +367,20 @@ function TvDisplay() {
         {/* FOOTER */}
         <footer className="bg-[#0f172a] h-[8vh] flex items-center shrink-0 relative z-20 overflow-hidden border-t-4 border-slate-700">
             <div className="w-full h-full flex items-center bg-[#0f172a] px-4">
-                <marquee className="text-2xl font-black tracking-widest flex items-center pt-1" scrollamount="10">
-                    <span className="text-pink-300">🏥 SELAMAT DATANG DI PUSKESMAS MALIMPUNG</span> 
-                    <span className="mx-8 text-slate-600">✦</span> 
-                    <span className="text-teal-400">Mohon siapkan Kartu Identitas (KTP/KK) atau Kartu BPJS Anda.</span> 
-                    <span className="mx-8 text-slate-600">✦</span> 
-                    <span className="text-white">Layanan CKG mencakup: Tensi, Gula Darah, Kolesterol, Asam Urat, Skrining Penyakit.</span> 
-                    <span className="mx-8 text-slate-600">✦</span> 
-                    <span className="text-emerald-400">🌟 PUSKESMAS MALIMPUNG — "Dekat Melayani, Ikhlas Mengabdi" 🌟</span> 
-                </marquee>
+                <div className="tv-ticker-track flex w-max whitespace-nowrap pt-1 text-xl font-black tracking-widest xl:text-2xl">
+                    {Array.from({ length: 2 }).map((_, index) => (
+                        <div key={index} className="flex items-center">
+                            <span className="text-pink-300">SELAMAT DATANG DI PUSKESMAS MALIMPUNG</span>
+                            <span className="mx-8 text-slate-600">|</span>
+                            <span className="text-teal-400">Mohon siapkan Kartu Identitas (KTP/KK) atau Kartu BPJS Anda.</span>
+                            <span className="mx-8 text-slate-600">|</span>
+                            <span className="text-white">Layanan CKG mencakup: Tensi, Gula Darah, Kolesterol, Asam Urat, Skrining Penyakit.</span>
+                            <span className="mx-8 text-slate-600">|</span>
+                            <span className="text-emerald-400">PUSKESMAS MALIMPUNG - Dekat Melayani, Ikhlas Mengabdi</span>
+                            <span className="mx-8 text-slate-600">|</span>
+                        </div>
+                    ))}
+                </div>
             </div>
         </footer>
 

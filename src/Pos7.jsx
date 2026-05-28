@@ -1,8 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { db } from './firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, serverTimestamp, runTransaction, getDoc } from 'firebase/firestore';
+import { useAuth } from './auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { STATUS_MAPPING } from './utils/constants';
+import { VISIT_STATUS } from './features/workflow/workflowStatus';
+import { auditQueueTransition } from './services/queueAudit';
+import { buildQueueSpeech, claimVisitForStaff, createTvQueueCall } from './services/queueService';
+import { nowTimestamp, updateVisit } from './services/visitService';
+import { getPatientByNik } from './services/patientService';
+import useQueue from './hooks/useQueue';
+import PatientStickyHeader from './components/patient/PatientStickyHeader';
+import PosBottomActionBar from './components/patient/PosBottomActionBar';
+import QueueEmptyState from './components/patient/QueueEmptyState';
 
 const extractValue = (posData, keywords, questionMap) => {
   if (!questionMap) questionMap = {};
@@ -218,57 +226,54 @@ const RangkumanCardPos7 = ({ icon, title, value, status, tone }) => {
 };
 
 function Pos7() {
-  const [antrian, setAntrian] = useState([]);
+  const { user } = useAuth();
+  const antrian = useQueue('POS7');
   const [pasienAktif, setPasienAktif] = useState(null);
   const [kesimpulan, setKesimpulan] = useState('');
   const [loading, setLoading] = useState(false); 
+  const [callingVisitId, setCallingVisitId] = useState(null);
   const [pesan, setPesan] = useState('');
   const navigate = useNavigate();
 
-  // 1. Tarik Pasien yang sudah selesai dari Pos 6
-  useEffect(() => {
-    const q = query(collection(db, "visits"), where("status_antrian", "in", [STATUS_MAPPING.POS7, 'Menunggu Pos 7', 'Antri Pos 7', 'Antre Pos 7', 'POS 7', 'Pos 7']));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = []; 
-      snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-      setAntrian(data.sort((a, b) => (a.waktu_ambil_tiket?.toMillis() || 0) - (b.waktu_ambil_tiket?.toMillis() || 0)));
-    });
-    return () => unsubscribe();
-  }, []);
-
   const handlePanggil = async (item) => {
+    if (callingVisitId || pasienAktif) return;
+    setCallingVisitId(item.id);
     try {
-      let latestData = item;
-      await runTransaction(db, async (transaction) => {
-        const docRef = doc(db, "visits", item.id);
-        const docSnap = await transaction.get(docRef);
-        if (!docSnap.exists()) throw new Error("Data tidak ditemukan!");
-        latestData = { id: docSnap.id, ...docSnap.data() };
-        const data = docSnap.data();
-        const rawRole = sessionStorage.getItem('rolePegawai') || '';
-        const isAdmin = rawRole.includes('admin');
-        if (!isAdmin && data.petugas_aktif && data.petugas_aktif !== sessionStorage.getItem('namaPegawai')) {
-             throw new Error(`Pasien sedang ditangani oleh ${data.petugas_aktif}`);
-        }
-        transaction.update(docRef, { petugas_aktif: sessionStorage.getItem('namaPegawai') || 'Petugas' });
+      const latestData = await claimVisitForStaff({
+        visitId: item.id,
+        staffName: user?.nama || 'Petugas',
+        isAdmin: user?.roles?.includes('admin'),
+        actor: user,
+        module: 'POS7',
+        workflowStatus: VISIT_STATUS.POS7_IN_PROGRESS
       });
       setPasienAktif(latestData); setPesan(''); setKesimpulan(latestData.kesimpulan_dokter || ''); window.scrollTo({ top: 0, behavior: 'smooth' });
-      try { await addDoc(collection(db, "panggilan_tv"), { pos: "POS 7", identitas_layar: item.nomor_antrian, teks_suara: `Nomor antrean... ${item.nomor_antrian.replace(/-/g, ' ')}... Silakan menuju meja Dokter di Pos Tujuh.`, waktu: serverTimestamp() }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 7:", e); }
+      try { await createTvQueueCall({ pos: "POS 7", queueNumber: latestData.nomor_antrian, speechText: buildQueueSpeech(latestData.nomor_antrian, 'Silakan menuju meja Dokter di Pos Tujuh.') }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 7:", e); }
     } catch (e) {
       alert("⚠️ " + e.message);
+    } finally {
+      setCallingVisitId(null);
     }
   };
 
   const handleSelesaikan = async (e) => {
-    e.preventDefault(); if (!pasienAktif) return; setLoading(true); setPesan('');
+    e.preventDefault(); if (!pasienAktif || loading) return; setLoading(true); setPesan('');
     try {
       // 🚀 UBAH STATUS JADI SELESAI (Hilang dari semua antrean Pos)
-      await updateDoc(doc(db, "visits", pasienAktif.id), { 
+      await updateVisit(pasienAktif.id, { 
+          status: VISIT_STATUS.FINALIZED,
           status_antrian: STATUS_MAPPING.SELESAI, 
-          dokter_pemeriksa: sessionStorage.getItem('namaPegawai') || 'Dokter/Petugas', 
+          dokter_pemeriksa: user?.nama || 'Dokter/Petugas', 
           kesimpulan_dokter: kesimpulan,
-          waktu_selesai: serverTimestamp(),
+          waktu_selesai: nowTimestamp(),
           petugas_aktif: null
+      });
+      await auditQueueTransition({
+        visit: pasienAktif,
+        module: 'Pos 7',
+        action: 'Selesaikan pemeriksaan dan terbitkan rapor',
+        toStatus: STATUS_MAPPING.SELESAI,
+        extra: { status: VISIT_STATUS.FINALIZED, dokter_pemeriksa: user?.nama || 'Dokter/Petugas' }
       });
       setPesan(`✅ Pemeriksaan Selesai! Pasien dapat melihat rapornya.`); 
       setTimeout(() => {
@@ -280,7 +285,7 @@ function Pos7() {
 
   const handleBatal = async () => {
     if (pasienAktif?.id) {
-      try { await updateDoc(doc(db, "visits", pasienAktif.id), { petugas_aktif: null }); }
+      try { await updateVisit(pasienAktif.id, { petugas_aktif: null }); }
       catch (error) { console.error("Gagal melepas pasien:", error); }
     }
     setPasienAktif(null);
@@ -293,9 +298,15 @@ function Pos7() {
     setLoading(true);
     setPesan('');
     try {
-      await updateDoc(doc(db, "visits", pasienAktif.id), {
+      await updateVisit(pasienAktif.id, {
         status_antrian: STATUS_MAPPING.POS6,
         petugas_aktif: null
+      });
+      await auditQueueTransition({
+        visit: pasienAktif,
+        module: 'Pos 7',
+        action: 'Kembalikan pasien dari Pos 7 ke Pos 6',
+        toStatus: STATUS_MAPPING.POS6
       });
       setPasienAktif(null);
     } catch (error) {
@@ -314,8 +325,8 @@ function Pos7() {
       let noHp = pasienAktif.pasien_snapshot?.no_hp || pasienAktif.no_hp;
       if (!noHp && pasienAktif.patientNIK && !pasienAktif.patientNIK.startsWith('NONIK')) {
           try {
-              const pDoc = await getDoc(doc(db, "patients", pasienAktif.patientNIK));
-              if (pDoc.exists()) noHp = pDoc.data().phone || pDoc.data().no_hp;
+              const patient = await getPatientByNik(pasienAktif.patientNIK);
+              if (patient) noHp = patient.phone || patient.no_hp;
           } catch(e) { console.warn("Gagal mengambil nomor HP pasien:", e); }
       }
       if(!noHp || noHp.length < 9) { alert("Nomor HP tidak valid/tidak ada di database."); return; }
@@ -346,21 +357,27 @@ function Pos7() {
       {!pasienAktif ? (
         <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-6 border-b border-slate-100 pb-3">POS 7: KESIMPULAN DOKTER ({antrian.length})</h3>
-            {antrian.length === 0 ? (<div className="text-center py-16 opacity-50">☕ <p className="font-bold text-[10px] uppercase text-slate-400 mt-2">Tidak ada antrean</p></div>) : (
+            {antrian.length === 0 ? (<QueueEmptyState accentClass="text-[#0f766e]" />) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 {antrian.map((item) => (
-                <div key={item.id} onClick={() => handlePanggil(item)} className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col items-center justify-center cursor-pointer hover:border-[#0f766e] group shadow-sm transition-all">
+                <button type="button" key={item.id} onClick={() => handlePanggil(item)} disabled={Boolean(callingVisitId)} className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col items-center justify-center cursor-pointer hover:border-[#0f766e] group shadow-sm transition-all disabled:cursor-wait disabled:opacity-60">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 group-hover:text-[#0f766e]">Antrian</p>
                     <h3 className="text-3xl font-black text-slate-800 mb-3 group-hover:text-[#0f766e]">{item.nomor_antrian}</h3>
-                    <div className="bg-slate-100 text-slate-600 text-[8px] font-black px-3 py-1 rounded uppercase tracking-widest">{item.kategori_usia_satusehat}</div>
-                </div>
+                    <div className="bg-slate-100 text-slate-600 text-[8px] font-black px-3 py-1 rounded uppercase tracking-widest">{callingVisitId === item.id ? 'Memanggil...' : item.kategori_usia_satusehat}</div>
+                </button>
                 ))}
             </div>
             )}
         </div>
       ) : (
       <div className="bg-slate-50 rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
-        <div className="bg-[#0f766e] p-6 text-white flex justify-between items-center">
+        <PatientStickyHeader
+          visit={pasienAktif}
+          posLabel="Pos 7: Kesimpulan Dokter"
+          accentClass="bg-[#0f766e]"
+          onCancel={handleBatal}
+        />
+        <div className="hidden bg-[#0f766e] p-6 text-white flex justify-between items-center">
             <div className="flex items-center gap-3"><span className="text-3xl">🩺</span><h2 className="text-4xl font-black">{pasienAktif.nomor_antrian}</h2></div>
             <button type="button" onClick={handleBatal} className="bg-white/20 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-white/30 transition-all">✕ Batal</button>
         </div>
@@ -373,7 +390,7 @@ function Pos7() {
                    <h3 className="font-black text-lg">{pasienAktif.pasien_snapshot?.nama || "Tanpa Nama"}</h3>
                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{pasienAktif.umur_saat_periksa} THN • {pasienAktif.kategori_usia_satusehat}</p>
                 </div>
-                <a href={`/rapor/${pasienAktif.id}?petugas=${encodeURIComponent(sessionStorage.getItem('namaPegawai') || '')}`} target="_blank" rel="noreferrer" className="text-xs font-bold text-[#0f766e] bg-teal-50 px-4 py-2 rounded-lg border border-teal-200 hover:bg-teal-100">📄 Lihat Draft Rapor</a>
+                <a href={`/rapor/${pasienAktif.id}?petugas=${encodeURIComponent(user?.nama || '')}`} target="_blank" rel="noreferrer" className="text-xs font-bold text-[#0f766e] bg-teal-50 px-4 py-2 rounded-lg border border-teal-200 hover:bg-teal-100">📄 Lihat Draft Rapor</a>
             </div>
 
             <div className="bg-white rounded-[2rem] p-5 border border-slate-200 shadow-sm mb-6">
@@ -410,17 +427,22 @@ function Pos7() {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 sticky mobile-safe-submit z-40">
-               <button type="button" onClick={handleKembaliPosSebelumnya} disabled={loading} className="w-full min-h-[60px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-black rounded-2xl shadow-sm active:scale-95 transition-all text-sm uppercase flex items-center justify-center gap-2 disabled:opacity-50">
-                   ‹ Pos 6
-               </button>
-               <button type="button" onClick={kirimWA} className="w-full min-h-[60px] bg-[#25D366] hover:bg-[#128C7E] text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all text-sm uppercase flex items-center justify-center gap-2">
-                   💬 Kirim WA
-               </button>
-               <button type="submit" disabled={loading} className="w-full min-h-[60px] bg-[#0f766e] hover:bg-[#115e59] text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all text-sm uppercase flex items-center justify-center gap-2">
-                   {loading ? 'MENYIMPAN...' : '🏁 Selesai'}
-               </button>
-            </div>
+            <PosBottomActionBar
+               backLabel="Kembali ke Pos 6"
+               primaryLabel="Tandai Selesai"
+               loading={loading}
+               onBack={handleKembaliPosSebelumnya}
+               primaryColorClass="bg-[#0f766e] hover:bg-[#115e59]"
+               secondaryAction={(
+                 <button
+                   type="button"
+                   onClick={kirimWA}
+                   className="w-full min-h-[60px] rounded-2xl bg-[#25D366] px-4 text-sm font-black uppercase text-white shadow-lg transition-all hover:bg-[#128C7E] active:scale-95"
+                 >
+                   Kirim WA
+                 </button>
+               )}
+            />
         </form>
       </div>
       )}

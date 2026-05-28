@@ -1,0 +1,105 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function tokenRoles() {
+      return request.auth.token.roles is list
+        ? request.auth.token.roles
+        : request.auth.token.role is string
+          ? [request.auth.token.role]
+          : [];
+    }
+
+    function activeUser() {
+      return signedIn() && (request.auth.token.isActive == true || userDoc().data.isActive == true);
+    }
+
+    function hasRole(role) {
+      return activeUser() && (
+        tokenRoles().hasAny([role]) ||
+        userDoc().data.roles.hasAny([role])
+      );
+    }
+
+    function hasAnyRole(roles) {
+      return activeUser() && (
+        tokenRoles().hasAny(roles) ||
+        userDoc().data.roles.hasAny(roles)
+      );
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || hasRole('admin'));
+      allow write: if hasRole('admin');
+    }
+
+    match /staff/{staffId} {
+      allow read, write: if hasRole('admin');
+    }
+
+    match /schools/{schoolId} {
+      allow read: if activeUser();
+      allow write: if hasRole('admin');
+    }
+
+    match /patients/{docId} {
+      allow read, create, update: if hasAnyRole(['admin', 'dokter', 'perawat', 'perawat_bidan', 'petugas']);
+      allow delete: if hasRole('admin');
+    }
+
+    match /visits/{docId} {
+      allow read: if activeUser();
+      allow create: if hasAnyRole(['admin', 'petugas', 'ttlm', 'dokter', 'perawat', 'perawat_bidan', 'apoteker']);
+      allow update: if hasAnyRole(['admin', 'petugas', 'ttlm', 'dokter', 'perawat', 'perawat_bidan', 'apoteker']);
+      allow delete: if hasRole('admin');
+    }
+
+    match /queue_counters/{docId} {
+      allow read, create, update: if hasAnyRole(['admin', 'petugas', 'ttlm', 'dokter', 'perawat', 'perawat_bidan', 'apoteker']);
+      allow delete: if hasRole('admin');
+    }
+
+    match /pengaturan/{docId} {
+      allow read: if docId == 'lokasi_aktif' || activeUser();
+      allow create, update: if hasAnyRole(['admin', 'petugas', 'ttlm', 'dokter', 'perawat', 'perawat_bidan', 'apoteker']);
+      allow delete: if hasRole('admin');
+    }
+
+    match /panggilan_tv/{docId} {
+      allow read: if true;
+      allow create: if hasAnyRole(['admin', 'petugas', 'ttlm', 'dokter', 'perawat', 'perawat_bidan', 'apoteker']);
+      allow update, delete: if hasRole('admin');
+    }
+
+    match /activity_logs/{docId} {
+      allow create: if activeUser();
+      allow read: if hasRole('admin');
+      allow update, delete: if false;
+    }
+
+    match /auditLogs/{docId} {
+      allow create: if activeUser();
+      allow read: if hasRole('admin') || hasRole('dokter');
+      allow update, delete: if false;
+    }
+
+    match /public_queue/{docId} {
+      allow read: if true;
+      allow create, update: if hasAnyRole(['admin', 'petugas', 'ttlm', 'dokter', 'perawat', 'perawat_bidan', 'apoteker']);
+      allow delete: if hasRole('admin');
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
