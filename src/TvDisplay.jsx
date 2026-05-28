@@ -267,8 +267,25 @@ function TvDisplay() {
 
   // --- KOMPONEN KOTAK ANTREAN ---
   const BoxPos = ({ namaPos, theme, dataAntrian, currentCall }) => {
-    const visibleQueue = dataAntrian.length > 0 ? dataAntrian : currentCall ? [currentCall] : [];
-    const countLabel = visibleQueue.length.toString().padStart(2, '0');
+    let visibleQueue = [...dataAntrian];
+    let isCalling = false;
+
+    if (currentCall && currentCall.nomor_antrian) {
+      isCalling = true;
+      const activeNumber = currentCall.nomor_antrian;
+      const indexInQueue = visibleQueue.findIndex(
+        (item) => (item.nomor_antrian || item.queueNumber) === activeNumber
+      );
+
+      if (indexInQueue !== -1) {
+        const [activeItem] = visibleQueue.splice(indexInQueue, 1);
+        visibleQueue.unshift({ ...activeItem, isCurrentCall: true });
+      } else {
+        visibleQueue.unshift(currentCall);
+      }
+    }
+
+    const countLabel = dataAntrian.length.toString().padStart(2, '0');
     const currentNumber = visibleQueue[0]?.nomor_antrian || visibleQueue[0]?.queueNumber || '...';
     const nextNumbers = visibleQueue
       .slice(1, 3)
@@ -276,18 +293,18 @@ function TvDisplay() {
       .filter(Boolean);
 
     return (
-      <div className="tv-pos-card relative flex h-full flex-col overflow-hidden rounded-2xl border bg-white shadow-[0_12px_28px_rgba(15,23,42,0.12)]" style={{ borderColor: theme.border }}>
-          <div className="flex flex-col items-center justify-center py-1.5 text-white shadow-sm" style={{ background: theme.solid }}>
+      <div className={`tv-pos-card relative flex h-full flex-col overflow-hidden rounded-2xl border bg-white shadow-[0_12px_28px_rgba(15,23,42,0.12)] ${isCalling ? 'ring-4 ring-rose-500/50 animate-pulse' : ''}`} style={{ borderColor: isCalling ? '#f43f5e' : theme.border }}>
+          <div className="flex flex-col items-center justify-center py-1.5 text-white shadow-sm" style={{ background: isCalling ? '#e11d48' : theme.solid }}>
               <h3 className="mt-0.5 text-2xl font-black leading-none tracking-widest lg:text-[28px]">{namaPos}</h3>
               <div className="mt-1 rounded-full bg-white/20 px-3 py-0.5 text-[9px] font-bold tracking-widest xl:text-[10px]">
-                  {currentCall && dataAntrian.length === 0 ? 'DIPANGGIL' : `${countLabel} PASIEN`}
+                  {isCalling ? 'DIPANGGIL' : `${countLabel} PASIEN`}
               </div>
           </div>
           <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-white px-3 py-3">
               {visibleQueue.length > 0 ? (
                   <>
                       {/* PENGGUNAAN FONT BEBAS NEUE */}
-                      <h4 className="font-['Bebas_Neue'] text-[68px] font-normal leading-none tracking-normal drop-shadow-sm xl:text-[82px] 2xl:text-[98px]" style={{ color: theme.solid }}>
+                      <h4 className="font-['Bebas_Neue'] text-[68px] font-normal leading-none tracking-normal drop-shadow-sm xl:text-[82px] 2xl:text-[98px]" style={{ color: isCalling ? '#e11d48' : theme.solid }}>
                           {currentNumber}
                       </h4>
                       <div className="flex min-h-[30px] w-full items-center justify-center">
@@ -299,8 +316,8 @@ function TvDisplay() {
                               <div className="w-full truncate rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-center text-[10px] font-black uppercase tracking-widest text-sky-700 xl:text-[11px]">
                                   Sinkron nomor
                               </div>
-                          ) : currentCall ? (
-                              <div className="rounded-full bg-teal-50 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-teal-700 xl:text-[11px]">
+                          ) : isCalling ? (
+                              <div className="rounded-full bg-rose-50 border border-rose-200 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-rose-700 xl:text-[11px]">
                                   Sedang dipanggil
                               </div>
                           ) : (
