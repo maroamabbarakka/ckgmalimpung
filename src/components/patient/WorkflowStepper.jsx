@@ -5,7 +5,7 @@ export default function WorkflowStepper({ activeKey = 'loket' }) {
 
   return (
     <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <ol className="flex min-w-max items-center gap-2">
+      <ol className="flex min-w-max items-center gap-1.5 md:gap-2">
         {WORKFLOW_STEPS.map((step, index) => {
           const isActive = index === activeIndex;
           const isDone = index < activeIndex;
@@ -16,14 +16,14 @@ export default function WorkflowStepper({ activeKey = 'loket' }) {
               : 'border-white/10 bg-white/10 text-white/70';
 
           return (
-            <li key={step.key} className="flex items-center gap-2">
-              <div className={`flex min-h-10 min-w-10 flex-col items-center justify-center rounded-2xl border px-3 ${tone}`}>
+            <li key={step.key} className="flex items-center gap-1.5 md:gap-2">
+              <div className={`flex min-h-8 min-w-10 flex-col items-center justify-center rounded-xl border px-2 md:min-h-10 md:min-w-10 md:rounded-2xl md:px-3 ${tone}`}>
                 <span className="text-xs font-black leading-none">{step.shortLabel}</span>
-                <span className="mt-1 text-[8px] font-black uppercase tracking-wider opacity-70">
+                <span className="mt-1 hidden text-[8px] font-black uppercase tracking-wider opacity-70 sm:block">
                   {isActive ? 'Aktif' : isDone ? 'Selesai' : 'Menunggu'}
                 </span>
               </div>
-              {index < WORKFLOW_STEPS.length - 1 && <span className="h-px w-4 bg-white/25" />}
+              {index < WORKFLOW_STEPS.length - 1 && <span className="h-px w-3 bg-white/25 md:w-4" />}
             </li>
           );
         })}

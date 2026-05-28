@@ -7,6 +7,7 @@ import AppInput from './design-system/components/AppInput';
 
 const LOGO_PINRANG = "/logo_pinrang.png";
 const LOGO_MALIMPUNG = "/logo_malimpung.png";
+const HERO_IMAGE = "/puskesmas_malimpung.jpg";
 const MAX_FAILED_ATTEMPTS = 5;
 const FAILED_ATTEMPT_DELAY_MS = 2000;
 const LOCKOUT_MS = 60000;
@@ -58,13 +59,13 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 relative overflow-hidden font-sans lg:grid lg:grid-cols-[1fr_520px] lg:items-stretch lg:gap-8 lg:p-8">
-        {/* Dekorasi Background */}
-        <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-teal-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-emerald-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30"></div>
+    <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(135deg,#f8fafc_0%,#edf7f5_48%,#e9f3ff_100%)] p-4 font-sans lg:grid lg:grid-cols-[1fr_520px] lg:items-stretch lg:gap-8 lg:p-8">
 
-        <section className="relative z-10 hidden min-h-[calc(100vh-4rem)] flex-col justify-between rounded-[2.5rem] bg-teal-700 p-12 text-white shadow-2xl lg:flex">
-            <div>
+        <section
+            className="relative z-10 hidden min-h-[calc(100vh-4rem)] flex-col justify-between overflow-hidden rounded-[2rem] bg-slate-900 p-12 text-white shadow-2xl lg:flex"
+            style={{ backgroundImage: `linear-gradient(90deg, rgba(9, 82, 76, 0.96), rgba(9, 82, 76, 0.76), rgba(15, 23, 42, 0.38)), url(${HERO_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+        >
+            <div className="relative z-10">
                 <div className="flex items-center gap-4">
                     <div className="rounded-2xl bg-white p-3 shadow-lg">
                         <img src={LOGO_MALIMPUNG} alt="Malimpung" className="h-12 w-auto object-contain" />
@@ -81,10 +82,10 @@ function Login() {
                     Platform operasional terpadu untuk antrean, pemeriksaan, rapor, dan monitoring layanan CKG.
                 </p>
             </div>
-            <div className="grid max-w-2xl grid-cols-3 gap-3 text-xs font-black uppercase tracking-widest text-teal-50">
-                <div className="rounded-2xl border border-white/20 bg-white/10 p-4">Antrean</div>
-                <div className="rounded-2xl border border-white/20 bg-white/10 p-4">Pemeriksaan</div>
-                <div className="rounded-2xl border border-white/20 bg-white/10 p-4">Rapor</div>
+            <div className="relative z-10 grid max-w-2xl grid-cols-3 gap-3 text-xs font-black uppercase tracking-widest text-teal-50">
+                <div className="rounded-xl border border-white/25 bg-white/[0.12] p-4 backdrop-blur">Antrean</div>
+                <div className="rounded-xl border border-white/25 bg-white/[0.12] p-4 backdrop-blur">Pemeriksaan</div>
+                <div className="rounded-xl border border-white/25 bg-white/[0.12] p-4 backdrop-blur">Rapor</div>
             </div>
         </section>
 

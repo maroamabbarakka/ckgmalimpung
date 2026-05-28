@@ -424,7 +424,7 @@ function Dashboard() {
   }, [filteredVisits]);
   const maxBottleneckCount = bottleneckRows[0]?.count || 1;
   const insightRows = useMemo(() => {
-    const qualityIssues = dataQuality.missingNik + dataQuality.missingBirthDate + dataQuality.missingVillage + dataQuality.invalidWorkflow + dataQuality.finalizedWithoutDoctor;
+    const qualityIssues = dataQuality.missingNik + dataQuality.invalidNik + dataQuality.missingBirthDate + dataQuality.invalidBirthDate + dataQuality.missingGender + dataQuality.invalidGender + dataQuality.missingVillage + dataQuality.invalidWorkflow + dataQuality.finalizedWithoutDoctor + dataQuality.duplicateIdentityYear;
     const topBottleneck = bottleneckRows[0];
     return [
       {
@@ -675,11 +675,13 @@ function Dashboard() {
                 </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-[10px] font-black uppercase tracking-widest">
-                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3"><p className="text-slate-400">NIK Kosong</p><p className="mt-1 text-xl text-slate-800">{dataQuality.missingNik}</p></div>
-                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3"><p className="text-slate-400">Tgl Lahir</p><p className="mt-1 text-xl text-slate-800">{dataQuality.missingBirthDate}</p></div>
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3"><p className="text-slate-400">NIK Bermasalah</p><p className="mt-1 text-xl text-slate-800">{dataQuality.missingNik + dataQuality.invalidNik}</p></div>
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3"><p className="text-slate-400">Tgl Lahir</p><p className="mt-1 text-xl text-slate-800">{dataQuality.missingBirthDate + dataQuality.invalidBirthDate}</p></div>
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3"><p className="text-slate-400">Gender</p><p className="mt-1 text-xl text-slate-800">{dataQuality.missingGender + dataQuality.invalidGender}</p></div>
                 <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3"><p className="text-slate-400">Desa</p><p className="mt-1 text-xl text-slate-800">{dataQuality.missingVillage}</p></div>
                 <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3"><p className="text-slate-400">Workflow</p><p className="mt-1 text-xl text-slate-800">{dataQuality.invalidWorkflow}</p></div>
-                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3 md:col-span-2"><p className="text-slate-400">Final tanpa dokter</p><p className="mt-1 text-xl text-slate-800">{dataQuality.finalizedWithoutDoctor}</p></div>
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3"><p className="text-slate-400">Duplikat Tahun</p><p className="mt-1 text-xl text-slate-800">{dataQuality.duplicateIdentityYear}</p></div>
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3 md:col-span-3"><p className="text-slate-400">Final tanpa dokter</p><p className="mt-1 text-xl text-slate-800">{dataQuality.finalizedWithoutDoctor}</p></div>
             </div>
         </div>
     ),

@@ -1,10 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { DEFAULT_ACTIVE_LOCATION, subscribeActiveLocation } from './services/settingsService';
-import { subscribeLatestTvQueueCall } from './services/queueService';
+import { subscribeLatestTvQueueCall, subscribeTvQueueGrid } from './services/queueService';
 import { subscribePublicTvQueueGrid } from './services/publicQueueService';
-import { enterFullscreen } from './features/tv/tvService';
-import { HealthEducationPanel } from './features/tv/HealthEducationPanel';
-import { QueueTicker } from './features/tv/QueueTicker';
+import { enterFullscreen, HEALTH_MESSAGES, sanitizePublicQueueItem } from './features/tv/tvService';
 
 const LOGO_PINRANG = "/logo_pinrang.png";
 const LOGO_MALIMPUNG = "/logo_malimpung.png";
@@ -34,17 +32,39 @@ function TvDisplay() {
   const [antrianGrid, setAntrianGrid] = useState({
       pos1: [], pos2: [], pos3: [], pos4: [], pos5: [], pos6: [], pos7: []
   });
+  const [fallbackAntrianGrid, setFallbackAntrianGrid] = useState({
+      pos1: [], pos2: [], pos3: [], pos4: [], pos5: [], pos6: [], pos7: []
+  });
 
   const lastCallId = useRef(null);
   const initialLoadRef = useRef(true); 
   const callTimeoutRef = useRef(null);
+  const publicQueueTotal = useMemo(() => Object.values(antrianGrid).reduce((total, items) => total + items.length, 0), [antrianGrid]);
+  const displayGrid = publicQueueTotal > 0 ? antrianGrid : fallbackAntrianGrid;
   const antreanBerikutnya = useMemo(() => (
-    Object.values(antrianGrid)
+    Object.values(displayGrid)
       .flat()
       .sort((a, b) => (a.waktu_ambil_tiket?.toMillis?.() || 0) - (b.waktu_ambil_tiket?.toMillis?.() || 0))
       .slice(0, 8)
-  ), [antrianGrid]);
-  const totalAntreanAktif = useMemo(() => Object.values(antrianGrid).reduce((total, items) => total + items.length, 0), [antrianGrid]);
+  ), [displayGrid]);
+  const totalAntreanAktif = useMemo(() => Object.values(displayGrid).reduce((total, items) => total + items.length, 0), [displayGrid]);
+  const tickerQueueText = useMemo(() => {
+    if (!antreanBerikutnya.length) return 'Antrean berikutnya: belum ada antrean aktif';
+    return `Antrean berikutnya: ${antreanBerikutnya.map((visit) => {
+      const item = sanitizePublicQueueItem(visit);
+      return `${item.nomorAntrian} menuju ${item.posTujuan}`;
+    }).join(' | ')}`;
+  }, [antreanBerikutnya]);
+
+  const getCurrentCallForPos = (posName) => {
+    if (!panggilanTerbaru?.identitas_layar || !panggilanTerbaru?.pos) return null;
+    const normalize = (value) => String(value || '').replace(/\s+/g, '').toUpperCase();
+    if (normalize(panggilanTerbaru.pos) !== normalize(posName)) return null;
+    return {
+      nomor_antrian: panggilanTerbaru.identitas_layar,
+      isCurrentCall: true
+    };
+  };
 
   // 1. JAM DIGITAL REAL-TIME
   useEffect(() => {
@@ -114,6 +134,19 @@ function TvDisplay() {
       }, (error) => {
           console.error('Gagal memuat antrean TV:', error);
           setTvQueueError('Koneksi data antrean sedang tidak stabil. Menampilkan data terakhir yang tersedia.');
+      });
+
+      return () => unsubscribe();
+  }, [isStarted]);
+
+  useEffect(() => {
+      if (!isStarted) return;
+
+      const unsubscribe = subscribeTvQueueGrid((nextGrid) => {
+          setFallbackAntrianGrid(nextGrid);
+          setLastSyncAt((value) => value || new Date());
+      }, (error) => {
+          console.error('Gagal memuat fallback antrean TV:', error);
       });
 
       return () => unsubscribe();
@@ -198,46 +231,55 @@ function TvDisplay() {
   }
 
   // --- KOMPONEN KOTAK ANTREAN ---
-  const BoxPos = ({ namaPos, headerClass, textClass, borderClass, dataAntrian }) => (
+  const BoxPos = ({ namaPos, headerClass, textClass, borderClass, dataAntrian, currentCall }) => {
+    const visibleQueue = dataAntrian.length > 0 ? dataAntrian : currentCall ? [currentCall] : [];
+    const countLabel = visibleQueue.length.toString().padStart(2, '0');
+
+    return (
       <div className={`bg-white rounded-xl flex flex-col h-full overflow-hidden shadow-lg border-b-[10px] ${borderClass} relative`}>
           <div className={`${headerClass} text-white flex flex-col items-center justify-center py-2 shadow-sm`}>
               <h3 className="font-black text-2xl lg:text-3xl tracking-widest leading-none mt-1">{namaPos}</h3>
               <div className="bg-white/20 px-3 py-0.5 rounded-full text-[9px] xl:text-[10px] font-bold tracking-widest mt-1 mb-1">
-                  {dataAntrian.length.toString().padStart(2, '0')} PASIEN
+                  {currentCall && dataAntrian.length === 0 ? 'DIPANGGIL' : `${countLabel} PASIEN`}
               </div>
           </div>
           <div className="flex-1 flex flex-col justify-center items-center p-2 bg-white">
-              {dataAntrian.length > 0 ? (
+              {visibleQueue.length > 0 ? (
                   <>
                       {/* PENGGUNAAN FONT BEBAS NEUE */}
                       <h4 className={`text-[85px] xl:text-[100px] 2xl:text-[120px] font-normal ${textClass} font-['Bebas_Neue'] tracking-normal leading-none mt-4 mb-2 drop-shadow-sm`}>
-                          {dataAntrian[0].nomor_antrian}
+                          {visibleQueue[0].nomor_antrian}
                       </h4>
-                      {dataAntrian.length > 1 ? (
+                      {visibleQueue.length > 1 ? (
                           <div className="border border-amber-400 text-amber-500 px-2 py-0.5 rounded-full text-[8px] xl:text-[9px] font-black uppercase tracking-widest truncate w-[95%] text-center mb-1 bg-amber-50">
-                              Menyusul: {dataAntrian.slice(1, 3).map(v => v.nomor_antrian).join(', ')}
+                              Menyusul: {visibleQueue.slice(1, 3).map(v => v.nomor_antrian).join(', ')}
+                          </div>
+                      ) : currentCall ? (
+                          <div className="rounded-full bg-teal-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-teal-700">
+                              Sedang dipanggil
                           </div>
                       ) : (
                            <div className="h-5 mb-1"></div> 
                       )}
                   </>
               ) : (
-                  <div className="text-center opacity-30 flex flex-col items-center justify-center h-full">
-                      <span className="mb-3 h-8 w-8 rounded-full border-4 border-slate-300 bg-slate-100 shadow-inner"></span>
+                  <div className="text-center opacity-45 flex flex-col items-center justify-center h-full">
+                      <span className="mb-2 text-5xl font-black leading-none text-slate-300">-</span>
                       <p className="font-bold text-[9px] xl:text-[10px] text-slate-500 uppercase tracking-widest">Antrean Kosong</p>
                   </div>
               )}
           </div>
       </div>
-  );
+    );
+  };
 
   return (
     <div className="h-screen w-screen bg-[#e2e8f0] flex flex-col overflow-hidden font-sans select-none cursor-default">
         {/* IMPORT FONT BEBAS NEUE DARI GOOGLE FONTS */}
         <style>
             {`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
-              @keyframes tvTicker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-              .tv-ticker-track { animation: tvTicker 38s linear infinite; }`}
+              @keyframes tvTicker { from { transform: translateX(100vw); } to { transform: translateX(-100%); } }
+              .tv-ticker-track { animation: tvTicker 26s linear infinite; will-change: transform; }`}
         </style>
         
         {/* HEADER */}
@@ -292,7 +334,7 @@ function TvDisplay() {
         <main className="flex-1 flex flex-col p-3 xl:p-4 2xl:p-6 gap-3 xl:gap-4 2xl:gap-6 bg-[#e2e8f0] min-h-0">
             
             {/* Sektor Atas: Info Panggilan & Video Edukasi */}
-            <div className="grid flex-1 grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-3 xl:gap-4 2xl:gap-6 min-h-0">
+            <div className="grid flex-1 grid-cols-[minmax(420px,0.85fr)_minmax(0,1.25fr)] gap-3 xl:gap-4 2xl:gap-6 min-h-0">
                 
                 {/* Kotak Kiri: Info Panggilan / Standby */}
                 <div className="bg-white rounded-3xl shadow-xl border border-white flex flex-col justify-center items-center p-6 xl:p-8 relative overflow-hidden min-w-0">
@@ -329,37 +371,29 @@ function TvDisplay() {
                     )}
                 </div>
 
-                {/* Kotak Kanan: Video, edukasi, dan antrean berikutnya */}
-                <div className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 xl:grid-cols-5 xl:grid-rows-none xl:gap-4 2xl:gap-6">
-                    <div className="hidden bg-black rounded-3xl shadow-xl overflow-hidden relative items-center justify-center min-h-0 xl:col-span-3 xl:flex">
-                        <video 
-                            src={VIDEO_PLAYLIST[currentVideoIndex]} 
-                            className="w-full h-full object-cover"
-                            autoPlay 
-                            muted 
-                            playsInline
-                            onEnded={() => setCurrentVideoIndex((prev) => (prev + 1) % VIDEO_PLAYLIST.length)} 
-                        />
-                        <div className="absolute inset-0 shadow-[inset_0_0_50px_rgba(0,0,0,0.5)] pointer-events-none"></div>
-                    </div>
-                    <div className="flex min-h-0 flex-col gap-3 xl:col-span-2 xl:gap-4 2xl:gap-6">
-                        <HealthEducationPanel />
-                        <div className="min-h-0 flex-1 overflow-hidden">
-                            <QueueTicker visits={antreanBerikutnya} limit={6} />
-                        </div>
-                    </div>
+                {/* Kotak Kanan: Video edukasi dibuat dominan; info ringkas masuk running text bawah. */}
+                <div className="relative min-h-0 min-w-0 overflow-hidden rounded-3xl bg-black shadow-xl">
+                    <video
+                        src={VIDEO_PLAYLIST[currentVideoIndex]}
+                        className="h-full w-full object-cover"
+                        autoPlay
+                        muted
+                        playsInline
+                        onEnded={() => setCurrentVideoIndex((prev) => (prev + 1) % VIDEO_PLAYLIST.length)}
+                    />
+                    <div className="pointer-events-none absolute inset-0 shadow-[inset_0_0_50px_rgba(0,0,0,0.45)]"></div>
                 </div>
             </div>
 
             {/* Sektor Bawah: Grid 7 Kotak POS Sejajar */}
             <div className="h-[35%] xl:h-[38%] min-h-[190px] shrink-0 grid grid-cols-7 gap-2 xl:gap-3 2xl:gap-4">
-                <BoxPos namaPos="POS 1" dataAntrian={antrianGrid.pos1} headerClass="bg-[#2563eb]" textClass="text-[#2563eb]" borderClass="border-[#2563eb]" />
-                <BoxPos namaPos="POS 2" dataAntrian={antrianGrid.pos2} headerClass="bg-[#4f46e5]" textClass="text-[#4f46e5]" borderClass="border-[#4f46e5]" />
-                <BoxPos namaPos="POS 3" dataAntrian={antrianGrid.pos3} headerClass="bg-[#e11d48]" textClass="text-[#e11d48]" borderClass="border-[#e11d48]" />
-                <BoxPos namaPos="POS 4" dataAntrian={antrianGrid.pos4} headerClass="bg-[#0f766e]" textClass="text-[#0f766e]" borderClass="border-[#0f766e]" />
-                <BoxPos namaPos="POS 5" dataAntrian={antrianGrid.pos5} headerClass="bg-[#059669]" textClass="text-[#059669]" borderClass="border-[#059669]" />
-                <BoxPos namaPos="POS 6" dataAntrian={antrianGrid.pos6} headerClass="bg-[#0284c7]" textClass="text-[#0284c7]" borderClass="border-[#0284c7]" />
-                <BoxPos namaPos="POS 7" dataAntrian={antrianGrid.pos7} headerClass="bg-[#0ea5e9]" textClass="text-[#0ea5e9]" borderClass="border-[#0ea5e9]" />
+                <BoxPos namaPos="POS 1" dataAntrian={displayGrid.pos1} currentCall={getCurrentCallForPos('POS 1')} headerClass="bg-[#2563eb]" textClass="text-[#2563eb]" borderClass="border-[#2563eb]" />
+                <BoxPos namaPos="POS 2" dataAntrian={displayGrid.pos2} currentCall={getCurrentCallForPos('POS 2')} headerClass="bg-[#4f46e5]" textClass="text-[#4f46e5]" borderClass="border-[#4f46e5]" />
+                <BoxPos namaPos="POS 3" dataAntrian={displayGrid.pos3} currentCall={getCurrentCallForPos('POS 3')} headerClass="bg-[#e11d48]" textClass="text-[#e11d48]" borderClass="border-[#e11d48]" />
+                <BoxPos namaPos="POS 4" dataAntrian={displayGrid.pos4} currentCall={getCurrentCallForPos('POS 4')} headerClass="bg-[#0f766e]" textClass="text-[#0f766e]" borderClass="border-[#0f766e]" />
+                <BoxPos namaPos="POS 5" dataAntrian={displayGrid.pos5} currentCall={getCurrentCallForPos('POS 5')} headerClass="bg-[#059669]" textClass="text-[#059669]" borderClass="border-[#059669]" />
+                <BoxPos namaPos="POS 6" dataAntrian={displayGrid.pos6} currentCall={getCurrentCallForPos('POS 6')} headerClass="bg-[#0284c7]" textClass="text-[#0284c7]" borderClass="border-[#0284c7]" />
+                <BoxPos namaPos="POS 7" dataAntrian={displayGrid.pos7} currentCall={getCurrentCallForPos('POS 7')} headerClass="bg-[#0ea5e9]" textClass="text-[#0ea5e9]" borderClass="border-[#0ea5e9]" />
             </div>
 
         </main>
@@ -374,7 +408,9 @@ function TvDisplay() {
                             <span className="mx-8 text-slate-600">|</span>
                             <span className="text-teal-400">Mohon siapkan Kartu Identitas (KTP/KK) atau Kartu BPJS Anda.</span>
                             <span className="mx-8 text-slate-600">|</span>
-                            <span className="text-white">Layanan CKG mencakup: Tensi, Gula Darah, Kolesterol, Asam Urat, Skrining Penyakit.</span>
+                            <span className="text-white">{tickerQueueText}</span>
+                            <span className="mx-8 text-slate-600">|</span>
+                            <span className="text-cyan-300">Edukasi: {HEALTH_MESSAGES.join('  |  ')}</span>
                             <span className="mx-8 text-slate-600">|</span>
                             <span className="text-emerald-400">PUSKESMAS MALIMPUNG - Dekat Melayani, Ikhlas Mengabdi</span>
                             <span className="mx-8 text-slate-600">|</span>

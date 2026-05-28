@@ -48,6 +48,7 @@ Paket `CKG_TERSANJUNG_TECHNICAL_UPDATE_PACK` dieksekusi sebagai stabilisasi bert
 - Firestore Rules menambahkan guard untuk `auditLogs` dan collection publik aman `public_queue`.
 - TV display publik membaca antrean dari `public_queue`, bukan langsung dari `visits`, agar data pasien tetap terlindungi oleh rules.
 - Skrip `scripts/backfillPublicQueue.js` tersedia untuk mengisi `public_queue` dari data antrean lama secara dry-run/commit.
+- Evaluator data quality terpusat tersedia untuk mendeteksi NIK/tanggal lahir/gender/desa/workflow/finalisasi dokter/duplikat tahun tanpa silent correction.
 - `App.jsx` mulai memakai config navigation terpusat untuk kartu pos dan mobile nav.
 - Helper Firebase `timestamp.js` dan `queryHelpers.js` tersedia untuk refactor service bertahap.
 - Komponen UI shared `Modal` dan `Table` tersedia di `src/components/ui`.

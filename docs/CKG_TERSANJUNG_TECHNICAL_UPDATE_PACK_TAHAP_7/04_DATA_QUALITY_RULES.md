@@ -34,3 +34,12 @@ Buat halaman admin:
 - admin bisa melihat data bermasalah
 - data bermasalah bisa diperbaiki dengan audit log
 - tidak ada silent correction tanpa catatan
+
+## Status Implementasi
+
+Status: baseline teknis berjalan.
+
+- Evaluator kualitas data tersedia di `src/features/dataQuality/dataQualityRules.js`.
+- Dashboard memakai evaluator untuk menghitung NIK bermasalah, tanggal lahir bermasalah, gender bermasalah, desa kosong, workflow kosong, final tanpa validasi dokter, dan identitas duplikat pada tahun yang sama.
+- Unit test tersedia di `src/features/dataQuality/dataQualityRules.test.js`.
+- Evaluator hanya menandai issue; tidak melakukan koreksi otomatis sehingga tidak ada silent correction.

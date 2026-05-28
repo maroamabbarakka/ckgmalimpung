@@ -52,6 +52,7 @@
 - Menambahkan guard anti submit ganda di Pos 1-7 dan Kunjungan Rumah; tombol simpan Kunjungan Rumah terkunci saat OCR masih berjalan.
 - Mengalihkan sumber antrean TV publik dari `visits` ke proyeksi aman `public_queue`; `panggilan_tv` hanya dibuka untuk data panggilan publik tanpa identitas pasien.
 - Menambahkan skrip `migrate:public-queue` untuk backfill proyeksi antrean publik dan mencegah update status menimpa nomor antrean publik.
+- Menambahkan evaluator data quality terpusat dan menghubungkannya ke Dashboard untuk NIK, tanggal lahir, gender, desa, workflow, validasi dokter, dan duplikat identitas per tahun.
 - Verifikasi:
   - `npm run lint`
   - `npm run test:run`

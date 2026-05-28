@@ -1,5 +1,6 @@
 import { collection, doc, limit, onSnapshot, orderBy, query, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { calculateDataQualitySummary } from '../dataQuality/dataQualityRules';
 
 const FINAL_STATUS = new Set(['FINALIZED', 'Selesai']);
 const CANCELLED_STATUS = new Set(['CANCELLED', 'Dibatalkan']);
@@ -68,22 +69,7 @@ export function calculateBottleneck(visits = []) {
 }
 
 export function calculateDataQuality(visits = []) {
-  return visits.reduce((acc, visit) => {
-    if (!visit.nik && !visit.patientNIK) acc.missingNik += 1;
-    if (!visit.tgl_lahir && !visit.patientBirthDate) acc.missingBirthDate += 1;
-    if (!visit.desa && !visit.desa_pelaksanaan) acc.missingVillage += 1;
-    if (!visit.status && !visit.status_antrian) acc.invalidWorkflow += 1;
-    if ((visit.status === 'FINALIZED' || visit.status_antrian === 'Selesai') && !visit.validasiDokter && !visit.pos7?.validasiDokter) {
-      acc.finalizedWithoutDoctor += 1;
-    }
-    return acc;
-  }, {
-    missingNik: 0,
-    missingBirthDate: 0,
-    missingVillage: 0,
-    invalidWorkflow: 0,
-    finalizedWithoutDoctor: 0,
-  });
+  return calculateDataQualitySummary(visits);
 }
 
 export function applyDashboardFilters(visits = [], filters = defaultDashboardFilters) {

@@ -39,6 +39,35 @@ const posCards = POS_CARDS;
 const posNavItems = POS_NAV_ITEMS;
 const mobileNavItems = MOBILE_NAV_ITEMS;
 
+const Icon = ({ name, className = 'h-7 w-7' }) => {
+  const common = {
+    className,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true
+  };
+  const icons = {
+    activity: <svg {...common}><path d="M22 12h-4l-3 8L9 4l-3 8H2" /></svg>,
+    chart: <svg {...common}><path d="M4 19V5" /><path d="M4 19h16" /><path d="M8 16v-5" /><path d="M12 16V8" /><path d="M16 16v-3" /></svg>,
+    clipboard: <svg {...common}><rect x="8" y="3" width="8" height="4" rx="1" /><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3" /><path d="M8 12h8" /><path d="M8 16h5" /></svg>,
+    'file-check': <svg {...common}><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z" /><path d="M14 2v5h5" /><path d="m9 15 2 2 4-4" /></svg>,
+    heart: <svg {...common}><path d="M19.5 12.5 12 20l-7.5-7.5a5 5 0 0 1 7.1-7.1l.4.4.4-.4a5 5 0 1 1 7.1 7.1Z" /></svg>,
+    home: <svg {...common}><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></svg>,
+    menu: <svg {...common}><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /></svg>,
+    route: <svg {...common}><circle cx="6" cy="19" r="2" /><circle cx="18" cy="5" r="2" /><path d="M8 19h4a4 4 0 0 0 0-8H9a4 4 0 0 1 0-8h7" /></svg>,
+    scan: <svg {...common}><path d="M7 3H5a2 2 0 0 0-2 2v2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /><circle cx="12" cy="12" r="3" /></svg>,
+    shield: <svg {...common}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="M9 12h6" /><path d="M12 9v6" /></svg>,
+    stethoscope: <svg {...common}><path d="M6 3v5a4 4 0 0 0 8 0V3" /><path d="M10 14a5 5 0 0 0 10 0v-2" /><circle cx="20" cy="10" r="2" /><path d="M4 3h4" /><path d="M12 3h4" /></svg>,
+    ticket: <svg {...common}><path d="M3 9a3 3 0 0 0 0 6v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a3 3 0 0 0 0-6V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2Z" /><path d="M13 5v2" /><path d="M13 17v2" /><path d="M13 11v2" /></svg>,
+    workflow: <svg {...common}><rect x="3" y="4" width="6" height="6" rx="2" /><rect x="15" y="4" width="6" height="6" rx="2" /><rect x="9" y="14" width="6" height="6" rx="2" /><path d="M9 7h6" /><path d="M12 10v4" /></svg>,
+  };
+  return icons[name] || icons.menu;
+};
+
 const CardMenu = ({ to, title, subtitle, icon, isAllowed, activeBgClass, activeIconClass, target }) => {
   if (!isAllowed) {
     return null;
@@ -50,8 +79,8 @@ const CardMenu = ({ to, title, subtitle, icon, isAllowed, activeBgClass, activeI
       target={target}
       className={`group flex min-h-[134px] flex-col items-center justify-center gap-2 rounded-[1.75rem] border border-slate-200/70 bg-white/75 p-4 text-center shadow-sm shadow-slate-200/70 backdrop-blur-lg transition-all duration-200 hover:-translate-y-1 hover:border-white hover:shadow-xl hover:shadow-slate-300/50 md:min-h-[148px] md:p-5 ${activeBgClass}`}
     >
-      <span className={`flex h-14 w-14 items-center justify-center rounded-2xl text-3xl transition-colors group-hover:text-white ${activeIconClass}`}>
-        {icon}
+      <span className={`flex h-14 w-14 items-center justify-center rounded-2xl transition-colors group-hover:text-white ${activeIconClass}`}>
+        <Icon name={icon} />
       </span>
       <span className="mt-1 text-base font-black text-slate-800 group-hover:text-white">{title}</span>
       <span className="text-[10px] font-bold uppercase text-slate-500 group-hover:text-white/90">{subtitle}</span>
@@ -80,8 +109,8 @@ const NavMobileItem = ({ to, icon, label, isActive, isAllowed }) => {
 
   return (
     <Link to={to} className={`${baseClass} group ${isActive ? 'bg-teal-50 text-teal-700' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>
-      <span className={`flex h-9 w-9 items-center justify-center rounded-2xl text-xl font-semibold leading-none transition-all duration-200 group-active:scale-95 ${isActive ? '-translate-y-1 scale-110 bg-white shadow-lg shadow-teal-200/80 ring-1 ring-teal-100' : 'group-hover:-translate-y-0.5 group-hover:scale-105'}`}>
-        {icon}
+      <span className={`flex h-9 w-9 items-center justify-center rounded-2xl leading-none transition-all duration-200 group-active:scale-95 ${isActive ? '-translate-y-1 scale-110 bg-white shadow-lg shadow-teal-200/80 ring-1 ring-teal-100' : 'group-hover:-translate-y-0.5 group-hover:scale-105'}`}>
+        <Icon name={icon} className="h-5 w-5" />
       </span>
       <span className={`max-w-full truncate text-[8px] font-black uppercase tracking-wide min-[390px]:text-[9px] ${isActive ? 'text-teal-700' : ''}`}>{label}</span>
       {isActive && (
@@ -132,11 +161,11 @@ function Beranda() {
   const isAdmin = hasAnyRole(['admin']);
   const allowedPosCards = posCards.filter((item) => hasAnyRole(item.roles));
   const moduleCards = [
-    { to: '/loket', title: 'Loket Tiket', subtitle: 'Antrean', icon: 'LK', isAllowed: hasAnyRole(roleGroups.staff), activeBgClass: 'hover:bg-amber-500', activeIconClass: 'bg-amber-100 group-hover:bg-amber-400' },
-    { to: '/dashboard', title: 'Dashboard', subtitle: 'Analitik Data', icon: 'DB', isAllowed: hasAnyRole(roleGroups.dashboard), activeBgClass: 'hover:bg-slate-800', activeIconClass: 'bg-slate-100 group-hover:bg-slate-700' },
-    { to: '/admin', title: 'Admin', subtitle: 'Admin Dashboard', icon: 'AD', isAllowed: isAdmin, activeBgClass: 'hover:bg-teal-700', activeIconClass: 'bg-teal-100 group-hover:bg-teal-600' },
-    { to: '/tentang', title: 'Tentang', subtitle: 'Info Aplikasi', icon: 'IN', isAllowed: true, activeBgClass: 'hover:bg-sky-500', activeIconClass: 'bg-sky-100 group-hover:bg-sky-400' },
-    { to: '/tv', target: '_blank', title: 'Layar Antrean', subtitle: 'Mode Display', icon: 'TV', isAllowed: hasAnyRole(roleGroups.staff), activeBgClass: 'hover:bg-blue-600', activeIconClass: 'bg-blue-100 group-hover:bg-blue-500' },
+    { to: '/loket', title: 'Loket Tiket', subtitle: 'Antrean', icon: 'ticket', isAllowed: hasAnyRole(roleGroups.staff), activeBgClass: 'hover:bg-amber-500', activeIconClass: 'bg-amber-100 group-hover:bg-amber-400' },
+    { to: '/dashboard', title: 'Dashboard', subtitle: 'Analitik Data', icon: 'chart', isAllowed: hasAnyRole(roleGroups.dashboard), activeBgClass: 'hover:bg-slate-800', activeIconClass: 'bg-slate-100 group-hover:bg-slate-700' },
+    { to: '/admin', title: 'Admin', subtitle: 'Admin Dashboard', icon: 'shield', isAllowed: isAdmin, activeBgClass: 'hover:bg-teal-700', activeIconClass: 'bg-teal-100 group-hover:bg-teal-600' },
+    { to: '/tentang', title: 'Tentang', subtitle: 'Info Aplikasi', icon: 'clipboard', isAllowed: true, activeBgClass: 'hover:bg-sky-500', activeIconClass: 'bg-sky-100 group-hover:bg-sky-400' },
+    { to: '/tv', target: '_blank', title: 'Layar Antrean', subtitle: 'Mode Display', icon: 'workflow', isAllowed: hasAnyRole(roleGroups.staff), activeBgClass: 'hover:bg-blue-600', activeIconClass: 'bg-blue-100 group-hover:bg-blue-500' },
   ].filter((item) => item.isAllowed);
 
   return (
@@ -314,16 +343,16 @@ function AppShell() {
             </div>
           </nav>
 
-          <div className="sticky top-0 z-40 flex min-h-[64px] items-center justify-between gap-2 border-b border-slate-200 bg-white/90 px-3 py-2 shadow-sm backdrop-blur-md print:hidden lg:hidden">
+          <div className="sticky top-0 z-40 flex min-h-[56px] items-center justify-between gap-2 border-b border-slate-200 bg-white/92 px-3 py-2 shadow-sm backdrop-blur-md print:hidden lg:hidden">
             <div className="flex min-w-0 items-center gap-1.5">
               {showMobileBack && (
                 <button
                   type="button"
                   onClick={() => safeBack(navigate, '/dashboard')}
-                  className="inline-flex min-h-9 shrink-0 items-center rounded-xl border border-slate-200 bg-white px-2.5 text-[11px] font-black text-slate-600 shadow-sm"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm"
+                  aria-label="Kembali"
                 >
-                  <span className="text-base leading-none">&lt;</span>
-                  <span className="ml-1 hidden min-[390px]:inline">Kembali</span>
+                  <span className="text-lg leading-none">&lt;</span>
                 </button>
               )}
               <Link to="/" className="flex min-w-0 items-center gap-1.5">
@@ -332,13 +361,7 @@ function AppShell() {
               </Link>
             </div>
             <div className="flex min-w-0 shrink-0 items-center gap-1.5">
-              {isAuthenticated && <DraftRecoveryBanner compact />}
-              {isAuthenticated && isAdmin && (
-                <Link to="/admin" className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700">Admin</Link>
-              )}
-              {isAuthenticated ? (
-                <button type="button" onClick={handleLogout} className="min-h-9 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-black text-rose-600">Keluar</button>
-              ) : (
+              {!isAuthenticated && (
                 <Link to="/login" className="inline-flex min-h-9 items-center rounded-lg bg-blue-600 px-3 py-1 text-[11px] font-black text-white shadow-sm">Masuk</Link>
               )}
             </div>
