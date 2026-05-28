@@ -33,6 +33,9 @@ function TvDisplay() {
       pos1: [], pos2: [], pos3: [], pos4: [], pos5: [], pos6: [], pos7: []
   });
   const [internalAntrianGrid, setInternalAntrianGrid] = useState(null);
+  const [activeCallsPerPos, setActiveCallsPerPos] = useState({
+      'POS 1': null, 'POS 2': null, 'POS 3': null, 'POS 4': null, 'POS 5': null, 'POS 6': null, 'POS 7': null
+  });
 
   const lastCallId = useRef(null);
   const initialLoadRef = useRef(true); 
@@ -99,6 +102,8 @@ function TvDisplay() {
       snapshot.docChanges().forEach((change) => {
         if (change.type === "added") {
           const data = change.doc.data();
+
+
           const docId = change.doc.id;
 
           if (lastCallId.current !== docId) {
@@ -121,6 +126,15 @@ function TvDisplay() {
 
   const eksekusiPanggilan = (data) => {
       setPanggilanTerbaru(data);
+
+      if (data.pos && data.identitas_layar) {
+          const key = String(data.pos).toUpperCase().trim();
+          setActiveCallsPerPos((prev) => ({
+              ...prev,
+              [key]: data.identitas_layar
+          }));
+      }
+
       putarBelSynthesizerLaluBicara(data.teks_suara);
       
       if (callTimeoutRef.current) clearTimeout(callTimeoutRef.current);
@@ -266,22 +280,26 @@ function TvDisplay() {
   }
 
   // --- KOMPONEN KOTAK ANTREAN ---
-  const BoxPos = ({ namaPos, theme, dataAntrian, currentCall }) => {
+  const BoxPos = ({ namaPos, theme, dataAntrian, currentCall, activeNumber }) => {
     let visibleQueue = [...dataAntrian];
     let isCalling = false;
 
+    const currentActiveNumber = currentCall?.nomor_antrian || activeNumber;
+
     if (currentCall && currentCall.nomor_antrian) {
       isCalling = true;
-      const activeNumber = currentCall.nomor_antrian;
+    }
+
+    if (currentActiveNumber) {
       const indexInQueue = visibleQueue.findIndex(
-        (item) => (item.nomor_antrian || item.queueNumber) === activeNumber
+        (item) => (item.nomor_antrian || item.queueNumber) === currentActiveNumber
       );
 
       if (indexInQueue !== -1) {
         const [activeItem] = visibleQueue.splice(indexInQueue, 1);
         visibleQueue.unshift({ ...activeItem, isCurrentCall: true });
       } else {
-        visibleQueue.unshift(currentCall);
+        visibleQueue.unshift({ nomor_antrian: currentActiveNumber, isCurrentCall: true });
       }
     }
 
@@ -494,13 +512,13 @@ function TvDisplay() {
 
             {/* Sektor Bawah: Grid 7 Kotak POS Sejajar */}
             <div className="grid h-[33%] min-h-[186px] shrink-0 grid-cols-7 gap-2 xl:h-[36%] xl:gap-3 2xl:gap-4">
-                <BoxPos namaPos="POS 1" dataAntrian={displayGrid.pos1} currentCall={getCurrentCallForPos('POS 1')} theme={{ solid: '#0080FF', border: '#BAE1FF' }} />
-                <BoxPos namaPos="POS 2" dataAntrian={displayGrid.pos2} currentCall={getCurrentCallForPos('POS 2')} theme={{ solid: '#4F46E5', border: '#C7D2FE' }} />
-                <BoxPos namaPos="POS 3" dataAntrian={displayGrid.pos3} currentCall={getCurrentCallForPos('POS 3')} theme={{ solid: '#DB2777', border: '#FBCFE8' }} />
-                <BoxPos namaPos="POS 4" dataAntrian={displayGrid.pos4} currentCall={getCurrentCallForPos('POS 4')} theme={{ solid: '#7C3AED', border: '#DDD6FE' }} />
-                <BoxPos namaPos="POS 5" dataAntrian={displayGrid.pos5} currentCall={getCurrentCallForPos('POS 5')} theme={{ solid: '#8B5CF6', border: '#DDD6FE' }} />
-                <BoxPos namaPos="POS 6" dataAntrian={displayGrid.pos6} currentCall={getCurrentCallForPos('POS 6')} theme={{ solid: '#0891B2', border: '#A5F3FC' }} />
-                <BoxPos namaPos="POS 7" dataAntrian={displayGrid.pos7} currentCall={getCurrentCallForPos('POS 7')} theme={{ solid: '#059669', border: '#A7F3D0' }} />
+                <BoxPos namaPos="POS 1" dataAntrian={displayGrid.pos1} currentCall={getCurrentCallForPos('POS 1')} activeNumber={activeCallsPerPos['POS 1']} theme={{ solid: '#0080FF', border: '#BAE1FF' }} />
+                <BoxPos namaPos="POS 2" dataAntrian={displayGrid.pos2} currentCall={getCurrentCallForPos('POS 2')} activeNumber={activeCallsPerPos['POS 2']} theme={{ solid: '#4F46E5', border: '#C7D2FE' }} />
+                <BoxPos namaPos="POS 3" dataAntrian={displayGrid.pos3} currentCall={getCurrentCallForPos('POS 3')} activeNumber={activeCallsPerPos['POS 3']} theme={{ solid: '#DB2777', border: '#FBCFE8' }} />
+                <BoxPos namaPos="POS 4" dataAntrian={displayGrid.pos4} currentCall={getCurrentCallForPos('POS 4')} activeNumber={activeCallsPerPos['POS 4']} theme={{ solid: '#7C3AED', border: '#DDD6FE' }} />
+                <BoxPos namaPos="POS 5" dataAntrian={displayGrid.pos5} currentCall={getCurrentCallForPos('POS 5')} activeNumber={activeCallsPerPos['POS 5']} theme={{ solid: '#8B5CF6', border: '#DDD6FE' }} />
+                <BoxPos namaPos="POS 6" dataAntrian={displayGrid.pos6} currentCall={getCurrentCallForPos('POS 6')} activeNumber={activeCallsPerPos['POS 6']} theme={{ solid: '#0891B2', border: '#A5F3FC' }} />
+                <BoxPos namaPos="POS 7" dataAntrian={displayGrid.pos7} currentCall={getCurrentCallForPos('POS 7')} activeNumber={activeCallsPerPos['POS 7']} theme={{ solid: '#059669', border: '#A7F3D0' }} />
             </div>
 
         </main>
