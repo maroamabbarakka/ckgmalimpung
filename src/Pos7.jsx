@@ -73,10 +73,10 @@ const buildClinicalSummary = (visit) => {
     }
 
     return [
-        { icon: 'â¤ï¸', label: 'Tensi', value: tensiField, status: tensiData.status, tone: tensiData.tone },
-        { icon: 'ðŸ©¸', label: 'Gula Darah', value: gulaData.nilai.split(' ')[0], status: gulaData.status, tone: gulaData.tone },
-        { icon: 'âš–ï¸', label: 'IMT / Gizi', value: imtValFull.split(' ')[0], status: imtStatus, tone: imtTone },
-        { icon: 'ðŸ«', label: 'TB/Paru', value: tbVal, status: tbStatus, tone: tbTone },
+        { icon: '❤️', label: 'Tensi', value: tensiField, status: tensiData.status, tone: tensiData.tone },
+        { icon: '🩸', label: 'Gula Darah', value: gulaData.nilai.split(' ')[0], status: gulaData.status, tone: gulaData.tone },
+        { icon: '⚖️', label: 'IMT / Gizi', value: imtValFull.split(' ')[0], status: imtStatus, tone: imtTone },
+        { icon: '🫁', label: 'TB/Paru', value: tbVal, status: tbStatus, tone: tbTone },
     ];
 };
 
@@ -248,7 +248,7 @@ function Pos7() {
       setPasienAktif(latestData); setPesan(''); setKesimpulan(latestData.kesimpulan_dokter || ''); window.scrollTo({ top: 0, behavior: 'smooth' });
       try { await createTvQueueCall({ pos: "POS 7", queueNumber: latestData.nomor_antrian, speechText: buildQueueSpeech(latestData.nomor_antrian, 'Silakan menuju meja Dokter di Pos Tujuh.') }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 7:", e); }
     } catch (e) {
-      alert("âš ï¸ " + e.message);
+      alert("⚠️ " + e.message);
     } finally {
       setCallingVisitId(null);
     }
@@ -257,7 +257,7 @@ function Pos7() {
   const handleSelesaikan = async (e) => {
     e.preventDefault(); if (!pasienAktif || loading || isFinalized) return; setLoading(true); setPesan('');
     try {
-      // ðŸš€ UBAH STATUS JADI SELESAI (Hilang dari semua antrean Pos)
+      // 🚀 UBAH STATUS JADI SELESAI (Hilang dari semua antrean Pos)
       const finalizedVisitPatch = {
           status: VISIT_STATUS.FINALIZED,
           status_antrian: STATUS_MAPPING.SELESAI,
@@ -274,9 +274,9 @@ function Pos7() {
         toStatus: STATUS_MAPPING.SELESAI,
         extra: { status: VISIT_STATUS.FINALIZED, dokter_pemeriksa: user?.nama || 'Dokter/Petugas' }
       });
-      setPesan(`âœ… Pemeriksaan Selesai! Pasien dapat melihat rapornya.`);
+      setPesan(`✅ Pemeriksaan Selesai! Pasien dapat melihat rapornya.`);
       setPasienAktif(prev => prev ? ({ ...prev, ...finalizedVisitPatch }) : prev);
-    } catch (error) { setPesan("âŒ Gagal menyimpan data: " + error.message); } finally { setLoading(false); }
+    } catch (error) { setPesan("❌ Gagal menyimpan data: " + error.message); } finally { setLoading(false); }
   };
 
   const handleBatal = async () => {
@@ -306,7 +306,7 @@ function Pos7() {
       });
       setPasienAktif(null);
     } catch (error) {
-      setPesan("âŒ Gagal mengembalikan pasien: " + error.message);
+      setPesan("❌ Gagal mengembalikan pasien: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -372,26 +372,26 @@ function Pos7() {
           queueCount={antrian.length}
         />
         <div className="hidden bg-[#0f766e] p-6 text-white flex justify-between items-center">
-            <div className="flex items-center gap-3"><span className="text-3xl">ðŸ©º</span><h2 className="text-4xl font-black">{pasienAktif.nomor_antrian}</h2></div>
-            <button type="button" onClick={handleBatal} className="bg-white/20 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-white/30 transition-all">âœ• Batal</button>
+            <div className="flex items-center gap-3"><span className="text-3xl">🩺</span><h2 className="text-4xl font-black">{pasienAktif.nomor_antrian}</h2></div>
+            <button type="button" onClick={handleBatal} className="bg-white/20 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-white/30 transition-all">✕ Batal</button>
         </div>
 
         <form onSubmit={handleSelesaikan} className="pos-form-surface p-4 md:p-6 bg-[#f8fafc] mobile-safe-page">
-            {pesan && <div className={`p-4 rounded-xl font-bold text-xs shadow-sm mb-6 ${pesan.includes('âŒ') ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>{pesan}</div>}
+            {pesan && <div className={`p-4 rounded-xl font-bold text-xs shadow-sm mb-6 ${pesan.includes('❌') ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>{pesan}</div>}
 
             <div className="patient-summary-card bg-white px-6 py-5 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center mb-6">
                 <div>
                    <h3 className="font-black text-lg">{pasienAktif.pasien_snapshot?.nama || "Tanpa Nama"}</h3>
-                   <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{pasienAktif.umur_saat_periksa} THN â€¢ {pasienAktif.kategori_usia_satusehat}</p>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{pasienAktif.umur_saat_periksa} THN • {pasienAktif.kategori_usia_satusehat}</p>
                 </div>
                 <a href={raporUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-[#0f766e] bg-teal-50 px-4 py-2 rounded-lg border border-teal-200 hover:bg-teal-100">
-                  {isFinalized ? 'ðŸ“„ Buka Rapor Final' : 'ðŸ“„ Lihat Draft Rapor'}
+                  {isFinalized ? '📄 Buka Rapor Final' : '📄 Lihat Draft Rapor'}
                 </a>
             </div>
 
             <div className="form-section-card bg-white rounded-[2rem] p-5 border border-slate-200 shadow-sm mb-6">
               <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-4">
-                <h4 className="font-black text-slate-800 flex items-center gap-2"><span>ðŸ“Œ</span> Ringkasan Klinis</h4>
+                <h4 className="font-black text-slate-800 flex items-center gap-2"><span>📌</span> Ringkasan Klinis</h4>
                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Review cepat</span>
               </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
@@ -402,7 +402,7 @@ function Pos7() {
             </div>
 
             <div className="form-section-card bg-white rounded-2xl md:rounded-[2rem] p-4 md:p-6 border border-slate-200 shadow-sm animate-fade-in-up">
-              <h4 className="flex items-center gap-3 text-slate-800 font-black mb-5 border-b border-slate-100 pb-3"><span className="text-xl">âœï¸</span> Kesimpulan & Edukasi Dokter</h4>
+              <h4 className="flex items-center gap-3 text-slate-800 font-black mb-5 border-b border-slate-100 pb-3"><span className="text-xl">✍️</span> Kesimpulan & Edukasi Dokter</h4>
                             <div className="flex flex-wrap gap-2 mb-4">
                 {[
                   { title: "Normal Sehat", text: 'Dalam batas normal. Tetap pertahankan pola hidup sehat dan kontrol rutin sesuai jadwal.' },

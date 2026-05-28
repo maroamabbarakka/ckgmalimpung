@@ -23,6 +23,7 @@ venv/
 scripts/temp*.txt
 src - Ver*/
 src - ver*/
+backups/
 
 # Editor directories and files
 .vscode/*

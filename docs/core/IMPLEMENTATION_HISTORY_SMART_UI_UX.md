@@ -125,6 +125,32 @@ Dokumen ini menyimpan riwayat detail perubahan UI/UX agar pengembangan berikutny
 - `public/Laporan_Tersanjung_Final.html` diperbarui untuk mencerminkan status Healthcare Workflow Super App.
 - Halaman `Tentang` diperbarui agar menjelaskan arah produk, modul, prinsip SMART UI/UX, dan artefak dokumentasi.
 
+## Optimasi Share Link & SEO
+
+- Mengoptimalkan berkas `index.html` untuk memunculkan cover/thumbnail secara otomatis saat membagikan tautan aplikasi (seperti ke WhatsApp, Telegram, Facebook, dan Twitter).
+- Menambahkan parameter dimensi gambar spesifik `og:image:width` (1200) dan `og:image:height` (675) untuk resolusi gambar `puskesmas_malimpung.jpg` (1200x675 px).
+- Menambahkan tag `<meta itemprop="image">` dan properti `og:site_name` untuk memperkuat kompatibilitas di platform versi lama.
+- Memastikan berkas gambar statis `puskesmas_malimpung.jpg` berukuran ringan (153 KB, di bawah batas maksimal WhatsApp 300 KB) agar langsung diproses oleh crawler perpesanan.
+- Menambahkan penanda namespace `prefix="og: https://ogp.me/ns#"` pada tag `<html>`.
+
+## Pembersihan Data Pasien Dummy (TERSANJUNG 4.4.1)
+
+- Membuat skrip pembersihan `scripts/cleanup_dummy_ckg.mjs` untuk memindai dan menghapus data dummy.
+- Melakukan penghapusan secara batch sebanyak 72 dokumen (36 dokumen `patients` dan 36 dokumen `visits`) yang ditandai dengan `seed_dummy: true`, no HP seeder dummy, atau ID kunjungan dummy.
+- Mempertahankan 1 dokumen kunjungan riil di Firestore.
+- Memastikan aturan keamanan (`firestore.rules`) dikembalikan ke konfigurasi produksi pasca-pembersihan.
+
+## Impor Data Dummy CKG Tersanjung & Dummy Data Manager (TERSANJUNG 4.5.0)
+
+- Membuat skrip validasi `scripts/validateImport.js` untuk memverifikasi data sebelum impor (memastikan NIK 16 digit, format tanggal ISO, nomor HP terstandarisasi 08, gender L/P, serta mendeteksi NIK ganda).
+- Membuat skrip impor `scripts/importPatients.js` untuk membaca file Excel `src/docs/CKG_Tersanjung_Import_CKGMalimpung_FormSchema.xlsx` dan mengunggah data dummy pasien (79 data) ke Cloud Firestore secara batch.
+- Menyusun distribusi pos secara merata menggunakan algoritma round-robin ke 7 Pos berbeda untuk data kunjungan dummy.
+- Memetakan jawaban kuesioner dari long format sheet ke pos-pos yang sesuai di visits dengan pengisian default jawaban normal/netral jika kosong guna menjaga kompatibilitas laporan dan grafik.
+- Memberikan penanda metadata dummy pada seluruh data terimpor (`isDummy: true`, `importBatch: "CKG_TERSANJUNG_2026"`, dsb.) untuk keamanan pembersihan.
+- Membuat komponen antarmuka admin `src/components/DummyDataManager.jsx` yang menampilkan statistik data dummy dan tombol pembersihan massal sekali klik (DELETE ALL DUMMY DATA) dengan konfirmasi keamanan teks "HAPUS".
+- Mengintegrasikan menu Dummy Data Manager pada sidebar admin grup sarana di `src/AdminDashboard.jsx` dan menyusun rendering halamannya secara responsif.
+- Membuat skrip CLI pembersih `scripts/deleteDummyData.js` untuk menghapus seluruh dokumen dengan tag `isDummy === true` secara aman dari command line.
+
 ## Verifikasi Terakhir
 
 - `npm run build` berhasil.

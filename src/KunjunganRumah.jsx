@@ -673,7 +673,7 @@ function KunjunganRumah() {
       setOcrMeta(null);
       setStep(5); window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
-      setPesan('âŒ Gagal sinkronisasi data: ' + error.message);
+      setPesan('❌ Gagal sinkronisasi data: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -895,7 +895,7 @@ function KunjunganRumah() {
     });
     const confidence = normalizedData.confidence ? ` (${Math.round(normalizedData.confidence * 100)}%)` : '';
     const warningText = normalizedData.warnings?.length ? ` Ada ${normalizedData.warnings.length} warning OCR.` : '';
-    setPesan(`âœ… Data ${normalizedData.document_type || 'identitas'} dibaca via ${source}${confidence}. Periksa ulang NIK dan nama.${warningText}`);
+    setPesan(`✅ Data ${normalizedData.document_type || 'identitas'} dibaca via ${source}${confidence}. Periksa ulang NIK dan nama.${warningText}`);
     return true;
   };
 
@@ -918,20 +918,20 @@ function KunjunganRumah() {
       if (extractedData) extractedData.source = ocrResult.source;
     } catch (localError) {
       if (!isCurrentJob()) return;
-      setPesan('âŒ Gagal membaca dokumen. Lensa terlalu buram.'); setOcrLoading(false); setOcrProgress(0); return;
+      setPesan('❌ Gagal membaca dokumen. Lensa terlalu buram.'); setOcrLoading(false); setOcrProgress(0); return;
     }
 
     if (!isCurrentJob()) return;
     if (extractedData?.nik || extractedData?.nama) {
       if (['Kartu Keluarga', 'KK'].includes(extractedData.document_type) && extractedData.candidates?.length > 1) {
         setOcrCandidates(extractedData.candidates.map(c => ({ ...c, confidence: extractedData.confidence })));
-        setPesan(`âš ï¸ Kartu Keluarga terbaca. Pilih anggota keluarga yang sedang diperiksa agar NIK tidak tertukar.`);
+        setPesan(`⚠️ Kartu Keluarga terbaca. Pilih anggota keluarga yang sedang diperiksa agar NIK tidak tertukar.`);
       } else {
         setOcrReview(extractedData);
         setPesan('Review hasil OCR, lalu klik Gunakan Data Ini jika NIK dan nama sudah benar.');
       }
     } else {
-      setPesan('âŒ KTP tidak terbaca. Harap input manual.');
+      setPesan('❌ KTP tidak terbaca. Harap input manual.');
     }
     setOcrLoading(false); setOcrProgress(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -1062,7 +1062,7 @@ function KunjunganRumah() {
       )}
 
       <div className="px-3 md:px-0 mt-2 relative z-10">
-        {pesan && step < 5 && <div className={`p-4 rounded-xl font-bold flex items-start gap-3 text-xs md:text-sm shadow-sm transition-all mb-4 no-print border ${pesan.includes('âŒ') || pesan.includes('âš ï¸') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}><span className="text-lg leading-none">{pesan.includes('âŒ') ? 'ðŸš«' : (pesan.includes('âš ï¸') ? 'âš ï¸' : 'âœ…')}</span><span className="leading-relaxed">{pesan.replace(/[âŒâš ï¸âœ…]/g, '')}</span></div>}
+        {pesan && step < 5 && <div className={`p-4 rounded-xl font-bold flex items-start gap-3 text-xs md:text-sm shadow-sm transition-all mb-4 no-print border ${pesan.includes('❌') || pesan.includes('⚠️') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}><span className="text-lg leading-none">{pesan.includes('❌') ? '🚫' : (pesan.includes('⚠️') ? '⚠️' : '✅')}</span><span className="leading-relaxed">{pesan.replace(/[❌⚠️✅]/g, '')}</span></div>}
 
         {/* KAMERA SCANNER KTP UI */}
         {isCameraOpen && (
@@ -1072,7 +1072,7 @@ function KunjunganRumah() {
             <canvas ref={processCanvasRef} className="hidden" />
 
             {facingMode === 'environment' && (
-              <button onClick={toggleTorch} className={`absolute top-8 right-6 z-30 p-3.5 rounded-full backdrop-blur-md border transition-all active:scale-90 shadow-xl ${isTorchOn ? 'bg-yellow-400 text-black border-yellow-300 shadow-[0_0_20px_rgba(250,204,21,0.6)]' : 'bg-black/60 text-white border-white/20 hover:bg-black/80'}`}><span className="text-2xl leading-none block">ðŸ”¦</span></button>
+              <button onClick={toggleTorch} className={`absolute top-8 right-6 z-30 p-3.5 rounded-full backdrop-blur-md border transition-all active:scale-90 shadow-xl ${isTorchOn ? 'bg-yellow-400 text-black border-yellow-300 shadow-[0_0_20px_rgba(250,204,21,0.6)]' : 'bg-black/60 text-white border-white/20 hover:bg-black/80'}`}><span className="text-2xl leading-none block">🔦</span></button>
             )}
 
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-none overflow-hidden">
@@ -1080,7 +1080,7 @@ function KunjunganRumah() {
                 <div className={`absolute inset-0 border-[3px] border-dashed rounded-2xl flex items-center justify-center transition-colors duration-300 ${kameraStatus === 'aligned' ? 'border-emerald-400 bg-emerald-500/20' : (kameraStatus === 'ready' ? 'border-amber-400 bg-amber-500/10' : 'border-slate-400 bg-black/10')}`}>
                   <div className="relative z-10 text-center bg-black/60 backdrop-blur-md px-5 py-3 rounded-xl border border-white/10 shadow-2xl">
                     <p className={`font-black tracking-widest uppercase text-xs md:text-sm drop-shadow-md transition-colors ${kameraStatus === 'aligned' ? 'text-emerald-400 animate-pulse' : (kameraStatus === 'ready' ? 'text-amber-400' : 'text-slate-300')}`}>
-                      {kameraStatus === 'aligned' ? 'âœ… TAHAN POSISI...' : (kameraStatus === 'ready' ? 'Posisikan KTP ke Kotak' : 'Fokus Kamera...')}
+                      {kameraStatus === 'aligned' ? '✅ TAHAN POSISI...' : (kameraStatus === 'ready' ? 'Posisikan KTP ke Kotak' : 'Fokus Kamera...')}
                     </p>
                     <p className="text-white font-bold text-[9px] md:text-[10px] mt-1.5 opacity-80">
                       {kameraStatus === 'aligned' ? 'Otomatis memfoto...' : 'Pastikan garis batas pas'}
@@ -1091,9 +1091,9 @@ function KunjunganRumah() {
             </div>
 
             <div className="absolute bottom-[80px] md:bottom-12 left-1/2 -translate-x-1/2 w-[90%] max-w-sm flex justify-between items-center bg-black/50 backdrop-blur-xl border border-white/10 px-6 py-5 rounded-[2rem] z-20 shadow-2xl">
-              <button onClick={stopCamera} className="text-white flex flex-col items-center justify-center w-14 gap-1.5 hover:text-red-400 transition active:scale-90"><span className="text-2xl font-light leading-none">âœ•</span><span className="text-[9px] font-bold tracking-wider">BATAL</span></button>
+              <button onClick={stopCamera} className="text-white flex flex-col items-center justify-center w-14 gap-1.5 hover:text-red-400 transition active:scale-90"><span className="text-2xl font-light leading-none">✕</span><span className="text-[9px] font-bold tracking-wider">BATAL</span></button>
               <button onClick={captureImage} className="w-20 h-20 rounded-full flex items-center justify-center border-4 bg-white/10 border-white active:scale-90 cursor-pointer shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all"><div className={`w-16 h-16 rounded-full shadow-inner ${kameraStatus === 'aligned' ? 'bg-emerald-400' : 'bg-white'}`}></div></button>
-              <button onClick={toggleCamera} className="text-white flex flex-col items-center justify-center w-14 gap-1.5 hover:text-blue-400 transition active:scale-90"><span className="text-2xl leading-none">ðŸ”„</span><span className="text-[9px] font-bold tracking-wider">GANTI</span></button>
+              <button onClick={toggleCamera} className="text-white flex flex-col items-center justify-center w-14 gap-1.5 hover:text-blue-400 transition active:scale-90"><span className="text-2xl leading-none">🔄</span><span className="text-[9px] font-bold tracking-wider">GANTI</span></button>
             </div>
           </div>
         )}
@@ -1104,15 +1104,15 @@ function KunjunganRumah() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-100 pb-5">
               <div><h3 className="text-lg md:text-xl font-black text-slate-800">1. Data Kependudukan</h3><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Sesuai KTP/KK Pasien</p></div>
               <div className="flex w-full md:w-auto gap-3">
-                <button type="button" onClick={() => startCamera()} disabled={!cvReady} className={`flex-1 md:flex-none min-h-[50px] px-4 rounded-xl text-[11px] md:text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg active:scale-95 ${cvReady ? 'bg-blue-950 hover:bg-blue-900 text-white' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}>{cvReady ? 'ðŸ“· Scan KTP' : 'â³ Memuat Scanner...'}</button>
-                <button type="button" onClick={() => fileInputRef.current.click()} className="flex-1 md:flex-none bg-slate-100 hover:bg-slate-200 text-slate-700 min-h-[50px] px-4 rounded-xl text-[11px] md:text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm active:scale-95">ðŸ“ Galeri</button>
+                <button type="button" onClick={() => startCamera()} disabled={!cvReady} className={`flex-1 md:flex-none min-h-[50px] px-4 rounded-xl text-[11px] md:text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg active:scale-95 ${cvReady ? 'bg-blue-950 hover:bg-blue-900 text-white' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}>{cvReady ? '📷 Scan KTP' : '⏳ Memuat Scanner...'}</button>
+                <button type="button" onClick={() => fileInputRef.current.click()} className="flex-1 md:flex-none bg-slate-100 hover:bg-slate-200 text-slate-700 min-h-[50px] px-4 rounded-xl text-[11px] md:text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm active:scale-95">📁 Galeri</button>
                 <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
               </div>
             </div>
 
             {ocrLoading && (
               <div className="mb-6 p-4 bg-emerald-600 text-white rounded-xl shadow-inner flex items-center gap-4 animate-pulse">
-                <span className="text-2xl animate-spin">âš™ï¸</span>
+                <span className="text-2xl animate-spin">⚙️</span>
                 <div className="flex-1"><p className="font-bold text-xs md:text-sm leading-tight">{ocrMode}</p>{ocrProgress > 0 && <p className="text-[9px] opacity-80 uppercase tracking-widest mt-1">Memproses ({ocrProgress}%)</p>}</div>
                 <button onClick={cancelOCR} className="bg-white/20 px-3 py-1.5 rounded-lg text-[10px] font-bold active:scale-90">BATAL</button>
               </div>
@@ -1144,7 +1144,7 @@ function KunjunganRumah() {
                       className="w-full text-left bg-white hover:bg-amber-100 border border-amber-200 rounded-xl p-3 transition active:scale-[0.99]"
                     >
                       <span className="block text-sm font-black text-slate-800">{candidate.nama || 'Nama belum terbaca'}</span>
-                      <span className="block text-[11px] font-bold text-slate-500 mt-1">NIK: {candidate.nik || '-'} â€¢ Lahir: {candidate.tgl_lahir || candidate.tanggalLahir || '-'}</span>
+                      <span className="block text-[11px] font-bold text-slate-500 mt-1">NIK: {candidate.nik || '-'} • Lahir: {candidate.tgl_lahir || candidate.tanggalLahir || '-'}</span>
                       <span className="mt-1 block text-[10px] font-black uppercase tracking-widest text-amber-700">Confidence: {Math.round(Number(candidate.confidence || 0) * (Number(candidate.confidence || 0) <= 1 ? 100 : 1))}%</span>
                     </button>
                   ))}
@@ -1165,7 +1165,7 @@ function KunjunganRumah() {
 
               {tanpaNik && (
                 <div className="col-span-2 bg-gradient-to-br from-amber-50 to-orange-50/50 p-5 md:p-6 rounded-[1.5rem] border border-amber-200 space-y-5 shadow-sm mt-2 animate-fade-in-up">
-                  <div className="border-b border-amber-200 pb-3 flex items-center gap-3"><span className="text-3xl bg-white p-2 rounded-xl shadow-sm border border-amber-100">ðŸ‘¨â€ðŸ‘©â€ðŸ‘§</span><div><h4 className="font-black text-amber-900 text-sm md:text-base">Data Wali Pendamping</h4><p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mt-0.5">Wajib untuk Integrasi SATUSEHAT</p></div></div>
+                  <div className="border-b border-amber-200 pb-3 flex items-center gap-3"><span className="text-3xl bg-white p-2 rounded-xl shadow-sm border border-amber-100">👨‍👩‍👧</span><div><h4 className="font-black text-amber-900 text-sm md:text-base">Data Wali Pendamping</h4><p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mt-0.5">Wajib untuk Integrasi SATUSEHAT</p></div></div>
                   <div className="grid grid-cols-2 gap-5">
                     <div className="col-span-2 md:col-span-1"><InputCustom type="tel" label="NIK Wali (16 Digit) *" name="nik_wali" value={formData.nik_wali} onChange={handleChange} required={true} placeholder="Ketik 16 digit..." maxLength="16" /></div>
                     <div className="col-span-2 md:col-span-1"><InputCustom label="Nama Wali *" name="nama_wali" value={formData.nama_wali} onChange={handleChange} required={true} placeholder="Nama lengkap wali..." /></div>
@@ -1195,8 +1195,8 @@ function KunjunganRumah() {
               <div className="col-span-2">
                 <label className="block text-[11px] md:text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-widest">Jenis Kelamin</label>
                 <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 gap-1.5 min-h-[56px] shadow-inner">
-                  <button type="button" onClick={() => setFormData({ ...formData, j_kelamin: 'L' })} className={`flex-1 text-[11px] md:text-xs font-black rounded-lg transition-all active:scale-95 ${formData.j_kelamin === 'L' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-white hover:shadow-sm'}`}>ðŸ‘¨ LAKI-LAKI</button>
-                  <button type="button" onClick={() => setFormData({ ...formData, j_kelamin: 'P' })} className={`flex-1 text-[11px] md:text-xs font-black rounded-lg transition-all active:scale-95 ${formData.j_kelamin === 'P' ? 'bg-pink-500 text-white shadow-md' : 'text-slate-500 hover:bg-white hover:shadow-sm'}`}>ðŸ‘© PEREMPUAN</button>
+                  <button type="button" onClick={() => setFormData({ ...formData, j_kelamin: 'L' })} className={`flex-1 text-[11px] md:text-xs font-black rounded-lg transition-all active:scale-95 ${formData.j_kelamin === 'L' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-white hover:shadow-sm'}`}>👨 LAKI-LAKI</button>
+                  <button type="button" onClick={() => setFormData({ ...formData, j_kelamin: 'P' })} className={`flex-1 text-[11px] md:text-xs font-black rounded-lg transition-all active:scale-95 ${formData.j_kelamin === 'P' ? 'bg-pink-500 text-white shadow-md' : 'text-slate-500 hover:bg-white hover:shadow-sm'}`}>👩 PEREMPUAN</button>
                 </div>
               </div>
 
@@ -1213,8 +1213,8 @@ function KunjunganRumah() {
 
             <div className="workflow-action-bar door-action-bar form-action-row no-print">
               <div className="contents">
-                <button type="button" onClick={handleBackToMenu} className="secondary-action w-full">â€¹ Menu</button>
-                <button type="button" onClick={handleNextStep} className="primary-action w-full">Lanjut Ke-2 â€º</button>
+                <button type="button" onClick={handleBackToMenu} className="secondary-action w-full">‹ Menu</button>
+                <button type="button" onClick={handleNextStep} className="primary-action w-full">Lanjut Ke-2 ›</button>
               </div>
             </div>
           </div>
@@ -1223,7 +1223,7 @@ function KunjunganRumah() {
         {/* STEP 2: ANTROPOMETRI & LAB */}
         {step === 2 && (
           <div className="bg-white p-5 md:p-8 rounded-[1.5rem] shadow-sm border border-slate-200 animate-fade-in-up">
-            <h3 className="text-lg md:text-xl font-black text-slate-800 mb-6 border-b border-slate-100 pb-5 flex items-center gap-3"><span className="text-2xl bg-indigo-100 p-2.5 rounded-xl text-indigo-600 shadow-sm">ðŸ”¬</span> 2. Antropometri & Lab</h3>
+            <h3 className="text-lg md:text-xl font-black text-slate-800 mb-6 border-b border-slate-100 pb-5 flex items-center gap-3"><span className="text-2xl bg-indigo-100 p-2.5 rounded-xl text-indigo-600 shadow-sm">🔬</span> 2. Antropometri & Lab</h3>
             <div className="space-y-8">
               <div>
                 <h4 className="font-black text-slate-700 mb-4 flex items-center gap-2 text-sm md:text-base border-l-4 border-indigo-500 pl-3">Pengukuran Dasar</h4>
@@ -1255,7 +1255,7 @@ function KunjunganRumah() {
                     <InputCustom type="tel" label="Tekanan Darah (Sis/Dia)" hint="Format: 120/80" value={td} onChange={(e) => handleTensiChange(e.target.value)} placeholder="Msl: 120/80" />
                     {isHipertensi && (
                       <div className="bg-white p-5 rounded-2xl border border-rose-200 space-y-5 shadow-sm animate-fade-in-up">
-                        <p className="text-[10px] font-black text-rose-700 uppercase tracking-widest flex items-center gap-2"><span className="text-base bg-rose-100 rounded-md p-1">âš ï¸</span> Tindak Lanjut Hipertensi</p>
+                        <p className="text-[10px] font-black text-rose-700 uppercase tracking-widest flex items-center gap-2"><span className="text-base bg-rose-100 rounded-md p-1">⚠️</span> Tindak Lanjut Hipertensi</p>
                         <TogglePill label="Didiagnosis Hipertensi oleh dokter?" value={riwayatHipertensi} onChange={setRiwayatHipertensi} colorClass="bg-rose-500" />
                         {riwayatHipertensi === 'Ya' && (
                           <div className="pt-2"><label className="block text-[11px] font-bold text-slate-700 uppercase tracking-widest mb-2">Lama Diagnosis (Bulan) *</label><input type="tel" inputMode="numeric" required value={lamaDiagnosisHipertensi} onChange={e => setLamaDiagnosisHipertensi(e.target.value)} placeholder="Msl: 12" className="w-full min-h-[48px] p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 outline-none font-bold text-base shadow-inner" /></div>
@@ -1270,7 +1270,7 @@ function KunjunganRumah() {
                     </div>
                     {isDiabetes && (
                       <div className="bg-white p-5 rounded-2xl border border-rose-200 space-y-5 shadow-sm animate-fade-in-up">
-                        <p className="text-[10px] font-black text-rose-700 uppercase tracking-widest flex items-center gap-2"><span className="text-base bg-rose-100 rounded-md p-1">âš ï¸</span> Tindak Lanjut Gula Tinggi</p>
+                        <p className="text-[10px] font-black text-rose-700 uppercase tracking-widest flex items-center gap-2"><span className="text-base bg-rose-100 rounded-md p-1">⚠️</span> Tindak Lanjut Gula Tinggi</p>
                         <TogglePill label="Didiagnosis Diabetes oleh dokter?" value={riwayatDiabetes} onChange={setRiwayatDiabetes} colorClass="bg-rose-500" />
                         {riwayatDiabetes === 'Ya' && (
                           <div className="pt-2"><label className="block text-[11px] font-bold text-slate-700 uppercase tracking-widest mb-2">Lama Diagnosis (Bulan) *</label><input type="tel" inputMode="numeric" required value={lamaDiagnosisDiabetes} onChange={e => setLamaDiagnosisDiabetes(e.target.value)} placeholder="Msl: 36" className="w-full min-h-[48px] p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 outline-none font-bold text-base shadow-inner" /></div>
@@ -1294,8 +1294,8 @@ function KunjunganRumah() {
 
             <div className="workflow-action-bar door-action-bar form-action-row no-print">
               <div className="contents">
-                <button type="button" onClick={handlePrevStep} className="secondary-action w-full">â€¹ Kembali Ke-1</button>
-                <button type="button" onClick={handleNextStep} className="primary-action w-full">Lanjut Ke-3 â€º</button>
+                <button type="button" onClick={handlePrevStep} className="secondary-action w-full">‹ Kembali Ke-1</button>
+                <button type="button" onClick={handleNextStep} className="primary-action w-full">Lanjut Ke-3 ›</button>
               </div>
             </div>
           </div>
@@ -1304,12 +1304,12 @@ function KunjunganRumah() {
         {/* STEP 3: PEMERIKSAAN KLINIS */}
         {step === 3 && (
           <div className="bg-white p-5 md:p-8 rounded-[1.5rem] shadow-sm border border-slate-200 animate-fade-in-up">
-            <h3 className="text-lg md:text-xl font-black text-slate-800 mb-6 border-b border-slate-100 pb-5 flex items-center gap-3"><span className="text-2xl bg-rose-100 p-2.5 rounded-xl text-rose-600 shadow-sm">ðŸ©º</span> 3. Pemeriksaan Klinis</h3>
+            <h3 className="text-lg md:text-xl font-black text-slate-800 mb-6 border-b border-slate-100 pb-5 flex items-center gap-3"><span className="text-2xl bg-rose-100 p-2.5 rounded-xl text-rose-600 shadow-sm">🩺</span> 3. Pemeriksaan Klinis</h3>
             <div className="space-y-8">
 
               {kategoriPasien === 'Bayi' && (
                 <div className="bg-gradient-to-br from-sky-50 to-white p-5 md:p-6 rounded-[1.5rem] border border-sky-100 shadow-sm">
-                  <h4 className="font-black text-sky-900 mb-5 border-b border-sky-100 pb-3 flex items-center gap-3 text-sm md:text-base"><span className="text-2xl bg-sky-200 p-2 rounded-xl">ðŸ‘¶</span> Bayi Baru Lahir (BBL)</h4>
+                  <h4 className="font-black text-sky-900 mb-5 border-b border-sky-100 pb-3 flex items-center gap-3 text-sm md:text-base"><span className="text-2xl bg-sky-200 p-2 rounded-xl">👶</span> Bayi Baru Lahir (BBL)</h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                     <TogglePill label="PJB 1 (Tangan Kanan)" hint="Saturasi <90%?" value={pjb1} onChange={setPjb1} opt1="Negatif" opt2="Positif" />
                     <TogglePill label="PJB 2 (Kaki)" hint="Saturasi kaki <90%?" value={pjb2} onChange={setPjb2} opt1="Negatif" opt2="Positif" />
@@ -1323,7 +1323,7 @@ function KunjunganRumah() {
 
               {kategoriPasien !== 'Bayi' && (
                 <div>
-                  <h4 className="font-black text-slate-700 mb-5 border-b border-slate-100 pb-3 flex items-center gap-3 text-sm md:text-base"><span className="text-2xl bg-slate-100 p-2 rounded-xl shadow-sm">ðŸ‘ï¸</span> Skrining Indera</h4>
+                  <h4 className="font-black text-slate-700 mb-5 border-b border-slate-100 pb-3 flex items-center gap-3 text-sm md:text-base"><span className="text-2xl bg-slate-100 p-2 rounded-xl shadow-sm">👁️</span> Skrining Indera</h4>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-6">
                     <SelectCustom label="Mata Kanan" hint="Pemeriksaan luar." value={mataKanan} onChange={setMataKanan} options={['N', 'Curiga']} />
                     <SelectCustom label="Mata Kiri" hint="Pemeriksaan luar." value={mataKiri} onChange={setMataKiri} options={['N', 'Curiga']} />
@@ -1345,7 +1345,7 @@ function KunjunganRumah() {
               {(kategoriPasien === 'Balita' || isAnakSekolah(kategoriPasien)) && (
                 <div className="space-y-6">
                   <div className="bg-white p-5 rounded-[1.5rem] border border-slate-200 shadow-sm">
-                    <h4 className="font-black text-slate-800 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-orange-100 p-2 rounded-xl shadow-sm">ðŸ­</span> Risiko Gula Darah Anak</h4>
+                    <h4 className="font-black text-slate-800 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-orange-100 p-2 rounded-xl shadow-sm">🍭</span> Risiko Gula Darah Anak</h4>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
                       <TogglePill label="Riw Gula Klg" hint="Keturunan DM?" value={gulaRiwKeluarga} onChange={setGulaRiwKeluarga} colorClass="bg-orange-500" />
                       <TogglePill label="Sering Lapar" hint="Banyak makan?" value={gulaLapar} onChange={setGulaLapar} colorClass="bg-orange-500" />
@@ -1356,7 +1356,7 @@ function KunjunganRumah() {
                   {kategoriPasien === 'Balita' && (
                     <div className="bg-gradient-to-br from-emerald-50 to-white p-5 rounded-[1.5rem] border border-emerald-100 shadow-sm">
                       <h4 className="font-black text-emerald-900 mb-5 border-b pb-3 flex items-center gap-3">
-   <span className="text-2xl bg-emerald-200 p-2 rounded-xl shadow-sm">ðŸ’‰</span> Imunisasi Dasar
+   <span className="text-2xl bg-emerald-200 p-2 rounded-xl shadow-sm">💉</span> Imunisasi Dasar
 </h4>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <label className="flex items-center space-x-3 bg-white p-3.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-emerald-50 shadow-sm min-h-[56px] active:scale-95 transition-all"><input type="checkbox" checked={imunHep} onChange={e => setImunHep(e.target.checked)} className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" /><span className="text-xs font-bold text-slate-700">Hep &lt;24 Bln</span></label>
@@ -1372,7 +1372,7 @@ function KunjunganRumah() {
                   )}
                   {isAnakSekolah(kategoriPasien) && (
                     <div className="bg-gradient-to-br from-indigo-50 to-white p-5 rounded-[1.5rem] border border-indigo-100 shadow-sm">
-                      <h4 className="font-black text-indigo-900 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-indigo-200 p-2 rounded-xl shadow-sm">ðŸ§ </span> Skrining Jiwa SDQ</h4>
+                      <h4 className="font-black text-indigo-900 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-indigo-200 p-2 rounded-xl shadow-sm">🧠</span> Skrining Jiwa SDQ</h4>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                         <TogglePill label="Sering Khawatir" hint="Gelisah/takut?" value={jiwaKhawatirAnak} onChange={setJiwaKhawatirAnak} colorClass="bg-indigo-600" />
                         <TogglePill label="Sulit Kontrol Diri" hint="Sering tantrum/marah?" value={jiwaKontrolAnak} onChange={setJiwaKontrolAnak} colorClass="bg-indigo-600" />
@@ -1386,7 +1386,7 @@ function KunjunganRumah() {
               {kategoriPasien === 'Dewasa' && (
                 <div className="space-y-6">
                   <div className="bg-gradient-to-br from-indigo-50 to-white p-5 rounded-[1.5rem] border border-indigo-100 shadow-sm">
-                    <h4 className="font-black text-indigo-900 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-indigo-200 p-2 rounded-xl shadow-sm">ðŸ§ </span> Skrining Jiwa SRQ-20</h4>
+                    <h4 className="font-black text-indigo-900 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-indigo-200 p-2 rounded-xl shadow-sm">🧠</span> Skrining Jiwa SRQ-20</h4>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
                       <TogglePill label="Tdk Semangat" hint="Sering merasa lelah?" value={jiwaSrqSemangat} onChange={setJiwaSrqSemangat} colorClass="bg-indigo-600" />
                       <TogglePill label="Sering Murung" hint="Merasa sedih/menangis?" value={jiwaSrqMurung} onChange={setJiwaSrqMurung} colorClass="bg-indigo-600" />
@@ -1395,7 +1395,7 @@ function KunjunganRumah() {
                     </div>
                   </div>
                   <div className="bg-slate-50 p-5 rounded-[1.5rem] border border-slate-200 shadow-sm">
-                    <h4 className="font-black text-slate-800 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-white p-2 rounded-xl shadow-sm">ðŸ’</span> Skrining CATIN</h4>
+                    <h4 className="font-black text-slate-800 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-white p-2 rounded-xl shadow-sm">💍</span> Skrining CATIN</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                       <TogglePill label="HIV" hint="Tes reaktif?" value={catinHiv} onChange={setCatinHiv} colorClass="bg-slate-700" />
                       <TogglePill label="Sifilis" hint="Tes reaktif?" value={catinSifilis} onChange={setCatinSifilis} colorClass="bg-slate-700" />
@@ -1408,7 +1408,7 @@ function KunjunganRumah() {
               {(kategoriPasien === 'Dewasa' || kategoriPasien === 'Lansia') && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                   <div className="bg-white p-6 rounded-[1.5rem] border border-slate-200 shadow-md">
-                    <h4 className="font-black text-slate-800 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-amber-100 p-2 rounded-xl shadow-sm">ðŸŽ—ï¸</span> Risiko Kanker Umum</h4>
+                    <h4 className="font-black text-slate-800 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-amber-100 p-2 rounded-xl shadow-sm">🎗️</span> Risiko Kanker Umum</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <TogglePill label="Ca Usus" hint="Riw. BAB darah" value={caUsus} onChange={setCaUsus} colorClass="bg-amber-500" />
                       <TogglePill label="Ca Lainnya" hint="Riw. kanker lainnya" value={caLain} onChange={setCaLain} colorClass="bg-amber-500" />
@@ -1416,7 +1416,7 @@ function KunjunganRumah() {
                   </div>
                   {isPerempuan && (
                     <div className="bg-gradient-to-br from-pink-50 to-white p-6 rounded-[1.5rem] border border-pink-100 shadow-md">
-                      <h4 className="font-black text-pink-900 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-pink-200 p-2 rounded-xl shadow-sm">ðŸ‘©â€âš•ï¸</span> Kanker Wanita</h4>
+                      <h4 className="font-black text-pink-900 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-pink-200 p-2 rounded-xl shadow-sm">👩‍⚕️</span> Kanker Wanita</h4>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
                         <TogglePill label="Ca Payudara" hint="Benjolan/keturunan" value={caPayudara} onChange={setCaPayudara} colorClass="bg-pink-600" />
                         <TogglePill label="Ca Serviks" hint="Pendarahan" value={caServiks} onChange={setCaServiks} colorClass="bg-pink-600" />
@@ -1436,7 +1436,7 @@ function KunjunganRumah() {
               {isUsiaKankerParu && (
                 <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-5 md:p-6 rounded-[1.5rem] border border-slate-700 shadow-xl mt-6 relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-                  <h4 className="relative z-10 font-black text-white mb-6 border-b border-slate-600 pb-4 flex items-center gap-3 text-sm md:text-base"><span className="text-2xl bg-slate-800 p-2.5 rounded-xl border border-slate-600 shadow-inner">ðŸš¬</span> Skrining Kanker Paru (Usia 45+)</h4>
+                  <h4 className="relative z-10 font-black text-white mb-6 border-b border-slate-600 pb-4 flex items-center gap-3 text-sm md:text-base"><span className="text-2xl bg-slate-800 p-2.5 rounded-xl border border-slate-600 shadow-inner">🚬</span> Skrining Kanker Paru (Usia 45+)</h4>
                   <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-5">
                     <SelectCustom darkTheme label="Riwayat Kanker" value={kankerParu.riwayat_kanker} onChange={v => setKankerParu({...kankerParu, riwayat_kanker: v})} options={['Tidak pernah didiagnosis menderita kanker', 'Pernah didiagnosis menderita kanker']} />
                     <SelectCustom darkTheme label="Riwayat Keluarga" value={kankerParu.riwayat_keluarga} onChange={v => setKankerParu({...kankerParu, riwayat_keluarga: v})} options={['Tidak ada keluarga yang terdiagnosis kanker', 'Ada keluarga terdiagnosis kanker']} />
@@ -1460,7 +1460,7 @@ function KunjunganRumah() {
               {kategoriPasien === 'Lansia' && (
                 <div className="space-y-6 mt-6">
                   <div className="bg-gradient-to-br from-indigo-50 to-white p-5 rounded-[1.5rem] border border-indigo-100 shadow-sm">
-                    <h4 className="font-black text-indigo-900 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-indigo-200 p-2 rounded-xl shadow-sm">ðŸ§ </span> 1. Penurunan Kognitif</h4>
+                    <h4 className="font-black text-indigo-900 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-indigo-200 p-2 rounded-xl shadow-sm">🧠</span> 1. Penurunan Kognitif</h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                       <TogglePill label="Mengingat 3 kata?" hint="Bunga, pintu, nasi." value={lansia.kog_ingat_3_kata} onChange={v => handleLansia('kog_ingat_3_kata', v)} colorClass="bg-indigo-600" />
                       <SelectCustom label="Orientasi Waktu/Tempat" hint="Tgl/Bulan/Tahun." value={lansia.kog_orientasi} onChange={v => handleLansia('kog_orientasi', v)} options={['Benar semua', 'Salah satu/Dua', 'Tidak Tahu']} />
@@ -1470,28 +1470,28 @@ function KunjunganRumah() {
 
                   {showMiniCog && (
                     <div className="bg-indigo-100 p-5 rounded-[1.5rem] border-2 border-dashed border-indigo-400 animate-fade-in-up shadow-inner">
-                      <h4 className="font-black text-indigo-900 mb-4 border-b border-indigo-200 pb-3">âš ï¸ Tindak Lanjut Kognitif (Mini Cog)</h4>
+                      <h4 className="font-black text-indigo-900 mb-4 border-b border-indigo-200 pb-3">⚠️ Tindak Lanjut Kognitif (Mini Cog)</h4>
                       <div className="flex flex-col sm:flex-row justify-between sm:items-center bg-indigo-200/50 p-4 rounded-xl mb-5 border border-indigo-300 gap-4">
                         <p className="text-xs font-bold text-indigo-900">Instruksi: Minta pasien menggambar jam angka lengkap di pukul 11:10.</p>
                         <div className={`flex items-center gap-2 font-mono font-black text-2xl px-5 py-2.5 rounded-xl border-2 shadow-sm ${timeLeft <= 30 ? 'bg-red-500 text-white border-red-600 animate-pulse' : 'bg-white text-indigo-700 border-indigo-200'}`}>
-                          <span>â±ï¸</span> {formatTime(timeLeft)}
+                          <span>⏱️</span> {formatTime(timeLeft)}
                         </div>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <TogglePill label="Hasil Gambar Jam" hint="Posisi benar/salah?" value={lansia.minicog_jam} onChange={v => handleLansia('minicog_jam', v)} opt1="Salah" opt2="Benar" colorClass="bg-indigo-600" />
                         <SelectCustom label="Mengulang 3 Kata" hint="Setelah menggambar." value={lansia.minicog_ingat} onChange={v => handleLansia('minicog_ingat', v)} options={['Benar semua kata', 'Benar 2 Kata', 'Benar 1 kata', 'Tidak dapat mengingat/mengulang kata']} />
                       </div>
-                      {timeLeft === 0 && lansia.minicog_jam === 'Salah' && (<p className="text-xs font-bold text-red-600 mt-4 flex gap-2 items-center bg-red-100 p-4 rounded-xl border border-red-200"><span className="text-xl">âš ï¸</span> Waktu habis (3 Menit). Hasil dikunci "Salah".</p>)}
+                      {timeLeft === 0 && lansia.minicog_jam === 'Salah' && (<p className="text-xs font-bold text-red-600 mt-4 flex gap-2 items-center bg-red-100 p-4 rounded-xl border border-red-200"><span className="text-xl">⚠️</span> Waktu habis (3 Menit). Hasil dikunci "Salah".</p>)}
                     </div>
                   )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-orange-50 p-5 rounded-[1.5rem] border border-orange-100 shadow-sm">
-                      <h4 className="font-black text-orange-900 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-orange-200 p-2 rounded-xl shadow-sm">ðŸ¦¿</span> 2. Mobilisasi</h4>
+                      <h4 className="font-black text-orange-900 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-orange-200 p-2 rounded-xl shadow-sm">🦿</span> 2. Mobilisasi</h4>
                       <TogglePill label="Berdiri dari kursi" hint="5x dlm 14 dtk tanpa tangan?" value={lansia.mob_berdiri_kursi} onChange={v => handleLansia('mob_berdiri_kursi', v)} colorClass="bg-orange-600" />
                     </div>
                     <div className="bg-emerald-50 p-5 rounded-[1.5rem] border border-emerald-100 shadow-sm">
-                      <h4 className="font-black text-emerald-900 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-emerald-200 p-2 rounded-xl shadow-sm">âš–ï¸</span> 3. Malnutrisi</h4>
+                      <h4 className="font-black text-emerald-900 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-emerald-200 p-2 rounded-xl shadow-sm">⚖️</span> 3. Malnutrisi</h4>
                       <div className="space-y-5">
                         <TogglePill label="BB turun >3 kg?" hint="Dlm 3 bln / baju melonggar?" value={lansia.gizi_bb_turun} onChange={v => handleLansia('gizi_bb_turun', v)} colorClass="bg-emerald-600" />
                         <TogglePill label="Hilang nafsu makan?" hint="Atau sulit menelan?" value={lansia.gizi_nafsu_makan} onChange={v => handleLansia('gizi_nafsu_makan', v)} colorClass="bg-emerald-600" />
@@ -1502,7 +1502,7 @@ function KunjunganRumah() {
 
                   {showSPPB && (
                     <div className="bg-orange-100 p-5 rounded-[1.5rem] border-2 border-dashed border-orange-400 animate-fade-in-up shadow-inner">
-                      <h4 className="font-black text-orange-900 mb-5 border-b border-orange-200 pb-3">âš ï¸ Tindak Lanjut Mobilisasi (SPPB)</h4>
+                      <h4 className="font-black text-orange-900 mb-5 border-b border-orange-200 pb-3">⚠️ Tindak Lanjut Mobilisasi (SPPB)</h4>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
                         <SelectCustom label="Berdiri Berdampingan" hint="Keseimbangan (10 Dtk)" value={lansia.sppb_samping} onChange={v => handleLansia('sppb_samping', v)} options={['Bertahan 10 detik', 'Tidak bertahan 10 detik', 'Tidak dilakukan']} />
                         <SelectCustom label="Berdiri Semi Tandem" hint="Keseimbangan (10 Dtk)" value={lansia.sppb_semitandem} onChange={v => handleLansia('sppb_semitandem', v)} options={['Bertahan 10 detik', 'Tidak bertahan 10 detik', 'Tidak dilakukan']} />
@@ -1515,7 +1515,7 @@ function KunjunganRumah() {
 
                   {showMNA && (
                     <div className="bg-emerald-100 p-5 rounded-[1.5rem] border-2 border-dashed border-emerald-400 animate-fade-in-up shadow-inner">
-                      <h4 className="font-black text-emerald-900 mb-5 border-b border-emerald-200 pb-3">âš ï¸ Tindak Lanjut Malnutrisi (MNA-SF)</h4>
+                      <h4 className="font-black text-emerald-900 mb-5 border-b border-emerald-200 pb-3">⚠️ Tindak Lanjut Malnutrisi (MNA-SF)</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <SelectCustom label="Asupan Makanan" hint="Dalam 3 bln terakhir" value={lansia.mna_asupan} onChange={v => handleLansia('mna_asupan', v)} options={['Nafsu Makan Biasa saja', 'Nafsu Makan Sedikit Berkurang', 'Nafsu Makan Yang Sangat Berkurang']} />
                         <SelectCustom label="Penurunan BB" hint="Dalam 3 bln terakhir" value={lansia.mna_bb} onChange={v => handleLansia('mna_bb', v)} options={['Tidak Tahu', 'Penurunan BB antara 1 - 3 kg', 'Penurunan BB > 3 Kg']} />
@@ -1529,7 +1529,7 @@ function KunjunganRumah() {
                   )}
 
                   <div className="bg-gradient-to-br from-sky-50 to-white p-5 rounded-[1.5rem] border border-sky-100 shadow-sm">
-                    <h4 className="font-black text-sky-900 mb-5 border-b pb-3 flex gap-3"><span className="text-2xl bg-sky-200 p-2 rounded-xl shadow-sm">ðŸ˜”</span> 4. Gejala Depresi</h4>
+                    <h4 className="font-black text-sky-900 mb-5 border-b pb-3 flex gap-3"><span className="text-2xl bg-sky-200 p-2 rounded-xl shadow-sm">😔</span> 4. Gejala Depresi</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                       <TogglePill label="Sedih/Putus Asa?" hint="2 minggu terakhir" value={lansia.dep_sedih} onChange={v => handleLansia('dep_sedih', v)} colorClass="bg-sky-600" />
                       <TogglePill label="Hilang Minat?" hint="2 minggu terakhir" value={lansia.dep_minat_turun} onChange={v => handleLansia('dep_minat_turun', v)} colorClass="bg-sky-600" />
@@ -1538,7 +1538,7 @@ function KunjunganRumah() {
 
                   {showDepresiLanjut && (
                     <div className="bg-sky-100 p-5 rounded-[1.5rem] border-2 border-dashed border-sky-400 animate-fade-in-up shadow-inner">
-                      <h4 className="font-black text-sky-900 mb-5 border-b border-sky-200 pb-3">âš ï¸ Tindak Lanjut Depresi (GDS)</h4>
+                      <h4 className="font-black text-sky-900 mb-5 border-b border-sky-200 pb-3">⚠️ Tindak Lanjut Depresi (GDS)</h4>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5">
                         <TogglePill label="Puas dgn Hidup?" hint="Saat ini" value={lansia.depl_puas} onChange={v => handleLansia('depl_puas', v)} colorClass="bg-sky-600" />
                         <TogglePill label="Sering Bosan?" hint="2 mgg terakhir" value={lansia.depl_bosan} onChange={v => handleLansia('depl_bosan', v)} colorClass="bg-sky-600" />
@@ -1549,7 +1549,7 @@ function KunjunganRumah() {
                   )}
 
                   <div className="bg-rose-50 p-5 rounded-[1.5rem] border border-rose-100 shadow-sm">
-                    <h4 className="font-black text-rose-900 mb-5 border-b pb-3 flex gap-3"><span className="text-2xl bg-rose-200 p-2 rounded-xl shadow-sm">ðŸƒ</span> 5. Gangguan Fungsional (Barthel Index)</h4>
+                    <h4 className="font-black text-rose-900 mb-5 border-b pb-3 flex gap-3"><span className="text-2xl bg-rose-200 p-2 rounded-xl shadow-sm">🏃</span> 5. Gangguan Fungsional (Barthel Index)</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                       <SelectCustom label="Kendalikan BAB" hint="Rangsang buang air besar" value={lansia.adl_bab} onChange={v => handleLansia('adl_bab', v)} options={['Terkendali teratur', 'Kadang-kadang tak terkendali (1x/minggu)', 'Tidak terkendali/tak teratur (perlu pencahar)']} />
                       <SelectCustom label="Kendalikan BAK" hint="Rangsang buang air kecil" value={lansia.adl_bak} onChange={v => handleLansia('adl_bak', v)} options={['Mandiri', 'Kadang-kadang tak terkendali (hanya 1x/24 jam)', 'Tak terkendali atau pakai kateter']} />
@@ -1565,7 +1565,7 @@ function KunjunganRumah() {
                   </div>
 
                   <div className="bg-slate-50 p-5 rounded-[1.5rem] border border-slate-200 shadow-sm">
-                    <h4 className="font-black text-slate-700 mb-5 border-b pb-3 flex gap-3"><span className="text-2xl bg-white p-2 rounded-xl shadow-sm">ðŸ§©</span> 11. Kognitif Lainnya (AD8 / IADL)</h4>
+                    <h4 className="font-black text-slate-700 mb-5 border-b pb-3 flex gap-3"><span className="text-2xl bg-white p-2 rounded-xl shadow-sm">🧩</span> 11. Kognitif Lainnya (AD8 / IADL)</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                       <SelectCustom label="Membuat Keputusan" hint="Mampu urus uang/belanja?" value={lansia.ad8_keputusan} onChange={v => handleLansia('ad8_keputusan', v)} options={['Tidak Berubah', 'Ya, Berubah', 'Tidak Tahu']} />
                       <SelectCustom label="Menekuni Hobi" hint="Rajut, jahit, dll." value={lansia.ad8_hobi} onChange={v => handleLansia('ad8_hobi', v)} options={['Tidak Berubah', 'Ya, Berubah', 'Tidak Tahu']} />
@@ -1583,8 +1583,8 @@ function KunjunganRumah() {
 
             <div className="workflow-action-bar door-action-bar form-action-row no-print">
               <div className="contents">
-                <button type="button" onClick={handlePrevStep} className="secondary-action w-full">â€¹ Kembali Ke-2</button>
-                <button type="button" onClick={handleNextStep} className="primary-action w-full">Lanjut Ke-4 â€º</button>
+                <button type="button" onClick={handlePrevStep} className="secondary-action w-full">‹ Kembali Ke-2</button>
+                <button type="button" onClick={handleNextStep} className="primary-action w-full">Lanjut Ke-4 ›</button>
               </div>
             </div>
           </div>
@@ -1593,12 +1593,12 @@ function KunjunganRumah() {
         {/* STEP 4: PARU & CATATAN AKHIR */}
         {step === 4 && (
           <div className="bg-white p-5 md:p-8 rounded-[1.5rem] shadow-sm border border-slate-200 animate-fade-in-up">
-            <h3 className="text-lg md:text-xl font-black text-slate-800 mb-6 border-b border-slate-100 pb-5 flex items-center gap-3"><span className="text-2xl bg-purple-100 p-2.5 rounded-xl text-purple-600 shadow-sm">ðŸ«</span> 4. Evaluasi Akhir</h3>
+            <h3 className="text-lg md:text-xl font-black text-slate-800 mb-6 border-b border-slate-100 pb-5 flex items-center gap-3"><span className="text-2xl bg-purple-100 p-2.5 rounded-xl text-purple-600 shadow-sm">🫁</span> 4. Evaluasi Akhir</h3>
 
             <div className="space-y-6">
               {(kategoriPasien === 'Bayi' || kategoriPasien === 'Balita') && (
                 <div className="bg-gradient-to-b from-emerald-50 to-white p-6 md:p-8 rounded-[1.5rem] text-center border border-emerald-100 shadow-sm">
-                  <span className="text-5xl block mb-5 bg-white w-20 h-20 mx-auto rounded-full flex items-center justify-center shadow-sm border border-emerald-50">ðŸ‘¶</span>
+                  <span className="text-5xl block mb-5 bg-white w-20 h-20 mx-auto rounded-full flex items-center justify-center shadow-sm border border-emerald-50">👶</span>
                   <h3 className="font-black text-emerald-800 text-lg md:text-xl">Pasien Anak Usia Dini</h3>
                   <p className="text-sm font-bold text-emerald-600 mt-2 max-w-sm mx-auto leading-relaxed">Pemeriksaan khusus selesai. Anda bisa langsung mengisi catatan akhir dan menekan tombol Simpan.</p>
                 </div>
@@ -1607,7 +1607,7 @@ function KunjunganRumah() {
               {(isAnakSekolah(kategoriPasien) || kategoriPasien === 'Dewasa' || kategoriPasien === 'Lansia') && (
                 <>
                   <div className="bg-slate-50 p-5 rounded-[1.5rem] border border-slate-200 shadow-sm">
-                    <h4 className="font-black text-slate-800 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-white p-2 rounded-xl shadow-sm">ðŸ¦ </span> Skrining Kulit</h4>
+                    <h4 className="font-black text-slate-800 mb-5 border-b pb-3 flex items-center gap-3"><span className="text-2xl bg-white p-2 rounded-xl shadow-sm">🦠</span> Skrining Kulit</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                       <TogglePill label="Kusta" hint="Bercak putih mati rasa?" value={kulitKusta} onChange={setKulitKusta} colorClass="bg-slate-700" />
                       <TogglePill label="Skabies" hint="Gatal malam hari?" value={kulitSkabies} onChange={setKulitSkabies} colorClass="bg-slate-700" />
@@ -1617,7 +1617,7 @@ function KunjunganRumah() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-gradient-to-br from-purple-50 to-white p-5 rounded-[1.5rem] border border-purple-100 shadow-sm">
-                      <h4 className="font-black text-purple-900 mb-5 border-b border-purple-100 pb-3 flex items-center gap-3"><span className="text-2xl bg-purple-200 p-2 rounded-xl shadow-sm">ðŸ«</span> Risiko & X-Ray TB</h4>
+                      <h4 className="font-black text-purple-900 mb-5 border-b border-purple-100 pb-3 flex items-center gap-3"><span className="text-2xl bg-purple-200 p-2 rounded-xl shadow-sm">🫁</span> Risiko & X-Ray TB</h4>
                       <div className="space-y-5">
                         <MultiTogglePill label="Batuk Lama" hint="Lebih/kurang 2 Minggu?" value={resTbBatuk} onChange={setResTbBatuk} options={['>2Mg', '<2Mg', 'Tdk']} />
                         <MultiTogglePill label="Kontak TB" hint="Kontak pasien TB?" value={resTbKontak} onChange={setResTbKontak} options={['Riw', 'Erat', 'Tdk']} />
@@ -1629,7 +1629,7 @@ function KunjunganRumah() {
                       </div>
                     </div>
                     <div className="bg-gradient-to-br from-rose-50 to-white p-5 rounded-[1.5rem] border border-rose-100 shadow-sm">
-                      <h4 className="font-black text-rose-900 mb-5 border-b border-rose-100 pb-3 flex items-center gap-3"><span className="text-2xl bg-rose-200 p-2 rounded-xl shadow-sm">ðŸ©¸</span> Skrining Hepatitis</h4>
+                      <h4 className="font-black text-rose-900 mb-5 border-b border-rose-100 pb-3 flex items-center gap-3"><span className="text-2xl bg-rose-200 p-2 rounded-xl shadow-sm">🩸</span> Skrining Hepatitis</h4>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <TogglePill label="Riw. Transfusi" hint="Pernah terima donor?" value={hepTransfusi} onChange={setHepTransfusi} colorClass="bg-rose-600" />
                         <TogglePill label="Cuci Darah (HD)" hint="Rutin hemodialisa?" value={hepHd} onChange={setHepHd} colorClass="bg-rose-600" />
@@ -1645,7 +1645,7 @@ function KunjunganRumah() {
                   {isUsiaKankerParu ? (
                     <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-5 rounded-[1.5rem] border border-slate-700 shadow-xl relative overflow-hidden">
                       <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
-                      <h4 className="relative z-10 font-black text-white mb-5 border-b border-slate-700 pb-3 flex items-center gap-3 text-sm md:text-base"><span className="text-2xl bg-slate-700 p-2 rounded-xl shadow-inner border border-slate-600">ðŸš¬</span> Risiko Kanker Paru</h4>
+                      <h4 className="relative z-10 font-black text-white mb-5 border-b border-slate-700 pb-3 flex items-center gap-3 text-sm md:text-base"><span className="text-2xl bg-slate-700 p-2 rounded-xl shadow-inner border border-slate-600">🚬</span> Risiko Kanker Paru</h4>
                       <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <TogglePill label={<span className="text-slate-300">Merokok &lt; 1th</span>} hint={<span className="text-slate-400">Berhenti &lt; 1 thn?</span>} value={caParuMerokokKrg1th} onChange={setCaParuMerokokKrg1th} colorClass="bg-emerald-600" />
                         <TogglePill label={<span className="text-slate-300">Riw Merokok</span>} hint={<span className="text-slate-400">Pernah/masih merokok?</span>} value={caParuRiwMerokok} onChange={setCaParuRiwMerokok} colorClass="bg-emerald-600" />
@@ -1660,7 +1660,7 @@ function KunjunganRumah() {
                   )}
 
                   <div className="bg-gradient-to-br from-sky-50 to-white p-5 rounded-[1.5rem] border border-sky-100 shadow-sm">
-                    <h4 className="font-black text-sky-900 mb-5 border-b border-sky-100 pb-3 flex items-center gap-3"><span className="text-2xl bg-sky-200 p-2 rounded-xl shadow-sm">ðŸ˜®â€ðŸ’¨</span> Merokok & PPOK</h4>
+                    <h4 className="font-black text-sky-900 mb-5 border-b border-sky-100 pb-3 flex items-center gap-3"><span className="text-2xl bg-sky-200 p-2 rounded-xl shadow-sm">😮‍💨</span> Merokok & PPOK</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                       <TogglePill label="Batuk Berdahak" hint="Pagi hari?" value={rokokBatukLama} onChange={setRokokBatukLama} colorClass="bg-sky-600" />
                       <TogglePill label="Nyeri / Sesak" hint="Dada terasa berat?" value={rokokSesak} onChange={setRokokSesak} colorClass="bg-sky-600" />
@@ -1673,7 +1673,7 @@ function KunjunganRumah() {
 
               {(isAnakSekolah(kategoriPasien) || kategoriPasien === 'Dewasa' || kategoriPasien === 'Lansia') && (
                 <div className="bg-emerald-50 p-5 rounded-[1.5rem] border border-emerald-200 mt-6 shadow-sm">
-                  <h4 className="font-black text-emerald-900 mb-5 border-b border-emerald-200 pb-3 flex items-center gap-3"><span className="text-2xl bg-emerald-200 p-2 rounded-xl shadow-sm">ðŸƒ</span> Aktivitas Fisik</h4>
+                  <h4 className="font-black text-emerald-900 mb-5 border-b border-emerald-200 pb-3 flex items-center gap-3"><span className="text-2xl bg-emerald-200 p-2 rounded-xl shadow-sm">🏃</span> Aktivitas Fisik</h4>
                   <div className="w-full">
                     <label className="block text-[11px] md:text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Pilih Kategori Aktivitas Sehari-hari</label>
                     <select value={aktivitasFisik} onChange={(e) => setAktivitasFisik(e.target.value)} className="w-full min-h-[52px] p-4 bg-white border border-emerald-200 rounded-xl outline-none text-base md:text-sm font-bold text-slate-700 shadow-sm focus:border-emerald-500 cursor-pointer transition-all active:scale-[0.98]">
@@ -1694,9 +1694,9 @@ function KunjunganRumah() {
 
             <div className="workflow-action-bar door-action-bar form-action-row no-print">
               <div className="contents">
-                <button type="button" onClick={handlePrevStep} className="secondary-action w-full">â€¹ Kembali Ke-3</button>
+                <button type="button" onClick={handlePrevStep} className="secondary-action w-full">‹ Kembali Ke-3</button>
                 <button type="button" onClick={handleSimpanKeDatabase} disabled={loading || ocrLoading} className="primary-action w-full disabled:opacity-50 flex items-center justify-center gap-2">
-                  {loading ? <><span className="animate-spin text-lg">âš™ï¸</span> MEMPROSES...</> : 'ðŸŽ¯ SIMPAN & RAPOR'}
+                  {loading ? <><span className="animate-spin text-lg">⚙️</span> MEMPROSES...</> : '🎯 SIMPAN & RAPOR'}
                 </button>
               </div>
             </div>
@@ -1709,15 +1709,15 @@ function KunjunganRumah() {
             <div className="bg-gradient-to-br from-blue-950 to-indigo-900 p-6 md:p-8 rounded-[1.5rem] shadow-xl flex flex-col md:flex-row justify-between items-center gap-6 mb-6 no-print border border-blue-800/50">
               <div className="text-center md:text-left">
                 <div className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full mb-3 border border-emerald-500/30">
-                  <span className="text-sm">ðŸŽ‰</span><span className="text-[10px] font-black uppercase tracking-widest">Tersimpan di Cloud</span>
+                  <span className="text-sm">🎉</span><span className="text-[10px] font-black uppercase tracking-widest">Tersimpan di Cloud</span>
                 </div>
                 <h2 className="text-white text-xl md:text-2xl font-bold">Pemeriksaan Selesai</h2>
               </div>
               <div className="flex flex-wrap justify-center gap-3 w-full md:w-auto">
-                <button onClick={handlePrintRapor} className="flex-1 md:flex-none bg-white text-slate-900 px-5 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 hover:bg-slate-100 text-[11px] md:text-xs uppercase tracking-widest"><span className="text-lg">ðŸ–¨ï¸</span> PDF/CETAK</button>
-                <button onClick={handleKirimWA} className="flex-1 md:flex-none bg-green-500 text-white px-5 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 hover:bg-green-400 text-[11px] md:text-xs uppercase tracking-widest"><span className="text-lg">ðŸ’¬</span> KIRIM WA</button>
+                <button onClick={handlePrintRapor} className="flex-1 md:flex-none bg-white text-slate-900 px-5 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 hover:bg-slate-100 text-[11px] md:text-xs uppercase tracking-widest"><span className="text-lg">🖨️</span> PDF/CETAK</button>
+                <button onClick={handleKirimWA} className="flex-1 md:flex-none bg-green-500 text-white px-5 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 hover:bg-green-400 text-[11px] md:text-xs uppercase tracking-widest"><span className="text-lg">💬</span> KIRIM WA</button>
               </div>
-              <button onClick={resetModul} className="w-full md:w-auto bg-slate-800 text-white px-5 py-3 rounded-xl font-bold border border-slate-600 hover:bg-slate-700 uppercase tracking-widest text-[10px] md:text-xs transition-colors active:scale-95">PASIEN BARU âž”</button>
+              <button onClick={resetModul} className="w-full md:w-auto bg-slate-800 text-white px-5 py-3 rounded-xl font-bold border border-slate-600 hover:bg-slate-700 uppercase tracking-widest text-[10px] md:text-xs transition-colors active:scale-95">PASIEN BARU ➔</button>
             </div>
 
             {/* Kontainer Rapor */}
@@ -1731,14 +1731,14 @@ function KunjunganRumah() {
                   </div>
                   <div>
                     <h1 className="text-xl md:text-2xl font-black drop-shadow-sm">Laporan Medical Check-Up (MCU)</h1>
-                    <p className="text-[9px] md:text-[10px] opacity-90 font-bold tracking-widest uppercase mt-1 text-emerald-100">Puskesmas Malimpung â€¢ Tgl Terbit: {tglString}, {waktuString} WITA</p>
+                    <p className="text-[9px] md:text-[10px] opacity-90 font-bold tracking-widest uppercase mt-1 text-emerald-100">Puskesmas Malimpung • Tgl Terbit: {tglString}, {waktuString} WITA</p>
                   </div>
                 </div>
 
                 {/* Identitas Pasien */}
                 <div className="p-4 md:p-6 pb-4 shrink-0 border-b border-slate-100 bg-slate-50/50">
                   <div className="flex flex-col sm:flex-row print:flex-row items-center gap-3 sm:gap-5 mb-5 text-center sm:text-left print:text-left">
-                    <div className="w-14 h-14 md:w-16 md:h-16 bg-white rounded-full border-4 border-slate-100 flex items-center justify-center text-2xl md:text-3xl shadow-sm">{formData.j_kelamin === 'P' ? 'ðŸ‘©' : 'ðŸ‘¨'}</div>
+                    <div className="w-14 h-14 md:w-16 md:h-16 bg-white rounded-full border-4 border-slate-100 flex items-center justify-center text-2xl md:text-3xl shadow-sm">{formData.j_kelamin === 'P' ? '👩' : '👨'}</div>
                     <div>
                       <h2 className="text-xl md:text-2xl font-black text-slate-800 uppercase tracking-wide">{formData.nama || 'Pasien Cek Kesehatan Gratis'}</h2>
                       <p className="text-[10px] md:text-xs text-slate-500 font-mono mt-0.5 font-bold">NIK: {tanpaNik ? formData.nik_wali : formData.nik}</p>
@@ -1756,10 +1756,10 @@ function KunjunganRumah() {
                   {/* Indikator Kritis */}
                   <h3 className="text-[10px] md:text-[11px] font-black text-slate-800 mb-4 uppercase tracking-widest border-b-2 border-slate-100 pb-2">1. Rangkuman Indikator Kritis</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 print:grid-cols-4 gap-3 md:gap-4 mb-6">
-                    <RangkumanCardPrint icon="â¤ï¸" title="Tekanan Darah" value={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? '-' : `${td || '-'}`} status={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? 'Pantau KIA' : tensiData.status} textColor={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? 'text-slate-500' : tensiData.color} dotPos={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? 50 : tensiData.pos} />
-                    <RangkumanCardPrint icon="ðŸ©¸" title="Gula Darah" value={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? '-' : gulaData.nilai} status={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? 'Pantau KIA' : gulaData.status} textColor={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? 'text-slate-500' : gulaData.color} dotPos={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? 50 : gulaData.pos} />
-                    <RangkumanCardPrint icon="âš–ï¸" title={(kategoriPasien === 'Bayi' || kategoriPasien === 'Balita') ? "BB / TB" : "IMT / Status Gizi"} value={(kategoriPasien === 'Bayi' || kategoriPasien === 'Balita') ? `${bb || '-'} Kg / ${tb || '-'} cm` : imtData.nilai} status={(kategoriPasien === 'Bayi' || kategoriPasien === 'Balita') ? 'Pantau Grafik KIA' : imtData.status} textColor={(kategoriPasien === 'Bayi' || kategoriPasien === 'Balita') ? 'text-slate-500' : imtData.color} dotPos={(kategoriPasien === 'Bayi' || kategoriPasien === 'Balita') ? 50 : imtData.pos} />
-                    <RangkumanCardPrint icon="ðŸ«" title="Risiko Paru/TB" value={resTbBatuk === '>2Mg' ? 'Suspek/Risiko' : 'Aman'} status="" textColor={resTbBatuk === '>2Mg' ? 'text-red-600' : 'text-emerald-600'} dotPos={resTbBatuk === '>2Mg' ? 85 : 15} />
+                    <RangkumanCardPrint icon="❤️" title="Tekanan Darah" value={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? '-' : `${td || '-'}`} status={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? 'Pantau KIA' : tensiData.status} textColor={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? 'text-slate-500' : tensiData.color} dotPos={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? 50 : tensiData.pos} />
+                    <RangkumanCardPrint icon="🩸" title="Gula Darah" value={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? '-' : gulaData.nilai} status={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? 'Pantau KIA' : gulaData.status} textColor={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? 'text-slate-500' : gulaData.color} dotPos={kategoriPasien === 'Bayi' || kategoriPasien === 'Balita' ? 50 : gulaData.pos} />
+                    <RangkumanCardPrint icon="⚖️" title={(kategoriPasien === 'Bayi' || kategoriPasien === 'Balita') ? "BB / TB" : "IMT / Status Gizi"} value={(kategoriPasien === 'Bayi' || kategoriPasien === 'Balita') ? `${bb || '-'} Kg / ${tb || '-'} cm` : imtData.nilai} status={(kategoriPasien === 'Bayi' || kategoriPasien === 'Balita') ? 'Pantau Grafik KIA' : imtData.status} textColor={(kategoriPasien === 'Bayi' || kategoriPasien === 'Balita') ? 'text-slate-500' : imtData.color} dotPos={(kategoriPasien === 'Bayi' || kategoriPasien === 'Balita') ? 50 : imtData.pos} />
+                    <RangkumanCardPrint icon="🫁" title="Risiko Paru/TB" value={resTbBatuk === '>2Mg' ? 'Suspek/Risiko' : 'Aman'} status="" textColor={resTbBatuk === '>2Mg' ? 'text-red-600' : 'text-emerald-600'} dotPos={resTbBatuk === '>2Mg' ? 85 : 15} />
                   </div>
 
                   {/* Tabel Hasil */}
@@ -1797,7 +1797,7 @@ function KunjunganRumah() {
                     <h3 className="text-[8px] md:text-[9px] font-black text-slate-400 mb-4 uppercase tracking-widest text-center">Tim Medis & Validasi Pemeriksaan Door-to-Door</h3>
                     <div className="flex flex-col sm:flex-row print:flex-row justify-between items-center text-center sm:text-left print:text-left px-2 md:px-6 gap-3">
                       <div><p className="text-[8px] text-slate-400 uppercase mb-1">Petugas Medis Lapangan</p><p className="text-[10px] md:text-[11px] print:text-[10px] font-black text-slate-800 uppercase bg-slate-100 py-1.5 px-4 rounded-lg inline-block border border-slate-200">{namaPetugas}</p></div>
-                      <div><p className="text-[8px] text-slate-400 uppercase mb-1">Status Sinkronisasi</p><p className="text-[10px] md:text-[11px] print:text-[10px] font-black text-emerald-700 uppercase bg-emerald-50 py-1.5 px-4 rounded-lg inline-block border border-emerald-200">âœ… Terverifikasi RME</p></div>
+                      <div><p className="text-[8px] text-slate-400 uppercase mb-1">Status Sinkronisasi</p><p className="text-[10px] md:text-[11px] print:text-[10px] font-black text-emerald-700 uppercase bg-emerald-50 py-1.5 px-4 rounded-lg inline-block border border-emerald-200">✅ Terverifikasi RME</p></div>
                     </div>
                   </div>
                 </div>

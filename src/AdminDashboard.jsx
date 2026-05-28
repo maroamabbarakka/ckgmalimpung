@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import PusatBantuan from './components/PusatBantuan';
 import ConnectionStatus from './components/system/ConnectionStatus';
+import DummyDataManager from './components/DummyDataManager';
 import {
   Bar,
   BarChart,
@@ -318,6 +319,7 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
       case 'profil': return { title: 'Profil Administrator', subtitle: 'Pengaturan Akun dan Keamanan', color: 'text-rose-600' };
       case 'privasi': return { title: 'Kebijakan Privasi', subtitle: 'Ketentuan Penggunaan dan Privasi', color: 'text-slate-700' };
       case 'bantuan': return { title: 'Pusat Bantuan', subtitle: 'Dokumentasi, FAQ, dan Petunjuk Penggunaan', color: 'text-slate-800' };
+      case 'dummy-manager': return { title: 'Dummy Data Manager', subtitle: 'Manajemen Data Dummy untuk Simulasi dan Pengujian', color: 'text-rose-600' };
       default: return null;
     }
   };
@@ -978,7 +980,8 @@ const activeUsername = normalizeText(user?.username);
             {renderSidebarGroup('sarana', <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>, 'Sarana Puskesmas', [
               renderAdminNavItem({ id: 'simpeg', label: 'Manajemen Nakes', simpegTab: 'staff' }),
               renderAdminNavItem({ id: 'sekolah', label: 'Sarana Binaan' }),
-              renderAdminNavItem({ id: 'simpeg', label: 'Backup Database', simpegTab: 'backup' })
+              renderAdminNavItem({ id: 'simpeg', label: 'Backup Database', simpegTab: 'backup' }),
+              renderAdminNavItem({ id: 'dummy-manager', label: 'Dummy Data Manager' })
             ])}
 
 
@@ -2613,6 +2616,8 @@ const activeUsername = normalizeText(user?.username);
             )}
 
             {activeMenu === 'bantuan' && <PusatBantuan />}
+
+            {activeMenu === 'dummy-manager' && <DummyDataManager />}
 
             {activeMenu === 'privasi' && (
               <section className="mx-auto max-w-5xl rounded-lg border border-slate-200 bg-white p-8 text-sm leading-7 text-slate-700">

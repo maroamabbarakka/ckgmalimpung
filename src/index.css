@@ -1,4 +1,4 @@
-﻿@tailwind base;
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -4360,22 +4360,24 @@ a {
   text-transform: uppercase;
 }
 
-.mobile-super-nav.mobile-nav {
-  left: 14px !important;
-  right: 14px !important;
-  bottom: 14px !important;
-  height: 74px !important;
-  z-index: 100 !important;
-  display: grid !important;
-  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
-  align-items: center !important;
-  gap: 2px !important;
-  padding: 6px 8px !important;
-  border-radius: 28px !important;
-  border: 1px solid rgba(220, 232, 242, 0.9) !important;
-  background: rgba(255, 255, 255, 0.94) !important;
-  box-shadow: 0 10px 24px rgba(48, 64, 80, 0.1) !important;
-  backdrop-filter: blur(20px) !important;
+@media (max-width: 767px) {
+  .mobile-super-nav.mobile-nav {
+    left: 14px !important;
+    right: 14px !important;
+    bottom: 14px !important;
+    height: 74px !important;
+    z-index: 100 !important;
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    align-items: center !important;
+    gap: 2px !important;
+    padding: 6px 8px !important;
+    border-radius: 28px !important;
+    border: 1px solid rgba(220, 232, 242, 0.9) !important;
+    background: rgba(255, 255, 255, 0.94) !important;
+    box-shadow: 0 10px 24px rgba(48, 64, 80, 0.1) !important;
+    backdrop-filter: blur(20px) !important;
+  }
 }
 
 .mobile-super-nav .mobile-nav-item {

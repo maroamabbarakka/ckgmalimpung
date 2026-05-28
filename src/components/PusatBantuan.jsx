@@ -99,7 +99,7 @@ const faqData = [
         title: 'Keamanan Data Transaksional',
         content: (
            <div className="space-y-4">
-              <p>TERSANJUNG v4.2 telah dilengkapi sistem <strong>Atomic Transactions</strong>.</p>
+              <p>TERSANJUNG v4.4 telah dilengkapi sistem <strong>Atomic Transactions</strong>.</p>
               <p>Ini berarti apabila ada dua Nakes atau lebih yang menghapus/mengubah data yang sama secara bersamaan di dalam waktu yang sama, sistem akan memblokirnya secara cerdas sehingga <strong>Data Tidak Akan Korup atau Bentrok</strong>.</p>
            </div>
         )
@@ -169,7 +169,7 @@ export default function PusatBantuan() {
              <div className="mt-16 pt-8 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-slate-400">
                 <span>Diperbarui pada Mei 2026</span>
                 <span className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-200">
-                   TERSANJUNG v4.2 
+                   TERSANJUNG v4.4 
                    <svg className="w-3.5 h-3.5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path></svg>
                 </span>
              </div>
