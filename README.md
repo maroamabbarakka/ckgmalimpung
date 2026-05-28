@@ -1,10 +1,7 @@
-# ckg-malimpung
+# CKG Malimpung (TERSANJUNG)
 
-Repositori berisi kumpulan skrip dan aplikasi untuk proyek internal.
+Aplikasi Layanan Cagar Kesehatan Keluarga Terpadu (CKG) untuk UPT Puskesmas Malimpung, Kabupaten Pinrang.
 
-- Spesifikasi PMB: [DOKUMEN_SPESIFIKASI_SISTEM_PMB](src/docs/DOKUMEN_SPESIFIKASI_SISTEM_PMB.md)
-
-Lokasi dokumen utama juga tersedia di `src/DOKUMEN_SPESIFIKASI_SISTEM_PMB.md`.
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
