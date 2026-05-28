@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 
 // ==========================================
-// 🚀 THE MASTER ENGINE V22.2 (TENSI & MNA FIX)
+// 🚀 THE MASTER ENGINE V22.3 (LOOKUP STABILITY PATCH)
 // ==========================================
 
 const SNELLEN_OPTIONS = [
@@ -21,8 +21,258 @@ const REGISTRY = {
   POS5_SPECIFIC: ['batuk', 'tb', 'tbc', 'tuberkulosis', 'keringat malam', 'demam', 'lesu', 'dahak', 'nafsu makan', 'mantoux', 'indurasi', 'pembesaran kelenjar', 'pembengkakan tulang', 'spirometri', 'puma', 'tcm', 'bta', 'skoring tb', 'sadanis', 'inspekulo', 'iva', 'dna hpv', 'ekg', 'bercak', 'putih mati rasa', 'kudis', 'skabies', 'koreng', 'gatal', 'kusta', 'frambusia', 'olahraga', 'merokok', 'alkohol', 'sayur', 'buah', 'narkoba', 'hubungan seksual', 'hubungan intim', 'aktif', 'terbangun', 'haus', 'lapar', 'mengompol', 'napas pendek']
 };
 
+
+
+// Normalize text before keyword lookup so matching is deterministic across
+// small wording/case/spacing differences in formSchemas.json.
+const normalizeQuestionText = (value) => String(value || '')
+  .toLowerCase()
+  .normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const isVirtualQuestion = (q) => Boolean(q?.isVirtual || String(q?.id || '').startsWith('VIRTUAL_'));
+
+// Stable lookup contract:
+// 1) exact normalized match
+// 2) startsWith normalized match
+// 3) includes normalized match
+// Within the same rank, longer keyword wins; then non-virtual schema fields win;
+// then lower column/sequence wins. This keeps Smart Fill deterministic without
+// changing the renderer execution order or schema contract.
+const findQuestionByKeywords = (questions = [], keywords = [], { includeVirtual = true } = {}) => {
+  const normalizedKeywords = (Array.isArray(keywords) ? keywords : [keywords])
+    .map(normalizeQuestionText)
+    .filter(Boolean);
+
+  if (!normalizedKeywords.length) return null;
+
+  const candidates = questions
+    .filter(q => includeVirtual || !isVirtualQuestion(q))
+    .map((q, index) => {
+      const text = normalizeQuestionText(q?.question_text);
+      let score = 0;
+
+      normalizedKeywords.forEach((kw) => {
+        if (!text || !kw) return;
+        if (text === kw) score = Math.max(score, 3000 + kw.length);
+        else if (text.startsWith(kw)) score = Math.max(score, 2000 + kw.length);
+        else if (text.includes(kw)) score = Math.max(score, 1000 + kw.length);
+      });
+
+      return { q, index, score };
+    })
+    .filter(item => item.score > 0)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (isVirtualQuestion(a.q) !== isVirtualQuestion(b.q)) return isVirtualQuestion(a.q) ? 1 : -1;
+      const aOrder = Number.isFinite(a.q?.column) ? a.q.column : (a.q?.sequence_number ?? a.index);
+      const bOrder = Number.isFinite(b.q?.column) ? b.q.column : (b.q?.sequence_number ?? b.index);
+      return aOrder - bOrder;
+    });
+
+  return candidates[0]?.q || null;
+};
+
 const isSchoolAgeCategory = (value) => ['sd', 'smp', 'sma', 'anak/siswa'].includes(String(value || '').trim().toLowerCase());
 const isEarlyChildCategory = (value) => ['bayi', 'balita'].includes(String(value || '').trim().toLowerCase());
+
+const getNumberProfileForQuestion = (question) => {
+  const text = String(question?.question_text || '').toLowerCase();
+  const hasAny = (keywords) => keywords.some(keyword => text.includes(keyword));
+
+  if (hasAny(['sistolik'])) return { mode: 'integer', min: 60, max: 260, unit: 'mmHg', hint: 'Periksa ulang bila di luar 60-260.' };
+  if (hasAny(['diastolik'])) return { mode: 'integer', min: 30, max: 160, unit: 'mmHg', hint: 'Periksa ulang bila di luar 30-160.' };
+  if (hasAny(['nadi'])) return { mode: 'integer', min: 30, max: 220, unit: 'x/menit', hint: 'Periksa ulang bila di luar 30-220.' };
+  if (hasAny(['napas'])) return { mode: 'integer', min: 5, max: 80, unit: 'x/menit', hint: 'Periksa ulang bila di luar 5-80.' };
+  if (hasAny(['suhu'])) return { mode: 'decimal', min: 30, max: 45, unit: 'C', hint: 'Periksa ulang bila di luar 30-45 C.' };
+  if (hasAny(['tinggi', 'panjang'])) return { mode: 'decimal', min: 30, max: 230, unit: 'cm', hint: 'Gunakan cm. Periksa ulang nilai ekstrem.' };
+  if (hasAny(['berat badan'])) return { mode: 'decimal', min: 1, max: 250, unit: 'kg', hint: 'Gunakan kg. Periksa ulang nilai ekstrem.' };
+  if (hasAny(['lingkar', 'lila'])) return { mode: 'decimal', min: 5, max: 200, unit: 'cm', hint: 'Gunakan cm. Periksa ulang nilai ekstrem.' };
+  if (hasAny(['gula darah', 'gds', 'gdp'])) return { mode: 'integer', min: 20, max: 700, unit: 'mg/dL', hint: 'Periksa ulang bila di luar 20-700.' };
+  if (hasAny(['kolesterol', 'hdl', 'ldl', 'trigliserida'])) return { mode: 'integer', min: 10, max: 1000, unit: 'mg/dL', hint: 'Periksa ulang nilai laboratorium ekstrem.' };
+  if (hasAny(['asam urat', 'kreatinin', 'hba1c', 'hb1ac', 'hemoglobin', 'imt', 'apri'])) return { mode: 'decimal', min: 0, max: 100, unit: '', hint: 'Gunakan angka desimal bila perlu.' };
+  if (hasAny(['skor', 'score', 'nilai', 'lama', 'tahun', 'bulan', 'batang', 'jumlah'])) return { mode: 'integer', min: 0, max: 999, unit: '', hint: 'Isi angka tanpa huruf.' };
+
+  return { mode: 'decimal', min: null, max: null, unit: '', hint: 'Isi angka saja.' };
+};
+
+const sanitizeNumberValue = (rawValue, mode = 'decimal') => {
+  const normalized = String(rawValue || '').replace(',', '.');
+  const cleaned = normalized.replace(mode === 'integer' ? /\D/g : /[^0-9.]/g, '');
+  if (mode === 'integer') return cleaned;
+  const [first, ...rest] = cleaned.split('.');
+  return rest.length ? `${first}.${rest.join('')}` : first;
+};
+
+const getNumberWarning = (value, profile) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const numeric = Number(raw);
+  if (Number.isNaN(numeric)) return 'Masukkan angka yang valid.';
+  if (profile.min !== null && numeric < profile.min) return profile.hint;
+  if (profile.max !== null && numeric > profile.max) return profile.hint;
+  return '';
+};
+
+const SmartNumberInput = ({ question, value, onChange: handleValueChange, placeholder = "0", className = "", compact = false, showUnit = true }) => {
+  const profile = getNumberProfileForQuestion(question);
+  const warning = getNumberWarning(value, profile);
+  const fieldId = `number-${question.id}`;
+  const helpId = `${fieldId}-help`;
+
+  return (
+    <div className={`${compact ? "w-full" : "w-full"} measurement-input smart-number-field`}>
+      <div className="relative">
+        <input
+          id={fieldId}
+          type="text"
+          value={value || ''}
+          onChange={(event) => handleValueChange(sanitizeNumberValue(event.target.value, profile.mode))}
+          placeholder={placeholder}
+          inputMode={profile.mode === 'integer' ? 'numeric' : 'decimal'}
+          pattern={profile.mode === 'integer' ? '[0-9]*' : '[0-9.]*'}
+          aria-invalid={Boolean(warning)}
+          aria-describedby={helpId}
+          className={`${className} ${warning ? 'border-amber-300 bg-amber-50 focus:ring-amber-400' : ''}`}
+        />
+        {showUnit && profile.unit && (
+          <span className="unit-badge pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-500">
+            {profile.unit}
+          </span>
+        )}
+      </div>
+      <p id={helpId} className={`field-helper mt-1 px-1 text-[10px] font-bold ${warning ? 'warning text-amber-700' : 'text-slate-400'}`}>
+        {warning || profile.hint}
+      </p>
+    </div>
+  );
+};
+
+const VoiceInput = ({ value, onChange, placeholder, type="text", inputMode, fieldClassName = "" }) => {
+  const [isListening, setIsListening] = useState(false);
+  const [interimText, setInterimText] = useState("");
+  const recognitionRef = useRef(null);
+  const isListeningRef = useRef(false);
+  const valueRef = useRef(value);
+
+  useEffect(() => {
+     valueRef.current = value;
+  }, [value]);
+
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'id-ID';
+
+      recognition.onresult = (event) => {
+        let currentFinal = "";
+        let currentInterim = "";
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) currentFinal += event.results[i][0].transcript + " ";
+          else currentInterim += event.results[i][0].transcript;
+        }
+
+        if (currentFinal) {
+           const prevVal = valueRef.current ? valueRef.current.trim() + " " : "";
+           const newVal = prevVal + currentFinal.trim();
+           valueRef.current = newVal;
+           onChange(newVal);
+        }
+        setInterimText(currentInterim);
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error", event.error);
+        if (event.error === 'not-allowed' || event.error === 'network') {
+            isListeningRef.current = false;
+            setIsListening(false);
+        }
+      };
+
+      recognition.onend = () => {
+        if (isListeningRef.current) {
+           try { recognition.start(); }
+           catch(e) {
+             console.warn("Gagal melanjutkan voice input:", e);
+             isListeningRef.current = false;
+             setIsListening(false);
+           }
+        } else {
+           setIsListening(false);
+           setInterimText("");
+        }
+      };
+
+      recognitionRef.current = recognition;
+    }
+
+    return () => {
+       if (recognitionRef.current) {
+          recognitionRef.current.onend = null;
+          recognitionRef.current.stop();
+       }
+    };
+  }, [onChange]);
+
+  const toggleListen = () => {
+    if (isListeningRef.current) {
+      isListeningRef.current = false;
+      setIsListening(false);
+      recognitionRef.current?.stop();
+      setInterimText("");
+    } else if (recognitionRef.current) {
+      try {
+        isListeningRef.current = true;
+        setIsListening(true);
+        recognitionRef.current.start();
+      } catch(e) {
+        console.error(e);
+      }
+    } else {
+      alert("Browser Anda tidak mendukung fitur Voice Recognition.");
+    }
+  };
+
+  const isSupported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  const displayValue = isListening && interimText ? (value ? value + " " + interimText : interimText) : value;
+
+  return (
+    <div className={`relative mt-2 flex w-full items-center ${fieldClassName}`}>
+      <input
+        type={type}
+        value={displayValue || ''}
+        onChange={e => {
+            onChange(e.target.value);
+            if (isListeningRef.current) toggleListen();
+        }}
+        required={false}
+        placeholder={isListening ? "Mendengarkan... (bisa jeda/napas)" : placeholder}
+        inputMode={inputMode}
+        className={`w-full min-h-[50px] bg-white border font-bold text-sm py-3.5 pl-4 pr-12 rounded-xl outline-none focus:ring-2 shadow-sm transition-all ${isListening ? 'border-rose-500 ring-2 ring-rose-200 placeholder-rose-400 text-rose-700' : 'border-slate-200 text-slate-800'}`}
+      />
+      {isSupported && (
+          <button
+             type="button"
+             onClick={toggleListen}
+             className={`absolute right-2 p-2.5 rounded-lg transition-all shadow-sm ${isListening ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
+             title={isListening ? "Matikan Mic" : "Mulai Bicara"}
+          >
+             {isListening ? (
+               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><rect x="5" y="5" width="10" height="10" /></svg>
+             ) : (
+               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8h-2a5 5 0 01-10 0H3a7.001 7.001 0 006 6.93V17H6v2h8v-2h-3v-2z" clipRule="evenodd" /></svg>
+             )}
+          </button>
+      )}
+    </div>
+  );
+};
 
 const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, primaryColor = 'indigo', kategoriUsia = '-' }) => {
   const [metodeGula, setMetodeGula] = useState('sewaktu');
@@ -118,16 +368,27 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
     });
   }, [schema, posNumber, kategoriUsia]);
 
-  const findQ = useCallback((keywords) => {
-    return allValidQuestions.find(q => keywords.some(kw => q.question_text.toLowerCase().includes(kw)));
+  const findQ = useCallback((keywords, options = {}) => {
+    return findQuestionByKeywords(allValidQuestions, keywords, options);
   }, [allValidQuestions]);
 
-  const findGlobalQ = useCallback((keywords) => {
+  const findGlobalQ = useCallback((keywords, options = {}) => {
     if (!schema || !schema.questions) return null;
-    return schema.questions.find(q => keywords.some(kw => q.question_text.toLowerCase().includes(kw)));
+    return findQuestionByKeywords(schema.questions, keywords, { includeVirtual: false, ...options });
   }, [schema]);
 
-  const getValue = useCallback((id) => (formData[id] || ''), [formData]);
+  const getValue = useCallback((id) => (id ? (formData[id] || '') : ''), [formData]);
+
+  const setDerivedValue = useCallback((question, nextValue) => {
+    if (!question?.id || isVirtualQuestion(question)) return;
+    const normalizedNext = nextValue == null ? '' : String(nextValue);
+    if (getValue(question.id) !== normalizedNext) onChange(question.id, normalizedNext);
+  }, [getValue, onChange]);
+
+  const clearDerivedValue = useCallback((question) => {
+    if (!question?.id || isVirtualQuestion(question)) return;
+    if (getValue(question.id)) onChange(question.id, '');
+  }, [getValue, onChange]);
 
   const getGlobalValue = useCallback((posKey, id) => {
     if (fullData && fullData[posKey] && fullData[posKey][id]) return fullData[posKey][id];
@@ -137,8 +398,8 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
   // DIAGNOSTIC AUTOMATION LOGIC (e.g. EKG from Pos 2 BP)
   const isHypertensionHistory = useMemo(() => {
     if (posNumber !== 5) return false;
-    const sysId = findGlobalQ(['sistolik'])?.id;
-    const diaId = findGlobalQ(['diastolik'])?.id;
+    const sysId = (findGlobalQ(['tekanan darah sistolik']) || findGlobalQ(['sistolik']))?.id;
+    const diaId = (findGlobalQ(['tekanan darah diastolik']) || findGlobalQ(['diastolik']))?.id;
     const htId = findGlobalQ(['tekanan darah tinggi', 'hipertensi'])?.id;
     
     let isHigh = false;
@@ -311,7 +572,9 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
         let status = "NORMAL";
         if (imtRawVal < 18.5) status = "KURUS"; else if (imtRawVal >= 25 && imtRawVal <= 29.9) status = "GEMUK"; else if (imtRawVal >= 30) status = "OBESITAS";
         const finalImtString = `${imtVal} (${status})`;
-        if (formData[qIMT.id] !== finalImtString) onChange(qIMT.id, finalImtString);
+        setDerivedValue(qIMT, finalImtString);
+      } else {
+        clearDerivedValue(qIMT);
       }
     }
 
@@ -327,12 +590,12 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
         else if (sys <= 159 && dia <= 99) res = "Sistol 140-159 / Diastol 90-99";
         else if (sys <= 179 && dia <= 109) res = "Sistol 160-179 / Diastol 100-109";
         else if (sys >= 180 || dia >= 110) res = "Sistol >=180 / Diastol >= 110";
-        if (res && formData[qBpResult.id] !== res) {
+        if (res) {
            const optMatch = qBpResult.options.find(o => o.includes(res));
-           if (optMatch) onChange(qBpResult.id, optMatch);
+           if (optMatch) setDerivedValue(qBpResult, optMatch);
         }
       } else {
-        if (formData[qBpResult.id] !== '') onChange(qBpResult.id, '');
+        clearDerivedValue(qBpResult);
       }
     }
 
@@ -347,15 +610,17 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
     if (qTumbKiri && qSnellKiri && getValue(qTumbKiri.id).toLowerCase().includes('normal')) {
         if (formData[qSnellKiri.id] !== SNELLEN_OPTIONS[0]) onChange(qSnellKiri.id, SNELLEN_OPTIONS[0]);
     }
-  }, [formData, findQ, getValue, onChange]);
+  }, [formData, findQ, getValue, onChange, setDerivedValue, clearDerivedValue]);
 
   useEffect(() => {
     if (!isEarlyChildCategory(kategoriUsia)) return;
     const allQuestions = schema?.questions || [];
-    const findAny = (keywords) => allQuestions.find(q => keywords.some(kw => String(q.question_text || '').toLowerCase().includes(kw)));
+    const findAny = (keywords) => findQuestionByKeywords(allQuestions, keywords, { includeVirtual: false });
     const isYes = (q) => q && String(getValue(q.id)).toLowerCase() === 'ya';
     const setIfDifferent = (q, value) => {
-      if (q && value && getValue(q.id) !== value) onChange(q.id, value);
+      if (!q?.id || isVirtualQuestion(q)) return;
+      const nextValue = value == null ? '' : String(value);
+      if (getValue(q.id) !== nextValue) onChange(q.id, nextValue);
     };
 
     const tbSignals = [
@@ -415,10 +680,12 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
   useEffect(() => {
     if (schema?.sheet_name !== 'BBL') return;
     const allQuestions = schema?.questions || [];
-    const findAny = (keywords) => allQuestions.find(q => keywords.every(kw => String(q.question_text || '').toLowerCase().includes(kw)));
-    const findLoose = (keywords) => allQuestions.find(q => keywords.some(kw => String(q.question_text || '').toLowerCase().includes(kw)));
+    const findAny = (keywords) => findQuestionByKeywords(allQuestions, keywords, { includeVirtual: false });
+    const findLoose = (keywords) => findQuestionByKeywords(allQuestions, keywords, { includeVirtual: false });
     const setIfDifferent = (q, value) => {
-      if (q && value && getValue(q.id) !== value) onChange(q.id, value);
+      if (!q?.id || isVirtualQuestion(q)) return;
+      const nextValue = value == null ? '' : String(value);
+      if (getValue(q.id) !== nextValue) onChange(q.id, nextValue);
     };
     const isPositive = (q) => String(getValue(q?.id)).toLowerCase().includes('positif');
 
@@ -443,10 +710,12 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
 
   useEffect(() => {
     const allQuestions = schema?.questions || [];
-    const findAny = (keywords) => allQuestions.find(q => keywords.every(kw => String(q.question_text || '').toLowerCase().includes(kw)));
-    const findLoose = (keywords) => allQuestions.find(q => keywords.some(kw => String(q.question_text || '').toLowerCase().includes(kw)));
+    const findAny = (keywords) => findQuestionByKeywords(allQuestions, keywords, { includeVirtual: false });
+    const findLoose = (keywords) => findQuestionByKeywords(allQuestions, keywords, { includeVirtual: false });
     const setIfDifferent = (q, value) => {
-      if (q && value && getValue(q.id) !== value) onChange(q.id, value);
+      if (!q?.id || isVirtualQuestion(q)) return;
+      const nextValue = value == null ? '' : String(value);
+      if (getValue(q.id) !== nextValue) onChange(q.id, nextValue);
     };
     const dayFromValue = (value) => {
       const match = String(value || '').match(/\d+/);
@@ -690,44 +959,6 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
     return normalized === 'tidak' || normalized === 'tdk' || normalized === 'no' || normalized.includes('negatif') || normalized.includes('non reaktif');
   };
 
-  const getNumberProfile = (question) => {
-    const text = String(question?.question_text || '').toLowerCase();
-    const hasAny = (keywords) => keywords.some(keyword => text.includes(keyword));
-
-    if (hasAny(['sistolik'])) return { mode: 'integer', min: 60, max: 260, unit: 'mmHg', hint: 'Periksa ulang bila di luar 60-260.' };
-    if (hasAny(['diastolik'])) return { mode: 'integer', min: 30, max: 160, unit: 'mmHg', hint: 'Periksa ulang bila di luar 30-160.' };
-    if (hasAny(['nadi'])) return { mode: 'integer', min: 30, max: 220, unit: 'x/menit', hint: 'Periksa ulang bila di luar 30-220.' };
-    if (hasAny(['napas'])) return { mode: 'integer', min: 5, max: 80, unit: 'x/menit', hint: 'Periksa ulang bila di luar 5-80.' };
-    if (hasAny(['suhu'])) return { mode: 'decimal', min: 30, max: 45, unit: 'C', hint: 'Periksa ulang bila di luar 30-45 C.' };
-    if (hasAny(['tinggi', 'panjang'])) return { mode: 'decimal', min: 30, max: 230, unit: 'cm', hint: 'Gunakan cm. Periksa ulang nilai ekstrem.' };
-    if (hasAny(['berat badan'])) return { mode: 'decimal', min: 1, max: 250, unit: 'kg', hint: 'Gunakan kg. Periksa ulang nilai ekstrem.' };
-    if (hasAny(['lingkar', 'lila'])) return { mode: 'decimal', min: 5, max: 200, unit: 'cm', hint: 'Gunakan cm. Periksa ulang nilai ekstrem.' };
-    if (hasAny(['gula darah', 'gds', 'gdp'])) return { mode: 'integer', min: 20, max: 700, unit: 'mg/dL', hint: 'Periksa ulang bila di luar 20-700.' };
-    if (hasAny(['kolesterol', 'hdl', 'ldl', 'trigliserida'])) return { mode: 'integer', min: 10, max: 1000, unit: 'mg/dL', hint: 'Periksa ulang nilai laboratorium ekstrem.' };
-    if (hasAny(['asam urat', 'kreatinin', 'hba1c', 'hb1ac', 'hemoglobin', 'imt', 'apri'])) return { mode: 'decimal', min: 0, max: 100, unit: '', hint: 'Gunakan angka desimal bila perlu.' };
-    if (hasAny(['skor', 'score', 'nilai', 'lama', 'tahun', 'bulan', 'batang', 'jumlah'])) return { mode: 'integer', min: 0, max: 999, unit: '', hint: 'Isi angka tanpa huruf.' };
-
-    return { mode: 'decimal', min: null, max: null, unit: '', hint: 'Isi angka saja.' };
-  };
-
-  const sanitizeNumberValue = (rawValue, mode = 'decimal') => {
-    const normalized = String(rawValue || '').replace(',', '.');
-    const cleaned = normalized.replace(mode === 'integer' ? /\D/g : /[^0-9.]/g, '');
-    if (mode === 'integer') return cleaned;
-    const [first, ...rest] = cleaned.split('.');
-    return rest.length ? `${first}.${rest.join('')}` : first;
-  };
-
-  const getNumberWarning = (value, profile) => {
-    const raw = String(value || '').trim();
-    if (!raw) return '';
-    const numeric = Number(raw);
-    if (Number.isNaN(numeric)) return 'Masukkan angka yang valid.';
-    if (profile.min !== null && numeric < profile.min) return profile.hint;
-    if (profile.max !== null && numeric > profile.max) return profile.hint;
-    return '';
-  };
-
   const getAnswerProfile = (question, options = []) => {
     const text = String(question?.question_text || '').toLowerCase();
     const type = String(question?.answer_type || '').toLowerCase();
@@ -772,169 +1003,6 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
     return profile.spanClass || '';
   };
 
-  const VoiceInput = ({ value, onChange, placeholder, type="text", inputMode, fieldClassName = "" }) => {
-    const [isListening, setIsListening] = useState(false);
-    const [interimText, setInterimText] = useState("");
-    const recognitionRef = useRef(null);
-    const isListeningRef = useRef(false);
-    const valueRef = useRef(value);
-
-    useEffect(() => {
-       valueRef.current = value;
-    }, [value]);
-
-    useEffect(() => {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true; 
-        recognition.interimResults = true;
-        recognition.lang = 'id-ID';
-
-        recognition.onresult = (event) => {
-          let currentFinal = "";
-          let currentInterim = "";
-
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              currentFinal += event.results[i][0].transcript + " ";
-            } else {
-              currentInterim += event.results[i][0].transcript;
-            }
-          }
-          
-          if (currentFinal) {
-             const prevVal = valueRef.current ? valueRef.current.trim() + " " : "";
-             const newVal = prevVal + currentFinal.trim();
-             valueRef.current = newVal;
-             onChange(newVal);
-          }
-          setInterimText(currentInterim);
-        };
-
-        recognition.onerror = (event) => {
-          console.error("Speech recognition error", event.error);
-          if (event.error === 'not-allowed' || event.error === 'network') {
-              isListeningRef.current = false;
-              setIsListening(false);
-          }
-        };
-
-        recognition.onend = () => {
-          if (isListeningRef.current) {
-             try { recognition.start(); } 
-             catch(e) { 
-               console.warn("Gagal melanjutkan voice input:", e);
-               isListeningRef.current = false; 
-               setIsListening(false); 
-             }
-          } else {
-             setIsListening(false);
-             setInterimText("");
-          }
-        };
-        
-        recognitionRef.current = recognition;
-      }
-      
-      return () => {
-         if (recognitionRef.current) {
-            recognitionRef.current.onend = null; 
-            recognitionRef.current.stop();
-         }
-      };
-    }, [onChange]);
-
-    const toggleListen = () => {
-      if (isListeningRef.current) {
-        isListeningRef.current = false;
-        setIsListening(false);
-        recognitionRef.current?.stop();
-        setInterimText("");
-      } else {
-        if (recognitionRef.current) {
-          try {
-            isListeningRef.current = true;
-            setIsListening(true);
-            recognitionRef.current.start();
-          } catch(e) {
-            console.error(e);
-          }
-        } else {
-          alert("Browser Anda tidak mendukung fitur Voice Recognition.");
-        }
-      }
-    };
-
-    const isSupported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-    const displayValue = isListening && interimText ? (value ? value + " " + interimText : interimText) : value;
-
-    return (
-      <div className={`relative mt-2 flex w-full items-center ${fieldClassName}`}>
-        <input 
-          type={type} 
-          value={displayValue || ''} 
-          onChange={e => {
-              onChange(e.target.value);
-              if (isListeningRef.current) toggleListen(); 
-          }}
-          required={false} 
-          placeholder={isListening ? "Mendengarkan... (bisa jeda/napas)" : placeholder}
-          inputMode={inputMode}
-          className={`w-full min-h-[50px] bg-white border font-bold text-sm py-3.5 pl-4 pr-12 rounded-xl outline-none focus:ring-2 shadow-sm transition-all ${isListening ? 'border-rose-500 ring-2 ring-rose-200 placeholder-rose-400 text-rose-700' : 'border-slate-200 text-slate-800'}`}
-        />
-        {isSupported && (
-            <button 
-               type="button" 
-               onClick={toggleListen}
-               className={`absolute right-2 p-2.5 rounded-lg transition-all shadow-sm ${isListening ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`}
-               title={isListening ? "Matikan Mic" : "Mulai Bicara"}
-            >
-               {isListening ? (
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><rect x="5" y="5" width="10" height="10" /></svg>
-               ) : (
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8h-2a5 5 0 01-10 0H3a7.001 7.001 0 006 6.93V17H6v2h8v-2h-3v-2z" clipRule="evenodd" /></svg>
-               )}
-            </button>
-        )}
-      </div>
-    );
-  };
-
-  const SmartNumberInput = ({ question, value, onChange: handleValueChange, placeholder = "0", className = "", compact = false, showUnit = true }) => {
-    const profile = getNumberProfile(question);
-    const warning = getNumberWarning(value, profile);
-    const fieldId = `number-${question.id}`;
-    const helpId = `${fieldId}-help`;
-
-    return (
-      <div className={compact ? "w-full" : "w-full"}>
-        <div className="relative">
-          <input
-            id={fieldId}
-            type="text"
-            value={value || ''}
-            onChange={(event) => handleValueChange(sanitizeNumberValue(event.target.value, profile.mode))}
-            placeholder={placeholder}
-            inputMode={profile.mode === 'integer' ? 'numeric' : 'decimal'}
-            pattern={profile.mode === 'integer' ? '[0-9]*' : '[0-9.]*'}
-            aria-invalid={Boolean(warning)}
-            aria-describedby={helpId}
-            className={`${className} ${warning ? 'border-amber-300 bg-amber-50 focus:ring-amber-400' : ''}`}
-          />
-          {showUnit && profile.unit && (
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-500">
-              {profile.unit}
-            </span>
-          )}
-        </div>
-        <p id={helpId} className={`mt-1 px-1 text-[10px] font-bold ${warning ? 'text-amber-700' : 'text-slate-400'}`}>
-          {warning || profile.hint}
-        </p>
-      </div>
-    );
-  };
-
   const CustomToggle = ({ question, options=[], variant = "segmented" }) => {
       const val = getValue(question.id);
       const hasLongOption = options.some(opt => parseOption(opt).length > 18);
@@ -964,14 +1032,14 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
       }
       
       return (
-          <div className={`${hasLongOption ? 'grid grid-cols-1 sm:grid-cols-2' : 'flex'} bg-slate-50/50 rounded-xl p-1 border border-slate-200 w-full mt-2 shadow-sm gap-1`}>
+          <div className={`segmented-control ${hasLongOption ? 'grid grid-cols-1 sm:grid-cols-2' : 'flex'} bg-slate-50/50 rounded-xl p-1 border border-slate-200 w-full mt-2 shadow-sm gap-1`}>
             {options.map((opt, i) => {
               const isWarning = opt.toLowerCase().includes('abnormal') || opt.toLowerCase().includes('positif') || opt.toLowerCase().includes('karies') || opt.toLowerCase().includes('buruk') || opt.toLowerCase().includes('ya');
               const activeClass = isWarning ? 'bg-rose-500 text-white shadow-md border-transparent' : `${getThemeColor()} text-white shadow-md border-transparent`;
               const isActive = val === opt;
               return (
                 <button key={i} type="button" onClick={() => onChange(question.id, opt)} 
-                  className={`min-w-0 flex-1 py-3.5 px-2 rounded-lg text-[11px] font-black ${hasLongOption ? 'normal-case tracking-normal leading-snug text-left' : 'uppercase tracking-wide'} transition-all break-words ${isActive ? activeClass : 'text-slate-500 hover:bg-white hover:shadow-sm'}`}>
+                  className={`segment-option ${isActive ? 'active' : ''} min-w-0 flex-1 py-3.5 px-2 rounded-lg text-[11px] font-black ${hasLongOption ? 'normal-case tracking-normal leading-snug text-left' : 'uppercase tracking-wide'} transition-all break-words ${isActive ? activeClass : 'text-slate-500 hover:bg-white hover:shadow-sm'}`}>
                   {parseOption(opt)}
                 </button>
               );
@@ -1312,9 +1380,9 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
         const useQuestionCards = ['Risiko Paru & Tuberkulosis', 'Skrining Kanker & Jantung', 'Skrining Kulit Khusus', 'Gaya Hidup & Risiko', 'Kesehatan Jiwa & Kognitif', 'Fisik Geriatri & Gizi'].includes(title);
 
         return (
-          <div key={title} className="bg-slate-50/50 rounded-2xl md:rounded-[2rem] p-3 sm:p-4 md:p-6 border border-slate-200 shadow-sm animate-fade-in-up mb-6">
-            <div className="flex flex-wrap items-start justify-between gap-3 mb-5 border-b border-slate-200/60 pb-3">
-              <h4 className="min-w-0 flex flex-1 items-center gap-3 text-slate-800 font-black leading-tight"><span className="shrink-0 text-xl">{icon}</span> <span className="break-words">{title}</span></h4>
+          <div key={title} className="form-section-card bg-slate-50/50 rounded-2xl md:rounded-[2rem] p-3 sm:p-4 md:p-6 border border-slate-200 shadow-sm animate-fade-in-up mb-6">
+            <div className="section-header flex flex-wrap items-start justify-between gap-3 mb-5 border-b border-slate-200/60 pb-3">
+              <h4 className="section-title min-w-0 flex flex-1 items-center gap-3 text-slate-800 font-black leading-tight"><span className="section-icon shrink-0 text-xl">{icon}</span> <span className="break-words">{title}</span></h4>
               <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                 <span className={`text-[9px] font-black px-2 py-1 rounded-full ${emptyCount ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'}`}>{emptyCount ? `${emptyCount} kosong` : 'Lengkap'}</span>
                 {normalFillCount > 0 && (
@@ -1351,7 +1419,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
                </div>
             )}
 
-            <div className={useQuestionCards ? "space-y-4" : (isGrid ? "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4" : "grid grid-cols-1 md:grid-cols-2 gap-4")}>
+            <div className={useQuestionCards ? "space-y-4" : (isGrid ? "form-grid grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4" : "form-grid grid grid-cols-1 md:grid-cols-2 gap-4")}>
                {visibleQs.map(q => {
                   const opts = q.question_text.toLowerCase().includes('snellen chart') ? SNELLEN_OPTIONS : q.options;
                   const questionIndex = visibleQs.findIndex(item => item.id === q.id) + 1;
@@ -1373,7 +1441,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
                   }
                   const spanClass = getQuestionSpanClass(q, opts);
                   return (
-                    <div key={q.id} className={`min-w-0 ${spanClass}`}>
+                    <div key={q.id} className={`form-field min-w-0 ${spanClass}`}>
                       <label className="text-[11px] md:text-[10px] font-black text-slate-500 uppercase tracking-wide px-1 block mb-1 leading-snug break-words">{parseQuestion(q.question_text, kategoriUsia)}</label>
                       {renderInput(q, opts)}
                     </div>
@@ -1394,36 +1462,37 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
     [qBB, qTB, qLP, qLiLA, qBetis, qSys, qDia, qRiwayatHT, findQ(['hasil tekanan darah']), qGDS, qGDP, findQ(['index massa tubuh', 'imt']), qHbA1c, qRiwayatDM, qKolesterol, qHdl, qLdl, qTrigliserida, qAsamUrat, qIntKolesterol, qIntHdl, qIntLdl, qIntTrigliserida, qIntDislipidemia].forEach(q => { if(q) usedIds.add(q.id); });
 
     return (
-      <div className="space-y-6">
+      <div className="dynamic-form-stack space-y-6">
         
         {/* CUSTOM BLOK: ANTROPOMETRI */}
         {(qBB || qTB || qBetis) && (
-          <div className="bg-slate-50/50 rounded-2xl md:rounded-[2rem] p-3 sm:p-4 md:p-6 border border-slate-200 shadow-sm mb-6">
+          <div id="pos2-antropometri" className="form-section-card bg-slate-50/50 rounded-2xl md:rounded-[2rem] p-3 sm:p-4 md:p-6 border border-slate-200 shadow-sm mb-6">
             <h4 className="flex items-center gap-3 text-slate-800 font-black mb-5 border-b border-slate-200/60 pb-3"><span className="text-xl">📏</span> Antropometri Dasar</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6 mb-6">
-              {qTB && <div>
+            <p className="section-helper">Gunakan satuan sesuai label. Periksa ulang jika nilai tampak ekstrem.</p>
+            <div className="form-grid mobile-compact-grid grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6 mb-6">
+              {qTB && <div className="form-field">
                 <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-0.5">Tinggi/Panjang <span className="text-rose-500">*</span></label>
                 <p className="text-[9px] text-slate-500 mb-2">Dalam sentimeter (cm)</p>
                     <SmartNumberInput question={qTB} value={getValue(qTB.id)} onChange={(nextValue) => onChange(qTB.id, nextValue)} className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-16 font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-500 text-lg" />
               </div>}
-              {qBB && <div>
+              {qBB && <div className="form-field">
                 <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-0.5">Berat Badan <span className="text-rose-500">*</span></label>
                 <p className="text-[9px] text-slate-500 mb-2">Dalam kilogram (kg)</p>
                 <SmartNumberInput question={qBB} value={getValue(qBB.id)} onChange={(nextValue) => onChange(qBB.id, nextValue)} className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-16 font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-500 text-lg" />
               </div>}
-              {qLP && <div>
+              {qLP && <div className="form-field">
                 <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-0.5">Lingkar Perut <span className="text-rose-500">*</span></label>
                 <p className="text-[9px] text-slate-500 mb-2">cm</p>
                 <SmartNumberInput question={qLP} value={getValue(qLP.id)} onChange={(nextValue) => onChange(qLP.id, nextValue)} className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-16 font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-500 text-lg" />
               </div>}
-              {qLiLA && <div>
+              {qLiLA && <div className="form-field full">
                 <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-0.5">LiLA <span className="text-rose-500">*</span></label>
                 <p className="text-[9px] text-slate-500 mb-2">Lingkar Lengan (cm)</p>
                 {qLiLA.answer_type === 'number' ? (
                   <SmartNumberInput question={qLiLA} value={getValue(qLiLA.id)} onChange={(nextValue) => onChange(qLiLA.id, nextValue)} className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-16 font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-500 text-lg" />
                 ) : renderInput(qLiLA)}
               </div>}
-              {qBetis && isQVisible(qBetis) && <div className="sm:col-span-2">
+              {qBetis && isQVisible(qBetis) && <div className="form-field full sm:col-span-2">
                 <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-0.5 text-orange-600">{parseQuestion(qBetis.question_text, kategoriUsia)}</label>
                 <p className="text-[9px] text-orange-400 mb-2">Lingkar Betis (cm)</p>
                 <SmartNumberInput question={qBetis} value={getValue(qBetis.id)} onChange={(nextValue) => onChange(qBetis.id, nextValue)} className="w-full border border-orange-200 rounded-xl px-4 py-3 pr-16 font-bold bg-orange-50 outline-none focus:ring-2 focus:ring-orange-500 text-lg" />
@@ -1438,14 +1507,14 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
                const imtColor = imtStatus === 'NORMAL' ? 'text-emerald-600' : (imtStatus === 'OBESITAS' || imtStatus === 'GEMUK' ? 'text-rose-600' : 'text-slate-800');
                
                return (
-                 <div className="bg-[#1e293b] text-white rounded-2xl p-5 flex flex-wrap justify-between items-center gap-3 shadow-md">
-                   <div>
-                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-1">IMT Terhitung</p>
-                      <h2 className="text-4xl font-black font-mono tracking-tighter leading-none">{imtValue}</h2>
-                      {!hasImt && <p className="mt-2 text-[10px] font-bold text-slate-300">Isi BB dan TB/PB untuk menghitung.</p>}
+                  <div className={`result-card ${hasImt ? '' : 'pending'} bg-[#1e293b] text-white rounded-2xl p-5 flex flex-wrap justify-between items-center gap-3 shadow-md`}>
+                  <div className="bp-input">
+                       <p className="result-label text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-1">IMT Terhitung</p>
+                       <h2 className="result-value text-4xl font-black font-mono tracking-tighter leading-none">{imtValue}</h2>
+                       {!hasImt && <p className="mt-2 text-[10px] font-bold text-slate-300">Menunggu tinggi dan berat badan</p>}
                    </div>
-                   <div className={`px-4 py-1.5 rounded-full font-black text-[10px] uppercase bg-white ${imtColor} shadow-sm`}>
-                      {hasImt ? imtStatus : 'MENUNGGU DATA'}
+                    <div className={`result-badge px-4 py-1.5 rounded-full font-black text-[10px] uppercase bg-white ${imtColor} shadow-sm`}>
+                       {hasImt ? imtStatus : 'Menunggu tinggi dan berat badan'}
                    </div>
                  </div>
                )
@@ -1455,17 +1524,17 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
 
         {/* CUSTOM BLOK: TENSI DARAH */}
         {qSys && (
-          <div className="bg-slate-50/50 rounded-2xl md:rounded-[2rem] p-4 md:p-6 border border-slate-200 shadow-sm mb-6">
+          <div id="pos2-tensi" className="form-section-card bg-slate-50/50 rounded-2xl md:rounded-[2rem] p-4 md:p-6 border border-slate-200 shadow-sm mb-6">
             <h4 className="flex items-center gap-3 text-slate-800 font-black mb-5 border-b border-slate-200/60 pb-3"><span className="text-xl">🩺</span> Tekanan Darah</h4>
             <div className="mb-4">
                <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-0.5 px-1">Tekanan Darah Sis/Dia <span className="text-rose-500">*</span></label>
                <p className="text-[9px] text-slate-500 mb-2 px-1">Isi sistolik dan diastolik dalam mmHg</p>
-               <div className="grid w-full md:w-2/3 grid-cols-[1fr_auto_1fr] items-end gap-3">
-                 <div>
+                <div className="bp-grid grid w-full md:w-2/3 grid-cols-[1fr_auto_1fr] items-end gap-3">
+                  <div className="bp-input">
                    <span className="mb-1 block px-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Sistolik</span>
                    <SmartNumberInput question={qSys} value={getValue(qSys.id)} onChange={(nextValue) => onChange(qSys.id, nextValue)} placeholder="120" className="w-full border border-slate-200 rounded-xl px-5 py-4 pr-20 font-black text-slate-800 text-lg tracking-widest bg-white outline-none focus:ring-2 focus:ring-[#4f46e5]" />
                  </div>
-                 <div className="pb-4 text-2xl font-black text-slate-300">/</div>
+                  <div className="bp-separator pb-4 text-2xl font-black text-slate-300">/</div>
                  <div>
                    <span className="mb-1 block px-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Diastolik</span>
                    {qDia && <SmartNumberInput question={qDia} value={getValue(qDia.id)} onChange={(nextValue) => onChange(qDia.id, nextValue)} placeholder="80" className="w-full border border-slate-200 rounded-xl px-5 py-4 pr-20 font-black text-slate-800 text-lg tracking-widest bg-white outline-none focus:ring-2 focus:ring-[#4f46e5]" />}
@@ -1474,7 +1543,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
             </div>
 
             {(parseInt(getValue(qSys.id)) >= 140 || parseInt(getValue(qDia?.id)) >= 90) && qRiwayatHT && (
-              <div className="mt-5 bg-rose-50 border border-rose-200 rounded-2xl p-5 md:w-1/2 shadow-sm animate-fade-in-up">
+              <div className="conditional-field mt-5 bg-rose-50 border border-rose-200 rounded-2xl p-5 md:w-1/2 shadow-sm animate-fade-in-up">
                 <h5 className="text-[10px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-2 mb-4"><span>⚠️</span> Tindak Lanjut Hipertensi</h5>
                 <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-2">Pernah didiagnosis Hipertensi oleh dokter?</label>
                 <CustomToggle question={qRiwayatHT} falseText="TIDAK" trueText="YA" options={qRiwayatHT.options} />
@@ -1496,25 +1565,25 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
 
         {/* CUSTOM BLOK: SKRINING GULA DARAH (POS 2) */}
         {(qGDS || qGDP) && (
-          <div className="bg-slate-50/50 rounded-2xl md:rounded-[2rem] p-4 md:p-6 border border-slate-200 shadow-sm mb-6">
+          <div id="pos2-gula" className="form-section-card bg-slate-50/50 rounded-2xl md:rounded-[2rem] p-4 md:p-6 border border-slate-200 shadow-sm mb-6">
             <h4 className="flex items-center gap-3 text-slate-800 font-black mb-5 border-b border-slate-200/60 pb-3"><span className="text-xl">🩸</span> Skrining Gula Darah</h4>
             
             <div className="mb-5">
-              <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-1 px-1">Apakah pasien berpuasa 8-12 jam sebelumnya? <span className="text-rose-500">*</span></label>
-              <div className="flex bg-slate-50/50 rounded-xl p-1 border border-slate-200 w-full mt-2 shadow-sm">
-                <button type="button" onClick={() => { setMetodeGula('sewaktu'); onChange('VIRTUAL_PUASA', 'Tidak'); }} className={`flex-1 py-4 rounded-lg text-[10px] font-black tracking-widest transition-all ${metodeGula === 'sewaktu' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-400'}`}>TIDAK (GDS)</button>
-                <button type="button" onClick={() => { setMetodeGula('puasa'); onChange('VIRTUAL_PUASA', 'Ya'); }} className={`flex-1 py-4 rounded-lg text-[10px] font-black tracking-widest transition-all ${metodeGula === 'puasa' ? `bg-[#4f46e5] text-white shadow-md border-transparent` : 'text-slate-400'}`}>YA (GDP)</button>
+              <label className="question-label block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-1 px-1">Apakah pasien berpuasa 8-12 jam sebelumnya? <span className="text-rose-500">*</span></label>
+              <div className="segmented-control flex bg-slate-50/50 rounded-xl p-1 border border-slate-200 w-full mt-2 shadow-sm">
+                <button type="button" onClick={() => { setMetodeGula('sewaktu'); onChange('VIRTUAL_PUASA', 'Tidak'); }} className={`segment-option ${metodeGula === 'sewaktu' ? 'active' : ''} flex-1 py-4 rounded-lg text-[10px] font-black tracking-widest transition-all ${metodeGula === 'sewaktu' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-400'}`}>TIDAK (GDS)</button>
+                <button type="button" onClick={() => { setMetodeGula('puasa'); onChange('VIRTUAL_PUASA', 'Ya'); }} className={`segment-option ${metodeGula === 'puasa' ? 'active' : ''} flex-1 py-4 rounded-lg text-[10px] font-black tracking-widest transition-all ${metodeGula === 'puasa' ? `bg-[#4f46e5] text-white shadow-md border-transparent` : 'text-slate-400'}`}>YA (GDP)</button>
               </div>
             </div>
 
-            <div className="mb-4 animate-fade-in-up">
+            <div className="conditional-field glucose-input mb-4 animate-fade-in-up">
                {metodeGula === 'sewaktu' && qGDS && (
-                 <div className="relative w-full max-w-72 md:max-w-sm">
+                 <div className="glucose-field relative w-full max-w-72 md:max-w-sm">
                    <SmartNumberInput question={qGDS} value={getValue(qGDS.id)} onChange={(nextValue) => onChange(qGDS.id, nextValue)} placeholder="0" className="w-full border border-slate-200 rounded-2xl px-6 py-6 pr-24 font-black text-slate-800 placeholder-slate-300 focus:text-slate-800 text-3xl tracking-wider bg-white outline-none focus:ring-4 focus:ring-[#4f46e5]/20 shadow-inner transition-all" />
                  </div>
                )}
                {metodeGula === 'puasa' && qGDP && (
-                 <div className="relative w-full max-w-72 md:max-w-sm">
+                 <div className="glucose-field relative w-full max-w-72 md:max-w-sm">
                    <SmartNumberInput question={qGDP} value={getValue(qGDP.id)} onChange={(nextValue) => onChange(qGDP.id, nextValue)} placeholder="0" className="w-full border border-slate-200 rounded-2xl px-6 py-6 pr-24 font-black text-slate-800 placeholder-slate-300 focus:text-slate-800 text-3xl tracking-wider bg-white outline-none focus:ring-4 focus:ring-[#4f46e5]/20 shadow-inner transition-all" />
                  </div>
                )}
@@ -1527,7 +1596,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
               
               if (isDiabetes && qRiwayatDM) {
                 return (
-                  <div className="mt-6 bg-rose-50 border border-rose-200 rounded-3xl p-6 md:w-2/3 shadow-sm animate-fade-in-up">
+                  <div className="conditional-field mt-6 bg-rose-50 border border-rose-200 rounded-3xl p-6 md:w-2/3 shadow-sm animate-fade-in-up">
                     <h5 className="text-[10px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-2 mb-4"><span>⚠️</span> Tindak Lanjut Diabetes</h5>
                     
                     <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest mb-2">{parseQuestion(qRiwayatDM.question_text, kategoriUsia)}</label>

@@ -292,6 +292,7 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
   });
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isGlobalFilterOpen, setIsGlobalFilterOpen] = useState(false);
   const [currentDateMs] = useState(() => Date.now());
   const [hasNewNotif, setHasNewNotif] = useState(true);
   const [filters, setFilters] = useState({
@@ -321,6 +322,13 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
     }
   };
   const headerInfo = getHeaderTitle();
+  const activeFilterCount = Object.values(filters).filter((value) => value !== 'Semua').length;
+  const filterSummary = [
+    filters.tahun,
+    filters.bulan,
+    'Malimpung',
+    activeFilterCount ? `${activeFilterCount} filter aktif` : 'Semua data'
+  ].filter(Boolean).join(' · ');
 
   useEffect(() => {
     // Membatasi pengambilan data hingga 2500 kunjungan terakhir untuk mencegah Firebase Out of Quota
@@ -935,7 +943,7 @@ const activeUsername = normalizeText(user?.username);
 
 
   return (
-    <div className="fixed inset-0 z-[70] bg-white text-slate-950 font-sans overflow-y-auto">
+    <div className="admin-shell fixed inset-0 z-[70] bg-white text-slate-950 font-sans overflow-y-auto">
       <div className="fixed right-3 top-3 z-[80] hidden md:block">
         <ConnectionStatus />
       </div>
@@ -1001,9 +1009,9 @@ const activeUsername = normalizeText(user?.username);
         </div>
       </aside>
 
-      <main className="flex min-h-screen flex-col bg-slate-50 lg:pl-64">
+      <main className="admin-main flex min-h-screen flex-col bg-slate-50 lg:pl-64">
         {/* Header mobile & title */}
-        <header className="sticky top-0 z-50 flex min-h-[5rem] items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur-sm px-4 shadow-sm lg:px-8 transition-all">
+        <header className="admin-topbar sticky top-0 z-50 flex min-h-[5rem] items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur-sm px-4 shadow-sm lg:px-8 transition-all">
           <div className="flex items-center gap-4 py-2">
             <button type="button" onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
@@ -1013,7 +1021,7 @@ const activeUsername = normalizeText(user?.username);
             </button>
             
             {/* Dynamic Title Moved to Header */}
-            <div className="flex flex-col justify-center animate-in fade-in slide-in-from-left-4 duration-500">
+            <div className="admin-title-block flex flex-col justify-center animate-in fade-in slide-in-from-left-4 duration-500">
                <h1 className={`text-xl md:text-2xl font-black leading-tight tracking-tight ${headerInfo?.color || 'text-slate-900'}`}>
                   {headerInfo?.title || 'Master Command Center'}
                </h1>
@@ -1115,12 +1123,21 @@ const activeUsername = normalizeText(user?.username);
           </div>
         </header>
 
-        <div className="flex-1 p-4 lg:p-8">
+        <div className="admin-content flex-1 p-4 lg:p-8">
           
           {/* Global Filter Bar */}
           {['pendaftaran', 'kehadiran', 'laporan', 'wilayah'].includes(activeMenu) && (
-             <div className="mb-8 border-b border-slate-200 pb-6 animate-in slide-in-from-top-4">
-             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-4">
+             <div className={`admin-filter-panel mb-8 border-b border-slate-200 pb-6 animate-in slide-in-from-top-4 ${isGlobalFilterOpen ? 'is-open' : ''}`}>
+             <div className="admin-filter-summary">
+                <div>
+                  <p className="admin-filter-eyebrow">Filter Data</p>
+                  <p className="admin-filter-text">{filterSummary}</p>
+                </div>
+                <button type="button" onClick={() => setIsGlobalFilterOpen((value) => !value)} className="admin-filter-toggle">
+                  {isGlobalFilterOpen ? 'Tutup' : 'Ubah'}
+                </button>
+             </div>
+             <div className="admin-filter-grid grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-4">
                 <div className="flex flex-col">
                    <label className="text-[10px] font-bold text-slate-500 mb-1">Tahun</label>
                    <select value={filters.tahun} onChange={e => setFilters({...filters, tahun: e.target.value})} className="border border-slate-300 rounded-lg text-xs p-2.5 outline-none focus:border-teal-500 bg-white">
@@ -1180,7 +1197,7 @@ const activeUsername = normalizeText(user?.username);
                 </div>
              </div>
              
-             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 items-end">
+             <div className="admin-filter-grid grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 items-end">
                 <div className="flex flex-col">
                    <label className="text-[10px] font-bold text-slate-500 mb-1">Kelas</label>
                    <select value={filters.kelas} onChange={e => setFilters({...filters, kelas: e.target.value})} className="border border-slate-300 rounded-lg text-xs p-2.5 outline-none focus:border-teal-500 bg-white">
@@ -1200,7 +1217,7 @@ const activeUsername = normalizeText(user?.username);
                    </select>
                 </div>
                 <div className="flex flex-col">
-                   <button onClick={() => setFilters({tahun:'Semua',bulan:'Semua',jenjang:'Semua',sekolah:'Semua',kelas:'Semua',usia:'Semua'})} className="bg-[#00b8ac] hover:bg-[#009c91] text-white text-xs font-bold py-2.5 rounded-lg border-none shadow-sm transition h-[38px]">
+                   <button onClick={() => setFilters({tahun:'Semua',bulan:'Semua',jenjang:'Semua',sekolah:'Semua',kelas:'Semua',usia:'Semua'})} className="admin-reset-filter bg-[#00b8ac] hover:bg-[#009c91] text-white text-xs font-bold py-2.5 rounded-lg border-none shadow-sm transition h-[38px]">
                       Reset Filter
                    </button>
                 </div>
@@ -2149,7 +2166,34 @@ const activeUsername = normalizeText(user?.username);
                       <h3 className="text-lg font-black text-slate-900 mb-1">Capaian Layanan per Dusun/Lingkungan</h3>
                       <p className="text-xs font-semibold text-slate-500">Tinjauan komprehensif kunjungan CKG di seluruh wilayah kerja Puskesmas Malimpung.</p>
                    </div>
-                   <div className="overflow-x-auto rounded-xl border border-slate-200">
+                   <div className="wilayah-mobile-list">
+                      {wilayahAnalytics.byDusun.map(dusun => {
+                         const risksLainnya = dusun.obesitas + dusun.paru + dusun.mental + dusun.indera;
+                         const statusLabel = dusun.total >= 20 ? 'Optimal' : dusun.total > 0 ? 'Menengah' : 'Kosong';
+                         return (
+                            <article key={`mobile-${dusun.name}`} className="wilayah-mobile-card">
+                               <div className="wilayah-mobile-card-head">
+                                  <div>
+                                     <h4>{dusun.name}</h4>
+                                     <p>{dusun.desa.replace('Desa ', '').replace('Kelurahan ', '')}</p>
+                                  </div>
+                                  <span className="wilayah-visit-pill">{formatNumber(dusun.total)}</span>
+                               </div>
+                               <div className="wilayah-risk-grid">
+                                  <span>Hipertensi <strong>{dusun.hipertensi > 0 ? formatNumber(dusun.hipertensi) : '-'}</strong></span>
+                                  <span>Diabetes <strong>{dusun.diabetes > 0 ? formatNumber(dusun.diabetes) : '-'}</strong></span>
+                                  <span>Risiko lain <strong>{risksLainnya > 0 ? formatNumber(risksLainnya) : '-'}</strong></span>
+                                  <span>Status <strong>{statusLabel}</strong></span>
+                               </div>
+                               <div className="wilayah-progress-row">
+                                  <div><span style={{ width: `${dusun.coverage}%` }} /></div>
+                                  <strong>{Math.round(dusun.coverage)}%</strong>
+                               </div>
+                            </article>
+                         );
+                      })}
+                   </div>
+                   <div className="wilayah-table-wrap overflow-x-auto rounded-xl border border-slate-200">
                       <table className="w-full text-left text-sm text-slate-600">
                          <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-black tracking-wider">
                             <tr>

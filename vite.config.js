@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['logo_malimpung.png', 'logo_pinrang.png'],
+      includeAssets: ['logo_malimpung.png', 'logo_pinrang.png', 'puskesmas_malimpung.jpg', 'pkmmalimpungicon.png'],
       manifest: {
         name: 'TERSANJUNG - Puskesmas Malimpung',
         short_name: 'TERSANJUNG',
@@ -16,14 +16,22 @@ export default defineConfig({
         background_color: '#0f172a',
         display: 'standalone',
         orientation: 'portrait',
+        start_url: '/',
+        scope: '/',
         icons: [
           {
-            src: '/pwa-192x192.png',
+            src: '/pkmmalimpungicon.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: '/pwa-512x512.png',
+            src: '/pkmmalimpungicon.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/pkmmalimpungicon.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'

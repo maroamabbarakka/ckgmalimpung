@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
+import { ChevronDown, MapPin, Printer, Ticket } from 'lucide-react';
 
 const LOGO_PINRANG = "/logo_pinrang.png";
 const LOGO_MALIMPUNG = "/logo_malimpung.png";
-import AppButton from './design-system/components/AppButton';
-import AppCard from './design-system/components/AppCard';
 import SyncStatusBanner from './components/system/SyncStatusBanner';
 import { createQueueTicket } from './services/queueService';
 import { updateActiveLocation } from './services/settingsService';
@@ -111,107 +110,113 @@ function Loket() {
 		  receiptBytes.push(...CMD_BOLD_OFF); receiptBytes.push(...CMD_FONT_B); receiptBytes.push(...encoder.encode("Lokasi Pelaksanaan CKG:\n")); receiptBytes.push(...CMD_FONT_A); receiptBytes.push(...CMD_BOLD_ON); receiptBytes.push(...encoder.encode(`${dusunAktif}\n`)); receiptBytes.push(...CMD_BOLD_OFF); receiptBytes.push(...encoder.encode(`Tgl : ${tglHariIni}\n`)); receiptBytes.push(...encoder.encode(`Jam : ${waktuLengkap} WITA\n`)); receiptBytes.push(...encoder.encode("--------------------------------\n"));
           receiptBytes.push(...CMD_FONT_B); receiptBytes.push(...CMD_BOLD_ON); receiptBytes.push(...encoder.encode('"DEKAT MELAYANI, IKHLAS MENGABDI"\n'));
           receiptBytes.push(...CMD_LINE_SPACING_DEFAULT); receiptBytes.push(...CMD_TINY_FEED); receiptBytes.push(...CMD_CUT_PAPER);
-          await sendToPrinter(receiptBytes); setLoading(false);
+          await sendToPrinter(receiptBytes); setPrinterMessage('Nomor antrean berhasil dicetak'); setLoading(false);
       } else {
           setStrukAktif(dataStruk);
-          setTimeout(() => { window.print(); setLoading(false); setTimeout(() => setStrukAktif(null), 1000); }, 500);
+          setTimeout(() => { window.print(); setPrinterMessage('Nomor antrean berhasil dicetak'); setLoading(false); setTimeout(() => setStrukAktif(null), 1000); }, 500);
       }
     } catch (error) { console.error("Error ambil antrian:", error); setPrinterMessage("Gagal mengambil antrian. Periksa koneksi internet, lalu coba lagi."); setLoading(false); }
   };
 
   return (
     <>
-      <div className="print:hidden w-full min-h-screen bg-slate-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/40 via-slate-900 to-slate-900 flex flex-col items-center p-3 sm:p-6 relative overflow-y-auto pb-20">
-        <div className="fixed left-3 top-3 z-50">
+      <div className="loket-page print:hidden w-full min-h-screen bg-slate-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/40 via-slate-900 to-slate-900 flex flex-col items-center p-3 sm:p-6 relative overflow-y-auto pb-20">
+        <div className="fixed left-3 top-[76px] z-50 hidden md:block">
           <SyncStatusBanner />
         </div>
-        <AppCard className="w-full max-w-[95%] sm:max-w-md md:max-w-xl bg-white rounded-2xl md:rounded-[3rem] shadow-2xl overflow-hidden animate-fade-in-up border border-slate-100 mt-4 md:mt-0 mb-4">
-          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white p-5 md:p-8 text-center relative overflow-hidden">
+        <div className="loket-wrapper">
+        <div className="loket-card w-full max-w-[95%] sm:max-w-md md:max-w-xl bg-white rounded-2xl md:rounded-[3rem] shadow-2xl overflow-hidden animate-fade-in-up border border-slate-100 mt-4 md:mt-0 mb-4">
+          <div className="loket-hero bg-gradient-to-br from-blue-600 to-indigo-700 text-white p-5 md:p-8 text-center relative overflow-hidden">
               <div className="absolute -top-10 -right-10 text-8xl md:text-9xl opacity-10 pointer-events-none transform rotate-12">🎟️</div>
-              <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+              <div className="printer-control absolute top-4 right-4 z-20 flex items-center gap-2">
                   {!isBtConnected ? (
-                     <button onClick={connectToPrinter} className="bg-white/20 hover:bg-white/30 backdrop-blur border border-white/40 px-3 py-1.5 rounded-full text-[9px] md:text-[10px] font-bold tracking-widest uppercase flex items-center gap-1.5 transition shadow-sm active:scale-95"><span className="text-[11px] md:text-xs">📡</span> <span>Hubungkan Printer</span></button>
+                     <button onClick={connectToPrinter} className="printer-btn bg-white/20 hover:bg-white/30 backdrop-blur border border-white/40 px-3 py-1.5 rounded-full text-[9px] md:text-[10px] font-bold tracking-widest uppercase flex items-center gap-1.5 transition shadow-sm active:scale-95"><Printer className="h-4 w-4" aria-hidden="true" /> <span>Hubungkan Printer</span></button>
                   ) : (
-                     <span className="bg-emerald-500/80 backdrop-blur border border-emerald-400 px-3 py-1.5 rounded-full text-[9px] md:text-[10px] font-bold tracking-widest uppercase flex items-center gap-1.5 shadow-sm"><span className="w-1.5 h-1.5 md:w-2 md:h-2 bg-white rounded-full animate-pulse"></span> Printer Siap</span>
+                     <span className="printer-btn printer-ready bg-emerald-500/80 backdrop-blur border border-emerald-400 px-3 py-1.5 rounded-full text-[9px] md:text-[10px] font-bold tracking-widest uppercase flex items-center gap-1.5 shadow-sm"><span className="w-1.5 h-1.5 md:w-2 md:h-2 bg-white rounded-full animate-pulse"></span> Printer Siap</span>
                   )}
               </div>
-              <div className="flex justify-center items-center gap-3 md:gap-4 mb-3 md:mb-5 relative z-10 mt-8 md:mt-0">
-                  <div className="bg-white p-2 rounded-xl shadow-md"><img src={LOGO_PINRANG} alt="Pinrang" className="h-8 md:h-12 w-auto object-contain" /></div>
-                  <div className="w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-white/50"></div>
-                  <div className="bg-white p-2 rounded-xl shadow-md"><img src={LOGO_MALIMPUNG} alt="Malimpung" className="h-8 md:h-12 w-auto object-contain" /></div>
+              <div className="hero-logo-group loket-logo-row flex justify-center items-center gap-3 md:gap-4 mb-3 md:mb-5 relative z-10 mt-8 md:mt-0">
+                  <div className="loket-logo-box bg-white p-2 rounded-xl shadow-md"><img src={LOGO_PINRANG} alt="Pinrang" className="h-8 md:h-12 w-auto object-contain" /></div>
+                  <div className="loket-logo-dot w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-white/50"></div>
+                  <div className="loket-logo-box bg-white p-2 rounded-xl shadow-md"><img src={LOGO_MALIMPUNG} alt="Malimpung" className="h-8 md:h-12 w-auto object-contain" /></div>
               </div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-widest relative z-10 drop-shadow-md">LOKET ANTRIAN</h1>
-              <p className="text-blue-200 font-bold mt-1 uppercase text-[10px] md:text-xs tracking-[0.2em] relative z-10">Puskesmas Malimpung</p>
+              <h1 className="loket-title text-xl sm:text-2xl md:text-3xl font-black tracking-widest relative z-10 drop-shadow-md">Loket Antrean</h1>
+              <p className="loket-subtitle text-blue-200 font-bold mt-1 uppercase text-[10px] md:text-xs tracking-[0.2em] relative z-10">Puskesmas Malimpung</p>
           </div>
 
-          <div className="p-4 sm:p-6 md:p-8 space-y-4 md:space-y-6">
-              <div className="bg-blue-50/70 border border-blue-100 p-3 md:p-4 rounded-xl md:rounded-2xl flex items-center md:items-start gap-3">
-                  <span className="text-xl md:text-2xl block drop-shadow-sm">📍</span>
+          <div className="info-section p-4 sm:p-6 md:p-8 space-y-4 md:space-y-6">
+              <div className="info-card location-info-card bg-blue-50/70 border border-blue-100 p-3 md:p-4 rounded-xl md:rounded-2xl flex items-center md:items-start gap-3">
+                  <MapPin className="mt-0.5 h-6 w-6 shrink-0 text-[#0080FF]" aria-hidden="true" />
                   <div>
-                      <h3 className="font-bold md:font-black text-blue-900 text-xs md:text-sm uppercase tracking-wider">Lokasi CKG Hari Ini</h3>
+                      <h3 className="info-label font-bold md:font-black text-blue-900 text-xs md:text-sm uppercase tracking-wider">Lokasi CKG Hari Ini</h3>
+                      <p className="info-value hidden md:block">{dusunAktif}</p>
                       <p className="hidden md:block text-xs text-slate-500 font-medium mt-1 leading-relaxed">Silakan atur lokasi posyandu tempat pelaksanaan Cek Kesehatan Gratis untuk men-generate karcis antrian.</p>
                   </div>
               </div>
 
               {printerMessage && (
-                  <div className={`rounded-xl border px-3 py-2 text-xs font-bold ${isBtConnected ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                  <div className={`loket-toast rounded-xl border px-3 py-2 text-xs font-bold ${printerMessage.includes('berhasil') || isBtConnected ? 'loket-toast-success border-emerald-200 bg-emerald-50 text-emerald-700' : 'loket-toast-warn border-amber-200 bg-amber-50 text-amber-700'}`}>
                       {printerMessage}
                   </div>
               )}
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="loket-status-grid grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="loket-status-card rounded-2xl border border-slate-200 bg-slate-50 p-3">
                       <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Lokasi Aktif</p>
                       <p className="mt-1 text-sm font-black leading-snug text-slate-800">{dusunAktif}</p>
                   </div>
-                  <div className="rounded-2xl border border-teal-200 bg-teal-50 p-3">
+                  <div className="loket-status-card loket-status-teal rounded-2xl border border-teal-200 bg-teal-50 p-3">
                       <p className="text-[9px] font-black uppercase tracking-[0.16em] text-teal-700">Nomor Terakhir</p>
                       <p className="mt-1 text-2xl font-black leading-none text-slate-900">{lastTicket?.nomor_antrian || '-'}</p>
                   </div>
-                  <div className={`rounded-2xl border p-3 ${isBtConnected ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+                  <div className={`loket-status-card ${isBtConnected ? 'loket-status-teal border-emerald-200 bg-emerald-50' : 'loket-status-amber border-amber-200 bg-amber-50'} rounded-2xl border p-3`}>
                       <p className={`text-[9px] font-black uppercase tracking-[0.16em] ${isBtConnected ? 'text-emerald-700' : 'text-amber-700'}`}>Printer</p>
                       <p className="mt-1 text-sm font-black leading-snug text-slate-800">{isBtConnected ? 'Tersambung' : 'Cetak Browser'}</p>
                   </div>
               </div>
 
-              <div className="space-y-3 md:space-y-4">
+              <div className="section-spacing space-y-3 md:space-y-4">
                   <div>
-                      <label className="block text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 md:mb-2 ml-1">Desa / Kelurahan</label>
+                      <label className="loket-field-label block text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 md:mb-2 ml-1">Desa / Kelurahan</label>
                       <div className="relative">
-                          <select value={desaAktif} onChange={(e) => setDesaAktif(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-slate-700 font-bold text-sm md:text-lg py-2.5 px-3 md:p-4 rounded-lg md:rounded-xl appearance-none focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer shadow-sm">
+                          <select value={desaAktif} onChange={(e) => setDesaAktif(e.target.value)} className="selector w-full bg-slate-50 border border-slate-200 text-slate-700 font-bold text-sm md:text-lg py-2.5 px-3 md:p-4 rounded-lg md:rounded-xl appearance-none focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer shadow-sm">
                               {Object.keys(WILAYAH_KERJA).map(desa => ( <option key={desa} value={desa}>{desa}</option> ))}
                           </select>
+                          <ChevronDown className="loket-select-icon pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
                           <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 font-bold text-[10px] md:text-xs">▼</div>
                       </div>
                   </div>
 
                   <div>
-                      <label className="block text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 md:mb-2 ml-1">Dusun / Posyandu</label>
+                      <label className="loket-field-label block text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 md:mb-2 ml-1">Dusun / Posyandu</label>
                       <div className="relative">
-                          <select value={dusunAktif} onChange={(e) => setDusunAktif(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-slate-700 font-bold text-sm md:text-lg py-2.5 px-3 md:p-4 rounded-lg md:rounded-xl appearance-none focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer shadow-sm">
+                          <select value={dusunAktif} onChange={(e) => setDusunAktif(e.target.value)} className="selector w-full bg-slate-50 border border-slate-200 text-slate-700 font-bold text-sm md:text-lg py-2.5 px-3 md:p-4 rounded-lg md:rounded-xl appearance-none focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer shadow-sm">
                               {WILAYAH_KERJA[desaAktif].map(dusun => ( <option key={dusun} value={dusun}>{dusun}</option> ))}
                           </select>
+                          <ChevronDown className="loket-select-icon pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
                           <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 font-bold text-[10px] md:text-xs">▼</div>
                       </div>
                   </div>
               </div>
 
-              <AppButton onClick={handleAmbilAntrian} disabled={loading} size="xl" className="w-full mt-2 md:mt-4 text-sm md:text-lg tracking-wider flex justify-center items-center gap-2 md:gap-3">
-                {loading ? (<><span className="animate-spin text-lg md:text-xl">⏳</span> MEMPROSES ANTREAN...</>) : (<><span className="text-lg md:text-xl drop-shadow-md">🖨️</span> AMBIL NOMOR ANTREAN</>)}
-              </AppButton>
+              <button type="button" onClick={handleAmbilAntrian} disabled={loading} className="queue-btn w-full mt-2 md:mt-4 text-sm md:text-lg tracking-wider flex justify-center items-center gap-2 md:gap-3">
+                {loading ? (<><span className="animate-spin text-lg md:text-xl">...</span> Memproses Antrean</>) : (<><Ticket className="h-5 w-5" aria-hidden="true" /> Ambil Nomor Antrean</>)}
+              </button>
 
               {lastTicket && (
-                  <div className="rounded-2xl border border-teal-200 bg-teal-50 p-4 text-center shadow-sm">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-teal-700">Nomor Terakhir</p>
-                      <p className="mt-2 text-5xl font-black tracking-tight text-slate-900">{lastTicket.nomor_antrian}</p>
+                  <div className="success-ticket rounded-2xl border border-teal-200 bg-teal-50 p-4 text-center shadow-sm">
+                      <p className="info-label text-[10px] font-black uppercase tracking-[0.18em] text-teal-700">Nomor Anda</p>
+                      <p className="ticket-number mt-2 text-5xl font-black tracking-tight text-slate-900">{lastTicket.nomor_antrian}</p>
+                      <p className="mt-2 text-sm font-bold text-slate-600">Silakan menunggu panggilan</p>
                       <p className="mt-2 text-xs font-bold text-slate-500">
                           {lastTicket.tempat_pelaksanaan} - {lastTicket.waktu_cetak} WITA
                       </p>
                   </div>
               )}
           </div>
-        </AppCard>
-        <div className="mt-4 md:mt-8 text-center text-slate-500 text-[9px] md:text-[10px] uppercase font-bold tracking-widest print:hidden">Sistem Loket Terpadu TERSANJUNG © 2026</div>
+        </div>
+        <div className="loket-footer mt-4 md:mt-8 text-center text-slate-500 text-[9px] md:text-[10px] uppercase font-bold tracking-widest print:hidden">Sistem Loket Terpadu TERSANJUNG © 2026</div>
+        </div>
       </div>
       {strukAktif && !isBtConnected && (
         <div className="hidden print:block w-full bg-white text-black font-sans text-center z-50">

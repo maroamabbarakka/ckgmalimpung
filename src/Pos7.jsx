@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useAuth } from './auth/AuthContext';
-import { useNavigate } from 'react-router-dom';
 import { STATUS_MAPPING } from './utils/constants';
 import { VISIT_STATUS } from './features/workflow/workflowStatus';
 import { auditQueueTransition } from './services/queueAudit';
@@ -10,7 +9,7 @@ import { getPatientByNik } from './services/patientService';
 import useQueue from './hooks/useQueue';
 import PatientStickyHeader from './components/patient/PatientStickyHeader';
 import PosBottomActionBar from './components/patient/PosBottomActionBar';
-import QueueEmptyState from './components/patient/QueueEmptyState';
+import QueueCallList from './components/patient/QueueCallList';
 
 const extractValue = (posData, keywords, questionMap) => {
   if (!questionMap) questionMap = {};
@@ -54,11 +53,11 @@ const buildClinicalSummary = (visit) => {
 
     const tensiField = extractValue(visit.pos2, ['sistolik'], visit.pos2_question_map || {}) ? `${extractValue(visit.pos2, ['sistolik'], visit.pos2_question_map || {})}/${extractValue(visit.pos2, ['diastolik'], visit.pos2_question_map || {})}` : '-';
     const tensiData = evalTensi(tensiField);
-    
+
     const gds = extractValue(visit.pos2, ['gula darah sewaktu', 'gds'], visit.pos2_question_map || {}) || extractValue(visit.pos4, ['gula darah sewaktu', 'gds'], visit.pos4_question_map || {});
     const gdp = extractValue(visit.pos2, ['gula darah puasa', 'gdp'], visit.pos2_question_map || {}) || extractValue(visit.pos4, ['gula darah puasa', 'gdp'], visit.pos4_question_map || {});
     const gulaData = evalGula(gds, gdp);
-    
+
     const imtValFull = extractValue(visit.pos2, ['imt'], visit.pos2_question_map || {}) || '-';
     let imtTone = 'slate'; let imtStatus = 'Belum Diperiksa';
     if (imtValFull !== '-') {
@@ -66,18 +65,18 @@ const buildClinicalSummary = (visit) => {
         else if (imtValFull.includes('GEMUK') || imtValFull.includes('OBESITAS')) { imtTone = 'rose'; imtStatus = 'Waspada'; }
         else { imtTone = 'amber'; imtStatus = 'Kurus'; }
     }
-    
+
     const tbParuRaw = extractValue(visit.pos5, ['batuk', 'tb', 'tbc'], visit.pos5_question_map || {});
     let tbTone = 'emerald'; let tbStatus = 'Aman'; let tbVal = 'Aman'; // Default Rapor Cetak
-    if (tbParuRaw && tbParuRaw.toLowerCase().includes('ya')) { 
-        tbTone = 'rose'; tbStatus = 'Risiko'; tbVal = 'Suspek'; 
+    if (tbParuRaw && tbParuRaw.toLowerCase().includes('ya')) {
+        tbTone = 'rose'; tbStatus = 'Risiko'; tbVal = 'Suspek';
     }
 
     return [
-        { icon: '❤️', label: 'Tensi', value: tensiField, status: tensiData.status, tone: tensiData.tone },
-        { icon: '🩸', label: 'Gula Darah', value: gulaData.nilai.split(' ')[0], status: gulaData.status, tone: gulaData.tone },
-        { icon: '⚖️', label: 'IMT / Gizi', value: imtValFull.split(' ')[0], status: imtStatus, tone: imtTone },
-        { icon: '🫁', label: 'TB/Paru', value: tbVal, status: tbStatus, tone: tbTone },
+        { icon: 'â¤ï¸', label: 'Tensi', value: tensiField, status: tensiData.status, tone: tensiData.tone },
+        { icon: 'ðŸ©¸', label: 'Gula Darah', value: gulaData.nilai.split(' ')[0], status: gulaData.status, tone: gulaData.tone },
+        { icon: 'âš–ï¸', label: 'IMT / Gizi', value: imtValFull.split(' ')[0], status: imtStatus, tone: imtTone },
+        { icon: 'ðŸ«', label: 'TB/Paru', value: tbVal, status: tbStatus, tone: tbTone },
     ];
 };
 
@@ -94,7 +93,7 @@ const VoiceTextArea = ({ value, onChange, placeholder }) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
-      recognition.continuous = true; 
+      recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'id-ID';
 
@@ -109,7 +108,7 @@ const VoiceTextArea = ({ value, onChange, placeholder }) => {
             currentInterim += event.results[i][0].transcript;
           }
         }
-        
+
         if (currentFinal) {
            const prevVal = valueRef.current ? valueRef.current.trim() + " " : "";
            const newVal = prevVal + currentFinal.trim();
@@ -135,13 +134,13 @@ const VoiceTextArea = ({ value, onChange, placeholder }) => {
            setInterimText("");
         }
       };
-      
+
       recognitionRef.current = recognition;
     }
-    
+
     return () => {
        if (recognitionRef.current) {
-          recognitionRef.current.onend = null; 
+          recognitionRef.current.onend = null;
           recognitionRef.current.stop();
        }
     };
@@ -171,19 +170,19 @@ const VoiceTextArea = ({ value, onChange, placeholder }) => {
 
   return (
     <div className="relative w-full">
-      <textarea 
-        value={displayValue || ''} 
+      <textarea
+        value={displayValue || ''}
         onChange={(e) => {
            onChange(e.target.value);
            if (isListeningRef.current) toggleListen();
-        }} 
+        }}
         placeholder={isListening ? "Mendengarkan suara Anda..." : placeholder}
         className={`w-full bg-slate-50 border rounded-xl p-4 min-h-[150px] outline-none transition-all text-sm font-semibold text-slate-800 shadow-inner pb-14 ${isListening ? 'border-teal-500 ring-2 ring-teal-200 placeholder-teal-600' : 'border-slate-200 focus:ring-2 focus:ring-[#0f766e]'}`}
         required
       />
       {isSupported && (
-        <button 
-           type="button" 
+        <button
+           type="button"
            onClick={toggleListen}
            className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex justify-center items-center transition-all shadow-md ${isListening ? 'bg-rose-500 text-white animate-pulse' : 'bg-[#0f766e] text-white hover:bg-[#115e59]'}`}
            title="Dikte Suara"
@@ -205,7 +204,7 @@ const RangkumanCardPos7 = ({ icon, title, value, status, tone }) => {
     if (tone === 'rose') { dotPos = 85; barClass = 'from-emerald-500 via-yellow-400 to-rose-500'; }
     else if (tone === 'amber') { dotPos = 60; barClass = 'from-emerald-500 via-yellow-400 to-rose-500'; }
     else if (tone === 'emerald') { dotPos = 25; barClass = 'from-emerald-500 via-yellow-400 to-rose-500'; }
-    
+
     return (
         <div className="min-w-0 border border-slate-200 rounded-2xl p-3 md:p-4 bg-white flex flex-col justify-between h-full shadow-sm hover:shadow-md transition">
             <div className="flex items-start gap-3 mb-4 min-w-0">
@@ -230,10 +229,9 @@ function Pos7() {
   const antrian = useQueue('POS7');
   const [pasienAktif, setPasienAktif] = useState(null);
   const [kesimpulan, setKesimpulan] = useState('');
-  const [loading, setLoading] = useState(false); 
+  const [loading, setLoading] = useState(false);
   const [callingVisitId, setCallingVisitId] = useState(null);
   const [pesan, setPesan] = useState('');
-  const navigate = useNavigate();
 
   const handlePanggil = async (item) => {
     if (callingVisitId || pasienAktif) return;
@@ -250,24 +248,25 @@ function Pos7() {
       setPasienAktif(latestData); setPesan(''); setKesimpulan(latestData.kesimpulan_dokter || ''); window.scrollTo({ top: 0, behavior: 'smooth' });
       try { await createTvQueueCall({ pos: "POS 7", queueNumber: latestData.nomor_antrian, speechText: buildQueueSpeech(latestData.nomor_antrian, 'Silakan menuju meja Dokter di Pos Tujuh.') }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 7:", e); }
     } catch (e) {
-      alert("⚠️ " + e.message);
+      alert("âš ï¸ " + e.message);
     } finally {
       setCallingVisitId(null);
     }
   };
 
   const handleSelesaikan = async (e) => {
-    e.preventDefault(); if (!pasienAktif || loading) return; setLoading(true); setPesan('');
+    e.preventDefault(); if (!pasienAktif || loading || isFinalized) return; setLoading(true); setPesan('');
     try {
-      // 🚀 UBAH STATUS JADI SELESAI (Hilang dari semua antrean Pos)
-      await updateVisit(pasienAktif.id, { 
+      // ðŸš€ UBAH STATUS JADI SELESAI (Hilang dari semua antrean Pos)
+      const finalizedVisitPatch = {
           status: VISIT_STATUS.FINALIZED,
-          status_antrian: STATUS_MAPPING.SELESAI, 
-          dokter_pemeriksa: user?.nama || 'Dokter/Petugas', 
+          status_antrian: STATUS_MAPPING.SELESAI,
+          dokter_pemeriksa: user?.nama || 'Dokter/Petugas',
           kesimpulan_dokter: kesimpulan,
           waktu_selesai: nowTimestamp(),
           petugas_aktif: null
-      });
+      };
+      await updateVisit(pasienAktif.id, finalizedVisitPatch);
       await auditQueueTransition({
         visit: pasienAktif,
         module: 'Pos 7',
@@ -275,12 +274,9 @@ function Pos7() {
         toStatus: STATUS_MAPPING.SELESAI,
         extra: { status: VISIT_STATUS.FINALIZED, dokter_pemeriksa: user?.nama || 'Dokter/Petugas' }
       });
-      setPesan(`✅ Pemeriksaan Selesai! Pasien dapat melihat rapornya.`); 
-      setTimeout(() => {
-          setPasienAktif(null);
-          navigate('/dashboard');
-      }, 1500); 
-    } catch (error) { setPesan("❌ Gagal menyimpan data: " + error.message); } finally { setLoading(false); }
+      setPesan(`âœ… Pemeriksaan Selesai! Pasien dapat melihat rapornya.`);
+      setPasienAktif(prev => prev ? ({ ...prev, ...finalizedVisitPatch }) : prev);
+    } catch (error) { setPesan("âŒ Gagal menyimpan data: " + error.message); } finally { setLoading(false); }
   };
 
   const handleBatal = async () => {
@@ -310,7 +306,7 @@ function Pos7() {
       });
       setPasienAktif(null);
     } catch (error) {
-      setPesan("❌ Gagal mengembalikan pasien: " + error.message);
+      setPesan("âŒ Gagal mengembalikan pasien: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -319,6 +315,9 @@ function Pos7() {
   const applyTemplate = (text) => {
     setKesimpulan(text);
   };
+
+  const isFinalized = pasienAktif?.status === VISIT_STATUS.FINALIZED || pasienAktif?.status_antrian === STATUS_MAPPING.SELESAI;
+  const raporUrl = pasienAktif?.id ? `/rapor/${pasienAktif.id}?petugas=${encodeURIComponent(user?.nama || '')}` : '';
 
     const kirimWA = async () => {
       const nama = pasienAktif.pasien_snapshot?.nama || "Pasien";
@@ -336,7 +335,7 @@ function Pos7() {
       const sys = extractValue(pasienAktif.pos2, ['sistolik'], pasienAktif.pos2_question_map);
       const dia = extractValue(pasienAktif.pos2, ['diastolik'], pasienAktif.pos2_question_map);
       const tensiRes = sys && dia ? `${sys}/${dia}` : '-';
-      
+
       let teks = `Halo ${nama},%0A%0ABerikut adalah ringkasan hasil Pemeriksaan Kesehatan Anda hari ini di Puskesmas:%0A`;
       teks += `-%20IMT/Gizi:%20${imt}%0A`;
       teks += `-%20Tensi:%20${tensiRes}%0A`;
@@ -353,49 +352,46 @@ function Pos7() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto mobile-safe-page px-2 md:px-0 font-sans">
+    <div className="pos-page-container space-y-6 max-w-5xl mx-auto mobile-safe-page px-2 md:px-0 font-sans">
       {!pasienAktif ? (
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-6 border-b border-slate-100 pb-3">POS 7: KESIMPULAN DOKTER ({antrian.length})</h3>
-            {antrian.length === 0 ? (<QueueEmptyState accentClass="text-[#0f766e]" />) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                {antrian.map((item) => (
-                <button type="button" key={item.id} onClick={() => handlePanggil(item)} disabled={Boolean(callingVisitId)} className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col items-center justify-center cursor-pointer hover:border-[#0f766e] group shadow-sm transition-all disabled:cursor-wait disabled:opacity-60">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 group-hover:text-[#0f766e]">Antrian</p>
-                    <h3 className="text-3xl font-black text-slate-800 mb-3 group-hover:text-[#0f766e]">{item.nomor_antrian}</h3>
-                    <div className="bg-slate-100 text-slate-600 text-[8px] font-black px-3 py-1 rounded uppercase tracking-widest">{callingVisitId === item.id ? 'Memanggil...' : item.kategori_usia_satusehat}</div>
-                </button>
-                ))}
-            </div>
-            )}
-        </div>
+        <>
+        <QueueCallList
+          queue={antrian}
+          onCall={handlePanggil}
+          callingVisitId={callingVisitId}
+        />
+        </>
       ) : (
-      <div className="bg-slate-50 rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
+      <div className="pos-main-card bg-slate-50 rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
         <PatientStickyHeader
           visit={pasienAktif}
-          posLabel="Pos 7: Kesimpulan Dokter"
+          posLabel="Pos 7: Rapor"
           accentClass="bg-[#0f766e]"
-          onCancel={handleBatal}
+          onCancel={isFinalized ? () => setPasienAktif(null) : handleBatal}
+          cancelLabel={isFinalized ? 'Tutup' : 'Batal'}
+          queueCount={antrian.length}
         />
         <div className="hidden bg-[#0f766e] p-6 text-white flex justify-between items-center">
-            <div className="flex items-center gap-3"><span className="text-3xl">🩺</span><h2 className="text-4xl font-black">{pasienAktif.nomor_antrian}</h2></div>
-            <button type="button" onClick={handleBatal} className="bg-white/20 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-white/30 transition-all">✕ Batal</button>
+            <div className="flex items-center gap-3"><span className="text-3xl">ðŸ©º</span><h2 className="text-4xl font-black">{pasienAktif.nomor_antrian}</h2></div>
+            <button type="button" onClick={handleBatal} className="bg-white/20 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-white/30 transition-all">âœ• Batal</button>
         </div>
 
-        <form onSubmit={handleSelesaikan} className="p-4 md:p-6 bg-[#f8fafc] mobile-safe-page">
-            {pesan && <div className={`p-4 rounded-xl font-bold text-xs shadow-sm mb-6 ${pesan.includes('❌') ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>{pesan}</div>}
-            
-            <div className="bg-white px-6 py-5 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center mb-6">
+        <form onSubmit={handleSelesaikan} className="pos-form-surface p-4 md:p-6 bg-[#f8fafc] mobile-safe-page">
+            {pesan && <div className={`p-4 rounded-xl font-bold text-xs shadow-sm mb-6 ${pesan.includes('âŒ') ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>{pesan}</div>}
+
+            <div className="patient-summary-card bg-white px-6 py-5 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center mb-6">
                 <div>
                    <h3 className="font-black text-lg">{pasienAktif.pasien_snapshot?.nama || "Tanpa Nama"}</h3>
-                   <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{pasienAktif.umur_saat_periksa} THN • {pasienAktif.kategori_usia_satusehat}</p>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{pasienAktif.umur_saat_periksa} THN â€¢ {pasienAktif.kategori_usia_satusehat}</p>
                 </div>
-                <a href={`/rapor/${pasienAktif.id}?petugas=${encodeURIComponent(user?.nama || '')}`} target="_blank" rel="noreferrer" className="text-xs font-bold text-[#0f766e] bg-teal-50 px-4 py-2 rounded-lg border border-teal-200 hover:bg-teal-100">📄 Lihat Draft Rapor</a>
+                <a href={raporUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-[#0f766e] bg-teal-50 px-4 py-2 rounded-lg border border-teal-200 hover:bg-teal-100">
+                  {isFinalized ? 'ðŸ“„ Buka Rapor Final' : 'ðŸ“„ Lihat Draft Rapor'}
+                </a>
             </div>
 
-            <div className="bg-white rounded-[2rem] p-5 border border-slate-200 shadow-sm mb-6">
+            <div className="form-section-card bg-white rounded-[2rem] p-5 border border-slate-200 shadow-sm mb-6">
               <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-4">
-                <h4 className="font-black text-slate-800 flex items-center gap-2"><span>📌</span> Ringkasan Klinis</h4>
+                <h4 className="font-black text-slate-800 flex items-center gap-2"><span>ðŸ“Œ</span> Ringkasan Klinis</h4>
                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Review cepat</span>
               </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
@@ -405,8 +401,8 @@ function Pos7() {
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl md:rounded-[2rem] p-4 md:p-6 border border-slate-200 shadow-sm animate-fade-in-up">
-              <h4 className="flex items-center gap-3 text-slate-800 font-black mb-5 border-b border-slate-100 pb-3"><span className="text-xl">✍️</span> Kesimpulan & Edukasi Dokter</h4>
+            <div className="form-section-card bg-white rounded-2xl md:rounded-[2rem] p-4 md:p-6 border border-slate-200 shadow-sm animate-fade-in-up">
+              <h4 className="flex items-center gap-3 text-slate-800 font-black mb-5 border-b border-slate-100 pb-3"><span className="text-xl">âœï¸</span> Kesimpulan & Edukasi Dokter</h4>
                             <div className="flex flex-wrap gap-2 mb-4">
                 {[
                   { title: "Normal Sehat", text: 'Dalam batas normal. Tetap pertahankan pola hidup sehat dan kontrol rutin sesuai jadwal.' },
@@ -420,29 +416,55 @@ function Pos7() {
                 ))}
               </div>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Tuliskan hasil diagnosis, anjuran gaya hidup, atau instruksi rujukan.</p>
-              <VoiceTextArea 
-                 value={kesimpulan} 
-                 onChange={(val) => setKesimpulan(val)} 
-                 placeholder="Contoh: Pasien terindikasi Hipertensi Tahap 1. Anjuran: Kurangi konsumsi garam dan kontrol kembali minggu depan..." 
+              <VoiceTextArea
+                 value={kesimpulan}
+                 onChange={(val) => setKesimpulan(val)}
+                 placeholder="Contoh: Pasien terindikasi Hipertensi Tahap 1. Anjuran: Kurangi konsumsi garam dan kontrol kembali minggu depan..."
               />
             </div>
 
-            <PosBottomActionBar
-               backLabel="Kembali ke Pos 6"
-               primaryLabel="Tandai Selesai"
-               loading={loading}
-               onBack={handleKembaliPosSebelumnya}
-               primaryColorClass="bg-[#0f766e] hover:bg-[#115e59]"
-               secondaryAction={(
-                 <button
-                   type="button"
-                   onClick={kirimWA}
-                   className="w-full min-h-[60px] rounded-2xl bg-[#25D366] px-4 text-sm font-black uppercase text-white shadow-lg transition-all hover:bg-[#128C7E] active:scale-95"
-                 >
-                   Kirim WA
-                 </button>
-               )}
-            />
+            {isFinalized ? (
+              <div className="sticky mobile-safe-submit z-40 mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => setPasienAktif(null)}
+                  className="w-full min-h-[60px] rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black uppercase text-slate-700 shadow-sm transition-all hover:bg-slate-50 active:scale-95"
+                >
+                  Kembali ke Antrian
+                </button>
+                <button
+                  type="button"
+                  onClick={kirimWA}
+                  className="w-full min-h-[60px] rounded-2xl bg-[#25D366] px-4 text-sm font-black uppercase text-white shadow-lg transition-all hover:bg-[#128C7E] active:scale-95"
+                >
+                  Kirim WA
+                </button>
+                <a
+                  href={raporUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex w-full min-h-[60px] items-center justify-center rounded-2xl bg-[#0f766e] px-4 text-sm font-black uppercase text-white shadow-lg transition-all hover:bg-[#115e59] active:scale-95"
+                >
+                  Unduh / Cetak Rapor
+                </a>
+              </div>
+            ) : (
+              <PosBottomActionBar
+                 backLabel="Kembali ke Pos 6"
+                 primaryLabel="Tandai Selesai"
+                 loading={loading}
+                 onBack={handleKembaliPosSebelumnya}
+                 secondaryAction={(
+                   <button
+                     type="button"
+                     onClick={kirimWA}
+                     className="w-full min-h-[60px] rounded-2xl bg-[#25D366] px-4 text-sm font-black uppercase text-white shadow-lg transition-all hover:bg-[#128C7E] active:scale-95"
+                   >
+                     Kirim WA
+                   </button>
+                 )}
+              />
+            )}
         </form>
       </div>
       )}

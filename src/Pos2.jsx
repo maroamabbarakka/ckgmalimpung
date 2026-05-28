@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { X } from 'lucide-react';
 import { useAuth } from './auth/AuthContext';
 import formSchemas from './formSchemas.json';
 import DynamicFormRenderer from './DynamicFormRenderer';
@@ -12,9 +13,11 @@ import useQueue from './hooks/useQueue';
 import { useAutosaveDraft } from './hooks/useAutosaveDraft';
 import { clearDraft, loadDraft } from './utils/draftStorage';
 import { MobileQueueDrawer } from './features/pos/shared/MobileQueueDrawer';
-import PatientStickyHeader from './components/patient/PatientStickyHeader';
 import PosBottomActionBar from './components/patient/PosBottomActionBar';
-import QueueEmptyState from './components/patient/QueueEmptyState';
+import WorkflowStepper from './components/patient/WorkflowStepper';
+import QueueStatusBadge from './design-system/components/QueueStatusBadge';
+import { maskNik } from './utils/privacy';
+import QueueCallList from './components/patient/QueueCallList';
 
 function Pos2() {
   const { user } = useAuth();
@@ -146,38 +149,61 @@ function Pos2() {
   const getActiveSchema = () => getSchemaForVisit(pasienAktif);
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto mobile-safe-page px-2 md:px-0 font-sans">
+    <div className="pos2-page pos-page-container space-y-6 max-w-5xl mx-auto mobile-safe-page px-2 md:px-0 font-sans">
       {!pasienAktif ? (
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-6 border-b border-slate-100 pb-3">POS 2: ANTROPOMETRI, TENSI & GULA DARAH ({antrian.length})</h3>
-            {antrian.length === 0 ? (
-              <QueueEmptyState accentClass="text-[#4f46e5]" />
-            ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                {antrian.map((item) => (
-                <button type="button" key={item.id} onClick={() => handlePanggil(item)} disabled={Boolean(callingVisitId)} className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col items-center justify-center cursor-pointer hover:border-[#4f46e5] group shadow-sm disabled:cursor-wait disabled:opacity-60">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 group-hover:text-[#4f46e5]">Antrian</p>
-                    <h3 className="text-3xl font-black text-slate-800 mb-3 group-hover:text-[#4f46e5]">{item.nomor_antrian}</h3>
-                    <div className="bg-slate-100 text-slate-600 text-[8px] font-black px-3 py-1 rounded uppercase tracking-widest">{callingVisitId === item.id ? 'Memanggil...' : item.kategori_usia_satusehat}</div>
-                </button>
-                ))}
-            </div>
-            )}
-        </div>
-      ) : (
-      <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
-        <PatientStickyHeader
-          visit={pasienAktif}
-          posLabel="Pos 2: Antropometri, Tensi & Gula Darah"
-          accentClass="bg-[#4f46e5]"
-          onCancel={handleBatal}
+        <>
+        <QueueCallList
+          queue={antrian}
+          onCall={handlePanggil}
+          callingVisitId={callingVisitId}
         />
+        </>
+      ) : (
+      <div className="pos-main-card pos2-workflow bg-white rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
+        <div className="pos-header pos-workflow-header">
+          <div className="pos-stepper">
+            <WorkflowStepper activeKey="pos2" />
+          </div>
+          <div className="mobile-status-summary md:hidden">Status: Siap diperiksa</div>
+
+          <div className="pos-header-main pos2-header-main">
+            <div className="pos2-patient-block">
+              <div className="queue-code queue-number">{pasienAktif.nomor_antrian || '-'}</div>
+              <div className="min-w-0">
+                <p className="pos-type-label pos-label">P2 · Antropometri, Tensi & Gula Darah</p>
+                <h2 className="patient-name">{pasienAktif.pasien_snapshot?.nama || "Tanpa Nama"}</h2>
+                <p className="patient-meta">{umurPasien} THN · {kategoriPasien} <span className="patient-nik">· NIK {maskNik(pasienAktif?.patientNIK)}</span></p>
+              </div>
+            </div>
+
+            <div className="header-actions header-action-row">
+              <QueueStatusBadge status={pasienAktif?.status_antrian} className="header-status-chip bg-white/15 text-white border-white/20" />
+              <button type="button" onClick={() => setQueueDrawerOpen(true)} className="header-queue-btn header-action-primary">
+                Antri Pos 2 ({antrian.length})
+              </button>
+              <button type="button" onClick={handleBatal} className="header-cancel-btn header-action-secondary" aria-label="Batalkan pasien aktif" title="Batal">
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+
+          <div className="status-chip-row header-status-row">
+            <span>OK Identitas Lengkap</span>
+            <span>OK Antrean Aktif</span>
+            <span>{draftSavedAt ? `Draft tersimpan ${draftSavedAt}` : 'Draft lokal aktif'}</span>
+          </div>
+        </div>
         <div className="hidden bg-[#4f46e5] p-6 text-white flex justify-between items-center">
             <h2 className="text-4xl font-black">{pasienAktif.nomor_antrian}</h2>
             <button type="button" onClick={handleBatal} className="bg-white/20 text-white px-4 py-2 rounded-xl font-bold text-xs">✕ Batal</button>
         </div>
-        <form onSubmit={handleSimpanData} className="p-4 md:p-6 bg-[#f8fafc] mobile-safe-page">
-            <div className="mb-3 md:hidden">
+        <form onSubmit={handleSimpanData} className="pos2-form p-4 md:p-6 bg-[#f8fafc] mobile-safe-page">
+            <div className="mobile-section-tabs md:hidden" aria-label="Navigasi bagian pemeriksaan Pos 2">
+              <a href="#pos2-antropometri">Antropometri</a>
+              <a href="#pos2-tensi">Tensi</a>
+              <a href="#pos2-gula">Gula Darah</a>
+            </div>
+            <div className="queue-list-button mb-3 md:hidden">
               <button
                 type="button"
                 onClick={() => setQueueDrawerOpen(true)}
@@ -186,10 +212,10 @@ function Pos2() {
                 Lihat Antrean ({antrian.length})
               </button>
             </div>
-            <div className="bg-white px-6 py-5 rounded-2xl shadow-sm border border-slate-200">
+            <div className="patient-summary-card bg-white px-6 py-5 rounded-2xl shadow-sm border border-slate-200">
                 <h3 className="font-black text-lg">{pasienAktif.pasien_snapshot?.nama || "Tanpa Nama"}</h3>
                 <p className="text-[10px] font-bold text-slate-400 uppercase">{umurPasien} THN • {kategoriPasien}</p>
-                <p className="mt-2 text-[10px] font-bold uppercase text-emerald-600">
+                <p className="autosave-status mt-2 text-[10px] font-bold uppercase text-emerald-600">
                   {draftSavedAt ? `Draft lokal tersimpan ${draftSavedAt}` : 'Draft lokal aktif'}
                 </p>
             </div>
@@ -201,7 +227,6 @@ function Pos2() {
               primaryLabel="Simpan & Lanjut Pos 3"
               loading={loading}
               onBack={handleKembaliPosSebelumnya}
-              primaryColorClass="bg-[#4f46e5] hover:bg-indigo-700"
             />
         </form>
       </div>

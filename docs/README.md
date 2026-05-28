@@ -15,4 +15,6 @@ Sumber aktif saat ini:
 2. src/formSchemas.json
 3. public/Laporan_Tersanjung_Final.html
 4. firestore.rules
-5. patch aktif di docs/PATCH_*.md
+5. docs/core/SMART_UI_UX_STANDARD.md
+6. docs/core/IMPLEMENTATION_HISTORY_SMART_UI_UX.md
+7. patch aktif di docs/PATCH_*.md

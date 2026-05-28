@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+﻿import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { exportToPKGExcel, exportClusterExcel, exportToPKG_PDF, exportClusterPDF } from './utils/exportPKG';
 import { STATUS_MAPPING } from './utils/constants';
@@ -71,7 +71,7 @@ const CardStatClickable = ({ title, value, subtitle, gradient, icon, onClick }) 
         </div>
         <div className="flex justify-between items-end relative z-10 mt-2">
             <p className="text-[8px] lg:text-[9px] font-bold bg-black/10 px-1.5 py-1 rounded-md border border-white/10 truncate max-w-[75%]">{subtitle}</p>
-            <span className="bg-white/30 rounded-full w-6 h-6 flex items-center justify-center text-[10px] transition-colors group-hover:bg-white/50 shadow-inner">🔍</span>
+            <span className="bg-white/30 rounded-full w-6 h-6 flex items-center justify-center text-[10px] transition-colors group-hover:bg-white/50 shadow-inner">ðŸ”</span>
         </div>
     </div>
 );
@@ -202,17 +202,17 @@ const defaultLayouts = {
     { i: 'traffic', x: 0, y: 0, w: 6, h: 7, minW: 4, minH: 5 },
     { i: 'umur', x: 0, y: 7, w: 6, h: 5, minW: 4, minH: 3 },
     { i: 'demografi', x: 6, y: 0, w: 6, h: 4, minW: 4, minH: 3 },
-    
+
     { i: 'tot-antrian', x: 12, y: 0, w: 6, h: 4, minW: 5, minH: 3 },
     { i: 'tot-selesai', x: 18, y: 0, w: 6, h: 4, minW: 5, minH: 3 },
-    
+
     { i: 'stat-hipertensi', x: 6, y: 4, w: 3, h: 4, minW: 2, minH: 3 },
     { i: 'stat-diabetes', x: 9, y: 4, w: 3, h: 4, minW: 2, minH: 3 },
     { i: 'stat-obesitas', x: 12, y: 4, w: 3, h: 4, minW: 2, minH: 3 },
     { i: 'stat-paru', x: 15, y: 4, w: 3, h: 4, minW: 2, minH: 3 },
     { i: 'stat-mental', x: 18, y: 4, w: 3, h: 4, minW: 2, minH: 3 },
     { i: 'stat-indera', x: 21, y: 4, w: 3, h: 4, minW: 2, minH: 3 },
-    
+
     { i: 'ekspor', x: 6, y: 8, w: 18, h: 4, minW: 10, minH: 2 },
     { i: 'quality', x: 0, y: 12, w: 12, h: 5, minW: 8, minH: 4 },
     { i: 'bottleneck', x: 12, y: 12, w: 12, h: 5, minW: 8, minH: 4 },
@@ -250,7 +250,7 @@ function Dashboard() {
         return saved ? JSON.parse(saved) : defaultLayouts;
     } catch { return defaultLayouts; }
   });
-  
+
   const [isEditMode, setIsEditMode] = useState(false);
   const [popupConfig, setPopupConfig] = useState({ isOpen: false, type: '', title: '' });
 
@@ -281,8 +281,8 @@ function Dashboard() {
       if (!isAdmin) return;
       setIsEditMode(!isEditMode);
       setPopupConfig({isOpen: false, type: '', title: ''});
-      if (!isEditMode) setPesan("🛠️ Mode Kustomisasi Aktif: Silakan atur lebar dan posisi panel.");
-      else setPesan("💾 Tata letak berhasil dikunci.");
+      if (!isEditMode) setPesan("ðŸ› ï¸ Mode Kustomisasi Aktif: Silakan atur lebar dan posisi panel.");
+      else setPesan("ðŸ’¾ Tata letak berhasil dikunci.");
       setTimeout(() => setPesan(""), 4000);
   };
 
@@ -292,7 +292,7 @@ function Dashboard() {
         setLayouts(defaultLayouts);
         localStorage.removeItem("dashboardLayout_v21");
         setIsEditMode(false);
-        setPesan("🔄 Tata letak berhasil di-reset penuh.");
+        setPesan("ðŸ”„ Tata letak berhasil di-reset penuh.");
         setTimeout(() => setPesan(""), 3000);
     }
   };
@@ -312,20 +312,20 @@ function Dashboard() {
 
   // --- KALKULASI STATISTIK KLINIS PTM ---
   const kalkulasiStatistik = (data) => {
-    let s = { 
-        total: data.length, selesai: 0, antri: 0, 
-        perPos: createEmptyPerPosStats(), 
-        gender: { L: 0, P: 0 }, usia: {}, 
-        klinis: { hipertensi: 0, hiperglikemia: 0, obesitas: 0, paru_ppok: 0, mental: 0, indera: 0 } 
+    let s = {
+        total: data.length, selesai: 0, antri: 0,
+        perPos: createEmptyPerPosStats(),
+        gender: { L: 0, P: 0 }, usia: {},
+        klinis: { hipertensi: 0, hiperglikemia: 0, obesitas: 0, paru_ppok: 0, mental: 0, indera: 0 }
     };
-    
+
     data.forEach(v => {
         const posKey = getPosKeyFromStatus(v.status_antrian);
         if (posKey && s.perPos[posKey] !== undefined) s.perPos[posKey]++;
         if (v.status_antrian === 'Selesai') s.selesai++; else s.antri++;
         if (v.pasien_snapshot?.j_kelamin === 'L') s.gender.L++;
         if (v.pasien_snapshot?.j_kelamin === 'P') s.gender.P++;
-        
+
         const rawKat = v.kategori_usia_satusehat || 'Dewasa';
         const kat = ['SD', 'SMP', 'SMA'].includes(rawKat) ? 'Anak/Siswa' : rawKat;
         s.usia[kat] = (s.usia[kat] || 0) + 1;
@@ -340,14 +340,14 @@ function Dashboard() {
         const gds = parseInt(v.pos4?.gds || extractDashboardValue(v.pos4, ['gula darah sewaktu', 'gds'], v.pos4_question_map) || v.pos2?.gds || extractDashboardValue(v.pos2, ['gula darah sewaktu', 'gds'], v.pos2_question_map) || 0);
         const gdp = parseInt(v.pos4?.gdp || extractDashboardValue(v.pos4, ['gula darah puasa', 'gdp'], v.pos4_question_map) || v.pos2?.gdp || extractDashboardValue(v.pos2, ['gula darah puasa', 'gdp'], v.pos2_question_map) || 0);
         if (gds >= 200 || gdp >= 126) s.klinis.hiperglikemia++;
-        
+
         const tbRaw = v.pos2?.tb || extractDashboardValue(v.pos2, ['tinggi badan'], v.pos2_question_map);
         const bbRaw = v.pos2?.bb || extractDashboardValue(v.pos2, ['berat badan'], v.pos2_question_map);
         if (kat !== 'Bayi' && kat !== 'Balita' && tbRaw && bbRaw) {
             const tb = parseFloat(tbRaw); const bb = parseFloat(bbRaw);
             if(tb > 0 && bb > 0) {
                 const imt = bb / Math.pow(tb/100, 2);
-                if (imt >= 25.0) s.klinis.obesitas++; 
+                if (imt >= 25.0) s.klinis.obesitas++;
             }
         }
 
@@ -355,7 +355,7 @@ function Dashboard() {
         if (p4.ppok?.nafas_pendek === 'Ya' || p5.ppok?.nafas_pendek === 'Ya' || p4.merokok?.batuk_lama === 'Ya' || p5.merokok?.batuk_lama === 'Ya' || p4.resiko_ca_paru?.riw_merokok === 'Ya' || p4.resiko_tb?.batuk_lama === '>2Mg' || p5.resiko_tb?.batuk === 'Ya' || extractDashboardValue(p5, ['batuk'], v.pos5_question_map) === 'Ya') s.klinis.paru_ppok++;
 
         const p3 = v.pos3 || {}; const p6 = v.pos6 || {}; const skilas = p3.skilas || p6.skilas || {};
-        const isMental = Object.values(p3.jiwa_srq20 || {}).some(val => String(val) !== 'Tidak' && String(val) !== 'Tdk' && val !== undefined && val !== '') || 
+        const isMental = Object.values(p3.jiwa_srq20 || {}).some(val => String(val) !== 'Tidak' && String(val) !== 'Tdk' && val !== undefined && val !== '') ||
                          Object.values(p6.jiwa_srq20 || {}).some(val => String(val) !== 'Tidak' && String(val) !== 'Tdk' && val !== undefined && val !== '') ||
                          Object.values(p3.jiwa_sdq || {}).some(val => String(val) === 'Ya') ||
                          Object.values(p6.jiwa_sdq || {}).some(val => String(val) === 'Ya') ||
@@ -401,7 +401,7 @@ function Dashboard() {
           valA = a.waktu_ambil_tiket?.toMillis ? a.waktu_ambil_tiket.toMillis() : 0;
           valB = b.waktu_ambil_tiket?.toMillis ? b.waktu_ambil_tiket.toMillis() : 0;
       }
-      
+
       if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
       if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
@@ -463,7 +463,7 @@ function Dashboard() {
   // OPTIMASI: useMemo untuk popup pasien
   const popupPatients = useMemo(() => {
       if (!popupConfig.isOpen) return [];
-      
+
       return visits.filter(v => {
           if (popupConfig.type === 'hipertensi') {
               const bp = getVisitBloodPressure(v);
@@ -495,14 +495,14 @@ function Dashboard() {
   }, [visits, popupConfig]);
 
   const popupDetailsInfo = {
-      'hipertensi': { icon: '🩺', title: 'Pasien Hipertensi (TD ≥ 140)' },
-      'diabetes': { icon: '🩸', title: 'Pasien Diabetes (Gula Tinggi)' },
-      'obesitas': { icon: '⚖️', title: 'Pasien Overweight & Obesitas' },
-      'paru_ppok': { icon: '🫁', title: 'Risiko Paru, PPOK & Perokok' },
-      'mental': { icon: '🧠', title: 'Indikasi Gangguan Emosional' },
-      'indera': { icon: '👁️', title: 'Gangguan Indera Mata / Telinga' }
+      'hipertensi': { icon: 'ðŸ©º', title: 'Pasien Hipertensi (TD â‰¥ 140)' },
+      'diabetes': { icon: 'ðŸ©¸', title: 'Pasien Diabetes (Gula Tinggi)' },
+      'obesitas': { icon: 'âš–ï¸', title: 'Pasien Overweight & Obesitas' },
+      'paru_ppok': { icon: 'ðŸ«', title: 'Risiko Paru, PPOK & Perokok' },
+      'mental': { icon: 'ðŸ§ ', title: 'Indikasi Gangguan Emosional' },
+      'indera': { icon: 'ðŸ‘ï¸', title: 'Gangguan Indera Mata / Telinga' }
   };
-  const currentPopupInfo = popupDetailsInfo[popupConfig.type] || { icon: '📋', title: 'Detail Data Pasien' };
+  const currentPopupInfo = popupDetailsInfo[popupConfig.type] || { icon: 'ðŸ“‹', title: 'Detail Data Pasien' };
 
   // =====================================================================
   // FUNGSI EKSPOR FLAT
@@ -613,7 +613,7 @@ function Dashboard() {
               },
               after
           });
-          setEditingVisit(null); alert("✅ Data diperbarui.");
+          setEditingVisit(null); alert("âœ… Data diperbarui.");
       } catch (e) { alert("Gagal: " + e.message); }
   };
 
@@ -630,7 +630,7 @@ function Dashboard() {
   const widgets = {
     'traffic': (
         <div key="traffic" className={`bg-white rounded-[1.5rem] shadow-sm border p-6 flex flex-col h-full ${isEditMode && !isMobile ? 'border-amber-400 cursor-move border-2' : 'border-slate-200'}`}>
-            <h3 className="font-black text-slate-800 text-[11px] uppercase tracking-[0.2em] border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><span>🚦</span> Traffic Real-Time</h3>
+            <h3 className="font-black text-slate-800 text-[11px] uppercase tracking-[0.2em] border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><span>ðŸš¦</span> Traffic Real-Time</h3>
             <div className="space-y-3 flex-1 flex flex-col justify-center">
                 {POS_QUEUE_OPTIONS.map(pos => (
                     <ProgressBarQueue key={pos.key} label={pos.trafficLabel} count={stats.perPos[pos.key]} colorClass={pos.colorClass} />
@@ -640,7 +640,7 @@ function Dashboard() {
     ),
     'umur': (
         <div key="umur" className={`bg-white rounded-[1.5rem] shadow-sm border p-6 flex flex-col h-full ${isEditMode && !isMobile ? 'border-amber-400 cursor-move border-2' : 'border-slate-200'}`}>
-            <h3 className="font-black text-slate-800 text-[11px] uppercase tracking-[0.2em] border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><span>📊</span> Proporsi Sasaran</h3>
+            <h3 className="font-black text-slate-800 text-[11px] uppercase tracking-[0.2em] border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><span>ðŸ“Š</span> Proporsi Sasaran</h3>
             <div className="space-y-4 flex-1 flex flex-col justify-center">
                 <ProgressBarAge label="Bayi & Balita" count={(stats.usia['Bayi']||0) + (stats.usia['Balita']||0)} total={stats.total} colorClass="bg-pink-400" />
                 <ProgressBarAge label="Anak & Siswa" count={stats.usia['Anak/Siswa'] || 0} total={stats.total} colorClass="bg-amber-400" />
@@ -651,7 +651,7 @@ function Dashboard() {
     ),
     'demografi': (
         <div key="demografi" className={`bg-white rounded-[1.5rem] shadow-sm border p-6 flex flex-col justify-center h-full ${isEditMode && !isMobile ? 'border-amber-400 cursor-move border-2' : 'border-slate-200'}`}>
-            <h3 className="font-black text-slate-800 text-[11px] uppercase tracking-[0.2em] mb-4">🚻 Gender</h3>
+            <h3 className="font-black text-slate-800 text-[11px] uppercase tracking-[0.2em] mb-4">ðŸš» Gender</h3>
             <div className="flex justify-between text-[11px] font-black mb-2">
                 <span className="text-blue-600">PRIA ({stats.gender.L})</span>
                 <span className="text-pink-600">WANITA ({stats.gender.P})</span>
@@ -718,54 +718,54 @@ function Dashboard() {
     ),
     'tot-antrian': (
         <div key="tot-antrian" className={`h-full ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move rounded-[1.5rem] p-0.5' : ''}`}>
-            <CardStat title="Total Antrian" value={stats.total} subtitle="Pasien Terdaftar" gradient="from-blue-600 to-indigo-700" icon="👥" />
+            <CardStat title="Total Antrian" value={stats.total} subtitle="Pasien Terdaftar" gradient="from-blue-600 to-indigo-700" icon="ðŸ‘¥" />
         </div>
     ),
     'tot-selesai': (
         <div key="tot-selesai" className={`h-full ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move rounded-[1.5rem] p-0.5' : ''}`}>
-            <CardStat title="Selesai Skrining" value={stats.selesai} subtitle="Rapor Diterbitkan" gradient="from-emerald-600 to-teal-700" icon="✅" />
+            <CardStat title="Selesai Skrining" value={stats.selesai} subtitle="Rapor Diterbitkan" gradient="from-emerald-600 to-teal-700" icon="âœ…" />
         </div>
     ),
     'stat-hipertensi': (
         <div key="stat-hipertensi" className={`h-full ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move rounded-[1.5rem] p-0.5' : ''}`}>
-            <CardStatClickable title="Hipertensi" value={stats.klinis.hipertensi} subtitle="Tensi >= 140" gradient="from-rose-500 to-pink-600" icon="🩺" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'hipertensi'}) : handlePublicRestrictedDetail()} />
+            <CardStatClickable title="Hipertensi" value={stats.klinis.hipertensi} subtitle="Tensi >= 140" gradient="from-rose-500 to-pink-600" icon="ðŸ©º" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'hipertensi'}) : handlePublicRestrictedDetail()} />
         </div>
     ),
     'stat-diabetes': (
         <div key="stat-diabetes" className={`h-full ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move rounded-[1.5rem] p-0.5' : ''}`}>
-            <CardStatClickable title="Gula Tinggi" value={stats.klinis.hiperglikemia} subtitle="GDS >= 200" gradient="from-orange-500 to-amber-600" icon="🩸" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'diabetes'}) : handlePublicRestrictedDetail()} />
+            <CardStatClickable title="Gula Tinggi" value={stats.klinis.hiperglikemia} subtitle="GDS >= 200" gradient="from-orange-500 to-amber-600" icon="ðŸ©¸" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'diabetes'}) : handlePublicRestrictedDetail()} />
         </div>
     ),
     'stat-obesitas': (
         <div key="stat-obesitas" className={`h-full ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move rounded-[1.5rem] p-0.5' : ''}`}>
-            <CardStatClickable title="Obesitas" value={stats.klinis.obesitas} subtitle="IMT >= 25" gradient="from-amber-500 to-yellow-600" icon="⚖️" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'obesitas'}) : handlePublicRestrictedDetail()} />
+            <CardStatClickable title="Obesitas" value={stats.klinis.obesitas} subtitle="IMT >= 25" gradient="from-amber-500 to-yellow-600" icon="âš–ï¸" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'obesitas'}) : handlePublicRestrictedDetail()} />
         </div>
     ),
     'stat-paru': (
         <div key="stat-paru" className={`h-full ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move rounded-[1.5rem] p-0.5' : ''}`}>
-            <CardStatClickable title="Risiko Paru" value={stats.klinis.paru_ppok} subtitle="PPOK/TB/Rokok" gradient="from-cyan-500 to-sky-600" icon="🫁" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'paru_ppok'}) : handlePublicRestrictedDetail()} />
+            <CardStatClickable title="Risiko Paru" value={stats.klinis.paru_ppok} subtitle="PPOK/TB/Rokok" gradient="from-cyan-500 to-sky-600" icon="ðŸ«" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'paru_ppok'}) : handlePublicRestrictedDetail()} />
         </div>
     ),
     'stat-mental': (
         <div key="stat-mental" className={`h-full ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move rounded-[1.5rem] p-0.5' : ''}`}>
-            <CardStatClickable title="Mental Jiwa" value={stats.klinis.mental} subtitle="Risiko Emosional" gradient="from-indigo-500 to-purple-600" icon="🧠" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'mental'}) : handlePublicRestrictedDetail()} />
+            <CardStatClickable title="Mental Jiwa" value={stats.klinis.mental} subtitle="Risiko Emosional" gradient="from-indigo-500 to-purple-600" icon="ðŸ§ " onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'mental'}) : handlePublicRestrictedDetail()} />
         </div>
     ),
     'stat-indera': (
         <div key="stat-indera" className={`h-full ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move rounded-[1.5rem] p-0.5' : ''}`}>
-            <CardStatClickable title="Indera" value={stats.klinis.indera} subtitle="Mata & Telinga" gradient="from-teal-500 to-emerald-600" icon="👁️" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'indera'}) : handlePublicRestrictedDetail()} />
+            <CardStatClickable title="Indera" value={stats.klinis.indera} subtitle="Mata & Telinga" gradient="from-teal-500 to-emerald-600" icon="ðŸ‘ï¸" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'indera'}) : handlePublicRestrictedDetail()} />
         </div>
     ),
     'ekspor': isAdmin ? (
         <div key="ekspor" className={`bg-white rounded-[1.5rem] shadow-sm border p-4 lg:p-6 flex flex-col justify-center h-full ${isEditMode && !isMobile ? 'border-amber-400 cursor-move border-2' : 'border-slate-200'}`}>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-3 mb-4 gap-3">
-                <h3 className="font-black text-[11px] text-slate-800 uppercase tracking-widest">📂 UNDUH LAPORAN</h3>
+                <h3 className="font-black text-[11px] text-slate-800 uppercase tracking-widest">ðŸ“‚ UNDUH LAPORAN</h3>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 {/* KOLEKTIF */}
                 <div className="flex flex-col gap-2 bg-slate-100/80 p-3 rounded-2xl border border-slate-200 shadow-sm">
                     <div className="flex items-center justify-center gap-2 mb-1">
-                        <span className="text-lg leading-none">📥</span>
+                        <span className="text-lg leading-none">ðŸ“¥</span>
                         <span className="font-black text-[10px] text-slate-800 uppercase tracking-widest">Data Kolektif</span>
                     </div>
                     <div className="flex flex-col gap-2">
@@ -778,7 +778,7 @@ function Dashboard() {
                 {['Balita', 'Anak/Siswa', 'Dewasa', 'Lansia'].map(k => (
                     <div key={k} className="flex flex-col gap-2 bg-slate-50/50 p-3 rounded-2xl border border-slate-100">
                         <div className="flex items-center justify-center gap-2 mb-1">
-                            <span className="text-lg leading-none">{k === 'Balita' ? '🍼' : k === 'Anak/Siswa' ? '🎒' : k === 'Dewasa' ? '💼' : '🧓'}</span>
+                            <span className="text-lg leading-none">{k === 'Balita' ? 'ðŸ¼' : k === 'Anak/Siswa' ? 'ðŸŽ’' : k === 'Dewasa' ? 'ðŸ’¼' : 'ðŸ§“'}</span>
                             <span className="font-black text-[10px] text-slate-700 uppercase tracking-widest">{k}</span>
                         </div>
                         <div className="flex flex-col gap-2">
@@ -791,7 +791,7 @@ function Dashboard() {
         </div>
     ) : (
         <div key="ekspor" className="bg-slate-50 rounded-[1.5rem] shadow-inner border border-slate-200 p-6 flex flex-col justify-center items-center h-full text-slate-400">
-            <span className="text-3xl mb-2 opacity-50">🔒</span>
+            <span className="text-3xl mb-2 opacity-50">ðŸ”’</span>
             <p className="text-xs font-black uppercase tracking-widest text-center text-slate-500">Ekspor Terkunci<br/><span className="text-[9px] font-bold text-slate-400">Fitur Khusus Administrator</span></p>
         </div>
     ),
@@ -800,7 +800,7 @@ function Dashboard() {
             <div className="p-5 border-b flex flex-col lg:flex-row justify-between items-center gap-4 bg-slate-50/80 backdrop-blur-md sticky top-0 z-20">
                 <div className="relative w-full lg:w-80">
                     <input type="text" placeholder="Cari NIK / Nama / Antrian..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-2xl border-2 border-slate-200 text-xs font-bold focus:border-blue-500 outline-none transition-all shadow-inner" />
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">ðŸ”</span>
                 </div>
                 {selectedRows.length > 0 && (
                     <div className="flex gap-2 w-full lg:w-auto">
@@ -822,7 +822,7 @@ function Dashboard() {
                                         <p className="font-black text-slate-800 text-base leading-tight break-words">{v.pasien_snapshot?.nama || 'Tanpa Nama'}</p>
                                         <p className="text-[11px] font-mono text-slate-400 mt-1 break-all">NIK: {maskNik(v.patientNIK)}</p>
                                         <div className="mt-3 flex flex-wrap items-center gap-2">
-                                            <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase text-slate-600">{v.kategori_usia_satusehat || 'Dewasa'} · {v.umur_saat_periksa || 0} THN</span>
+                                            <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase text-slate-600">{v.kategori_usia_satusehat || 'Dewasa'} Â· {v.umur_saat_periksa || 0} THN</span>
                                             <QueueStatusBadge status={v.status_antrian} className="rounded-lg px-2.5 py-1 text-[10px]" />
                                         </div>
                                         <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] font-black">
@@ -831,8 +831,8 @@ function Dashboard() {
                                         </div>
                                     </div>
                                     <div className="flex shrink-0 flex-col gap-2">
-                                        <button type="button" aria-label="Buka rapor digital" title="Buka rapor digital" onClick={() => window.open(`/rapor/${v.id}`, '_blank')} className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-teal-600 shadow-sm">🖨️</button>
-                                        <button type="button" aria-label="Edit data pasien" title="Edit data pasien" onClick={() => openEditModal(v)} className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-blue-600 shadow-sm">✏️</button>
+                                        <button type="button" aria-label="Buka rapor digital" title="Buka rapor digital" onClick={() => window.open(`/rapor/${v.id}`, '_blank')} className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-teal-600 shadow-sm">ðŸ–¨ï¸</button>
+                                        <button type="button" aria-label="Edit data pasien" title="Edit data pasien" onClick={() => openEditModal(v)} className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-blue-600 shadow-sm">âœï¸</button>
                                     </div>
                                 </div>
                             </div>
@@ -843,10 +843,10 @@ function Dashboard() {
                     <thead className="bg-white border-b-2 border-slate-100 sticky top-0 z-10 shadow-sm">
                         <tr className="font-black uppercase text-slate-400 text-[10px] tracking-widest">
                             <th className="px-4 py-3 w-12 text-center"><input type="checkbox" onChange={handleSelectAll} checked={selectedRows.length === filteredVisits.length && filteredVisits.length > 0} className="w-4 h-4 rounded border-slate-300 cursor-pointer" /></th>
-                            <th className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => requestSort('identitas')}>Identitas Pasien {sortConfig.key === 'identitas' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}</th>
-                            <th className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => requestSort('kategori')}>Kategori Umur {sortConfig.key === 'kategori' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}</th>
-                            <th className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => requestSort('klinis')}>Status Klinis Dasar {sortConfig.key === 'klinis' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}</th>
-                            <th className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => requestSort('antrian')}>Posisi Antrian {sortConfig.key === 'antrian' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}</th>
+                            <th className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => requestSort('identitas')}>Identitas Pasien {sortConfig.key === 'identitas' ? (sortConfig.direction === 'asc' ? 'â–²' : 'â–¼') : ''}</th>
+                            <th className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => requestSort('kategori')}>Kategori Umur {sortConfig.key === 'kategori' ? (sortConfig.direction === 'asc' ? 'â–²' : 'â–¼') : ''}</th>
+                            <th className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => requestSort('klinis')}>Status Klinis Dasar {sortConfig.key === 'klinis' ? (sortConfig.direction === 'asc' ? 'â–²' : 'â–¼') : ''}</th>
+                            <th className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => requestSort('antrian')}>Posisi Antrian {sortConfig.key === 'antrian' ? (sortConfig.direction === 'asc' ? 'â–²' : 'â–¼') : ''}</th>
                             <th className="px-4 py-3 text-center">Aksi</th>
                         </tr>
                     </thead>
@@ -867,8 +867,8 @@ function Dashboard() {
                                     </td>
                                     <td className="px-4 py-2">
                                         <div className="flex gap-2">
-                                            <span className="bg-white border border-slate-200 px-2 py-1 rounded-md font-bold text-rose-600 text-[10px] shadow-sm leading-none">🩺 {getVisitBloodPressure(v).label}</span>
-                                            <span className="bg-white border border-slate-200 px-2 py-1 rounded-md font-bold text-orange-600 text-[10px] shadow-sm leading-none">🩸 {getVisitGlucose(v).label}</span>
+                                            <span className="bg-white border border-slate-200 px-2 py-1 rounded-md font-bold text-rose-600 text-[10px] shadow-sm leading-none">ðŸ©º {getVisitBloodPressure(v).label}</span>
+                                            <span className="bg-white border border-slate-200 px-2 py-1 rounded-md font-bold text-orange-600 text-[10px] shadow-sm leading-none">ðŸ©¸ {getVisitGlucose(v).label}</span>
                                         </div>
                                     </td>
                                     <td className="px-4 py-2">
@@ -876,8 +876,8 @@ function Dashboard() {
                                     </td>
                                     <td className="px-4 py-2 text-center">
                                         <div className="flex justify-center gap-2">
-                                            <button onClick={() => window.open(`/rapor/${v.id}`, '_blank')} className="w-8 h-8 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-teal-600 shadow-sm hover:bg-teal-600 hover:text-white transition">🖨️</button>
-                                            <button onClick={() => openEditModal(v)} className="w-8 h-8 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-blue-600 shadow-sm hover:bg-blue-600 hover:text-white transition">✏️</button>
+                                            <button onClick={() => window.open(`/rapor/${v.id}`, '_blank')} className="w-8 h-8 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-teal-600 shadow-sm hover:bg-teal-600 hover:text-white transition">ðŸ–¨ï¸</button>
+                                            <button onClick={() => openEditModal(v)} className="w-8 h-8 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-blue-600 shadow-sm hover:bg-blue-600 hover:text-white transition">âœï¸</button>
                                         </div>
                                     </td>
                                 </tr>
@@ -889,7 +889,7 @@ function Dashboard() {
         </div>
     ) : (
         <div key="tabel" className="bg-slate-50 rounded-[2.5rem] shadow-inner border border-slate-200 overflow-hidden flex flex-col items-center justify-center h-full min-h-[400px] text-slate-400 p-8">
-            <span className="text-6xl mb-4 opacity-50">🔒</span>
+            <span className="text-6xl mb-4 opacity-50">ðŸ”’</span>
             <h3 className="text-sm md:text-base font-black uppercase tracking-widest text-center text-slate-600">Daftar Pasien Disembunyikan</h3>
             <p className="text-[10px] md:text-xs text-center mt-3 max-w-md font-bold text-slate-400 leading-relaxed">
                 Sesuai kebijakan privasi dan perlindungan data rekam medis, detail identitas (Nama/NIK) dan riwayat klinis individu tidak dapat diakses secara publik.
@@ -905,50 +905,51 @@ function Dashboard() {
 
   return (
     <div className="fixed inset-0 z-[60] bg-[#f8fafc] flex flex-col h-screen w-screen overflow-hidden font-sans">
-      
+
       {/* HEADER PUTIH ATAS */}
       <header className="h-14 bg-white border-b border-slate-200 px-4 md:px-6 flex justify-between items-center shrink-0 shadow-sm print-hidden sticky top-0 z-50">
           <div className="flex items-center gap-2 md:gap-3">
-              <span className="w-7 h-7 bg-slate-900 text-white rounded-lg flex items-center justify-center text-sm shadow-sm">📊</span>
+              <span className="w-7 h-7 bg-slate-900 text-white rounded-lg flex items-center justify-center text-sm shadow-sm">ðŸ“Š</span>
               <h1 className="font-black text-slate-800 text-sm md:text-base tracking-widest uppercase hidden sm:block">Master Command Center</h1>
           </div>
           <div className="flex items-center gap-2">
               {!isMobile && isAdmin && (
                   <button onClick={toggleEditMode} className={`px-3 py-1.5 rounded-lg font-bold text-[10px] md:text-xs transition flex items-center gap-1.5 border shadow-sm ${isEditMode ? 'bg-amber-500 text-white border-amber-600 animate-pulse' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>
-                      {isEditMode ? '💾 KUNCI TATA LETAK' : '🛠️ KUSTOMISASI'}
+                      {isEditMode ? 'ðŸ’¾ KUNCI TATA LETAK' : 'ðŸ› ï¸ KUSTOMISASI'}
                   </button>
               )}
               <div className="w-px h-5 bg-slate-300 mx-1 hidden md:block"></div>
-              <button onClick={() => navigate('/')} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg font-bold text-[10px] md:text-xs transition flex items-center gap-1.5 hidden md:flex"><span>🏠</span> Beranda</button>
+              <button onClick={() => navigate('/')} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg font-bold text-[10px] md:text-xs transition flex items-center gap-1.5 hidden md:flex"><span>ðŸ </span> Beranda</button>
               {isAuthenticated ? (
-                  <button onClick={handleLogout} className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 px-3 py-1.5 rounded-lg font-bold text-[10px] md:text-xs transition flex items-center gap-1.5 hidden md:flex"><span>🚪</span> Keluar</button>
+                  <button onClick={handleLogout} className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 px-3 py-1.5 rounded-lg font-bold text-[10px] md:text-xs transition flex items-center gap-1.5 hidden md:flex"><span>ðŸšª</span> Keluar</button>
               ) : (
-                  <button onClick={() => navigate('/login')} className="bg-blue-600 hover:bg-blue-700 text-white border border-blue-500 px-3 py-1.5 rounded-lg font-bold text-[10px] md:text-xs transition flex items-center gap-1.5 hidden md:flex"><span>🔑</span> Masuk Admin</button>
+                  <button onClick={() => navigate('/login')} className="bg-blue-600 hover:bg-blue-700 text-white border border-blue-500 px-3 py-1.5 rounded-lg font-bold text-[10px] md:text-xs transition flex items-center gap-1.5 hidden md:flex"><span>ðŸ”‘</span> Masuk Admin</button>
               )}
           </div>
       </header>
 
       {/* DASHBOARD KONTEN AREA */}
       <div className="flex-1 w-full overflow-y-auto overflow-x-hidden relative">
-          
-          {/* BANNER HITAM */}
+          <div className="dashboard-container">
+
+              {/* BANNER HITAM */}
           <div className="m-4 lg:m-6 bg-slate-900 rounded-2xl px-5 py-4 md:px-6 shadow-md border border-slate-800 flex flex-col md:flex-row justify-between items-center gap-3 relative overflow-hidden shrink-0">
               <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
-              
+
               <div className="relative z-10 flex items-center gap-4">
                   <div className="hidden md:flex w-16 h-16 bg-white rounded-2xl items-center justify-center border-4 border-emerald-400 p-1.5 animate-pulse shadow-lg shadow-emerald-500/50 shrink-0">
                       <img src="/logo_pinrang.png" alt="Logo Pinrang" className="w-full h-full object-contain" />
                   </div>
                   <div className="text-center md:text-left">
                       <h2 className="text-xl md:text-2xl font-black text-white tracking-tight drop-shadow-md leading-none">Dashboard Data TERSANJUNG</h2>
-                      <p className="text-emerald-400 text-[10px] mt-1 font-bold uppercase tracking-widest">Live Monitoring • Puskesmas Malimpung</p>
+                      <p className="text-emerald-400 text-[10px] mt-1 font-bold uppercase tracking-widest">Live Monitoring â€¢ Puskesmas Malimpung</p>
                   </div>
               </div>
-              
+
               <div className="relative z-10 flex flex-col sm:flex-row gap-2 w-full md:w-auto items-center shrink-0">
-                  
+
                   <div className="flex items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-lg px-2 w-full sm:w-auto">
-                      <span className="text-xs mr-1">🌍</span>
+                      <span className="text-xs mr-1">ðŸŒ</span>
                       <select value={filterDesa} onChange={(e) => setFilterDesa(e.target.value)} className="w-full sm:w-48 bg-transparent text-white py-2 font-bold text-xs outline-none cursor-pointer">
                           <option value="Semua" className="text-slate-900">Seluruh Wilayah Kerja</option>
                           <option value="Desa Malimpung" className="text-slate-900">Desa Malimpung</option>
@@ -956,10 +957,10 @@ function Dashboard() {
                           <option value="Kelurahan Maccirinna" className="text-slate-900">Kel. Maccirinna</option>
                       </select>
                   </div>
-                  
+
                   {!isMobile && isAdmin && (
                       <button onClick={resetLayout} className="w-full sm:w-auto bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 border border-rose-500 active:scale-95 shrink-0">
-                          🔄 RESET LAYOUT
+                          ðŸ”„ RESET LAYOUT
                       </button>
                   )}
               </div>
@@ -970,7 +971,7 @@ function Dashboard() {
 
           {/* AREA WIDGET (CONDITIONAL RENDERING) */}
           <div className={`mx-4 lg:mx-6 mb-10 ${isEditMode && !isMobile ? "bg-slate-200/50 rounded-[2rem] border-2 border-dashed border-amber-400 p-2" : ""}`}>
-              
+
               {isMobile ? (
                   // =====================================================================
                   // TAMPILAN MOBILE: NATIVE FLEXBOX (Performa Sangat Tinggi)
@@ -1003,13 +1004,13 @@ function Dashboard() {
                       <AutoWidthGrid
                           className="layout"
                           layouts={layouts}
-                          breakpoints={{ lg: 1200, md: 996, sm: 768 }} 
-                          cols={{ lg: 24, md: 24, sm: 24 }} 
-                          rowHeight={40} 
+                          breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+                          cols={{ lg: 24, md: 24, sm: 24 }}
+                          rowHeight={40}
                           onLayoutChange={handleLayoutChange}
-                          isDraggable={isEditMode} 
-                          isResizable={isEditMode} 
-                          margin={[16, 16]} 
+                          isDraggable={isEditMode}
+                          isResizable={isEditMode}
+                          margin={[16, 16]}
                           useCSSTransforms={true}
                       >
                           {/* Render semua value dari objek widgets */}
@@ -1021,6 +1022,7 @@ function Dashboard() {
               )}
 
           </div>
+        </div>
 
       </div>
 
@@ -1036,7 +1038,7 @@ function Dashboard() {
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Daftar Pasien Hasil Skrining Risiko Tinggi</p>
                         </div>
                       </div>
-                      <button onClick={() => setPopupConfig({isOpen: false, type: '', title: ''})} className="w-12 h-12 bg-slate-100 text-slate-500 hover:bg-rose-600 hover:text-white rounded-full flex items-center justify-center transition-all font-black shadow-inner">✕</button>
+                      <button onClick={() => setPopupConfig({isOpen: false, type: '', title: ''})} className="w-12 h-12 bg-slate-100 text-slate-500 hover:bg-rose-600 hover:text-white rounded-full flex items-center justify-center transition-all font-black shadow-inner">âœ•</button>
                   </div>
                   <div className="flex-1 overflow-y-auto min-h-0 bg-slate-50/50 rounded-[2rem] p-4 border-2 border-slate-100 shadow-inner custom-scrollbar">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1045,14 +1047,14 @@ function Dashboard() {
                                   <div className="flex justify-between">
                                       <div>
                                           <p className="font-black text-slate-800 text-base">{p.pasien_snapshot?.nama}</p>
-                                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{p.kategori_usia_satusehat} • {p.umur_saat_periksa} THN</p>
+                                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{p.kategori_usia_satusehat} â€¢ {p.umur_saat_periksa} THN</p>
                                       </div>
-                                      <span className="text-2xl group-hover:translate-x-1 transition-transform">➔</span>
+                                      <span className="text-2xl group-hover:translate-x-1 transition-transform">âž”</span>
                                   </div>
                                   <div className="mt-4 flex flex-wrap gap-2">
-                                      {popupConfig.type === 'hipertensi' && <span className="bg-rose-50 text-rose-700 px-3 py-1 rounded-lg text-[10px] font-black border border-rose-200">🩺 TD: {getVisitBloodPressure(p).label}</span>}
-                                      {popupConfig.type === 'diabetes' && <span className="bg-orange-50 text-orange-700 px-3 py-1 rounded-lg text-[10px] font-black border border-orange-200">🩸 Gula: {getVisitGlucose(p).label}</span>}
-                                      {popupConfig.type === 'obesitas' && <span className="bg-amber-50 text-amber-700 px-3 py-1 rounded-lg text-[10px] font-black border border-amber-200">⚖️ IMT: {(parseFloat(p.pos2?.bb) / Math.pow(parseFloat(p.pos2?.tb)/100, 2)).toFixed(1)}</span>}
+                                      {popupConfig.type === 'hipertensi' && <span className="bg-rose-50 text-rose-700 px-3 py-1 rounded-lg text-[10px] font-black border border-rose-200">ðŸ©º TD: {getVisitBloodPressure(p).label}</span>}
+                                      {popupConfig.type === 'diabetes' && <span className="bg-orange-50 text-orange-700 px-3 py-1 rounded-lg text-[10px] font-black border border-orange-200">ðŸ©¸ Gula: {getVisitGlucose(p).label}</span>}
+                                      {popupConfig.type === 'obesitas' && <span className="bg-amber-50 text-amber-700 px-3 py-1 rounded-lg text-[10px] font-black border border-amber-200">âš–ï¸ IMT: {(parseFloat(p.pos2?.bb) / Math.pow(parseFloat(p.pos2?.tb)/100, 2)).toFixed(1)}</span>}
                                   </div>
                               </div>
                           ))}
@@ -1067,7 +1069,7 @@ function Dashboard() {
       {isAdmin && editingVisit && (
           <div className="fixed inset-0 z-[300] bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4 print-hidden">
               <div className="bg-white rounded-[2rem] w-full max-w-lg p-6 md:p-8 shadow-2xl animate-fade-in-up">
-                  <h3 className="font-black text-lg mb-4 border-b pb-2 text-slate-800">✏️ Edit Rekam Medis</h3>
+                  <h3 className="font-black text-lg mb-4 border-b pb-2 text-slate-800">âœï¸ Edit Rekam Medis</h3>
                   <div className="space-y-3">
                       <div><label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Nama Pasien</label><input type="text" value={editForm.nama} onChange={e => setEditForm({...editForm, nama: e.target.value})} className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm font-bold mt-1" /></div>
                       <div><label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">NIK</label><input type="text" value={editForm.nik} onChange={e => setEditForm({...editForm, nik: e.target.value})} className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm font-mono mt-1" /></div>

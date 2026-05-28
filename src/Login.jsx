@@ -1,16 +1,36 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
-import AppButton from './design-system/components/AppButton';
-import AppCard from './design-system/components/AppCard';
-import AppInput from './design-system/components/AppInput';
 
 const LOGO_PINRANG = "/logo_pinrang.png";
 const LOGO_MALIMPUNG = "/logo_malimpung.png";
 const HERO_IMAGE = "/puskesmas_malimpung.jpg";
+const WORKFLOW_ITEMS = ['Antrean', 'Pemeriksaan', 'Rapor', 'Monitoring'];
 const MAX_FAILED_ATTEMPTS = 5;
 const FAILED_ATTEMPT_DELAY_MS = 2000;
 const LOCKOUT_MS = 60000;
+
+const UserIcon = () => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className="login-input-icon">
+    <path d="M20 21a8 8 0 0 0-16 0" />
+    <circle cx="12" cy="8" r="4" />
+  </svg>
+);
+
+const LockIcon = () => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className="login-input-icon">
+    <rect x="4" y="11" width="16" height="9" rx="2" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+  </svg>
+);
+
+const LogInIcon = () => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" className="login-button-icon">
+    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+    <path d="M10 17l5-5-5-5" />
+    <path d="M15 12H3" />
+  </svg>
+);
 
 function Login() {
   const [username, setUsername] = useState('');
@@ -55,98 +75,135 @@ function Login() {
     setFailedAttempts(nextFailedAttempts);
     setCurrentTime(Date.now());
     setRetryAfter(Date.now() + (nextFailedAttempts >= MAX_FAILED_ATTEMPTS ? LOCKOUT_MS : FAILED_ATTEMPT_DELAY_MS));
-    setError(result.message || 'Username atau PIN salah, atau akun tidak aktif.');
+    setError('ID pengguna atau PIN belum sesuai. Periksa kembali data akses Anda.');
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(135deg,#f8fafc_0%,#edf7f5_48%,#e9f3ff_100%)] p-4 font-sans lg:grid lg:grid-cols-[1fr_520px] lg:items-stretch lg:gap-8 lg:p-8">
+    <div className="login-page">
 
         <section
-            className="relative z-10 hidden min-h-[calc(100vh-4rem)] flex-col justify-between overflow-hidden rounded-[2rem] bg-slate-900 p-12 text-white shadow-2xl lg:flex"
-            style={{ backgroundImage: `linear-gradient(90deg, rgba(9, 82, 76, 0.96), rgba(9, 82, 76, 0.76), rgba(15, 23, 42, 0.38)), url(${HERO_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+            className="login-hero-panel"
         >
-            <div className="relative z-10">
-                <div className="flex items-center gap-4">
-                    <div className="rounded-2xl bg-white p-3 shadow-lg">
-                        <img src={LOGO_MALIMPUNG} alt="Malimpung" className="h-12 w-auto object-contain" />
+            <div className="login-hero-media">
+                <img
+                    src={HERO_IMAGE}
+                    alt=""
+                    aria-hidden="true"
+                    className="login-hero-photo"
+                />
+                <div className="login-hero-overlay" />
+            </div>
+
+            <div className="login-hero-content">
+                <div className="login-hero-brand">
+                    <div className="login-hero-logo">
+                        <img src={LOGO_MALIMPUNG} alt="Malimpung" />
                     </div>
                     <div>
-                        <p className="text-xs font-black uppercase tracking-[0.24em] text-teal-100">Puskesmas Malimpung</p>
-                        <p className="mt-1 text-sm font-semibold text-teal-50">Kabupaten Pinrang</p>
+                        <p className="login-hero-kicker">Puskesmas Malimpung</p>
+                        <p className="login-hero-region">Kabupaten Pinrang</p>
                     </div>
                 </div>
-                <h2 className="mt-16 max-w-2xl text-5xl font-black leading-tight tracking-tight">
-                    Sistem Layanan Cek Kesehatan Gratis
+                <h2 className="login-hero-title">
+                    Sistem Layanan<br />Cek Kesehatan Gratis
                 </h2>
-                <p className="mt-6 max-w-xl text-base font-medium leading-8 text-teal-50">
-                    Platform operasional terpadu untuk antrean, pemeriksaan, rapor, dan monitoring layanan CKG.
+                <p className="login-hero-description">
+                    Platform operasional untuk antrean, pemeriksaan, rapor, dan monitoring layanan CKG.
                 </p>
             </div>
-            <div className="relative z-10 grid max-w-2xl grid-cols-3 gap-3 text-xs font-black uppercase tracking-widest text-teal-50">
-                <div className="rounded-xl border border-white/25 bg-white/[0.12] p-4 backdrop-blur">Antrean</div>
-                <div className="rounded-xl border border-white/25 bg-white/[0.12] p-4 backdrop-blur">Pemeriksaan</div>
-                <div className="rounded-xl border border-white/25 bg-white/[0.12] p-4 backdrop-blur">Rapor</div>
+            <div className="login-hero-chips">
+                    {WORKFLOW_ITEMS.map((item) => (
+                        <span key={item} className="login-hero-chip">
+                            {item}
+                        </span>
+                    ))}
             </div>
         </section>
 
-        <section className="relative z-10 flex min-h-[calc(100vh-2rem)] items-center justify-center lg:min-h-[calc(100vh-4rem)]">
-        <AppCard className="w-full max-w-md p-8 md:p-10 relative z-10 border-white rounded-[2.5rem] shadow-2xl">
-            <div className="text-center mb-8">
-                <div className="flex justify-center gap-4 mb-6">
-                    <img src={LOGO_PINRANG} alt="Pinrang" className="h-12 w-auto object-contain" />
-                    <img src={LOGO_MALIMPUNG} alt="Malimpung" className="h-12 w-auto object-contain" />
+        <section className="login-card-shell">
+        <div className="login-card">
+            <div className="login-brand-block">
+                <div className="login-logo-row">
+                    <img src={LOGO_PINRANG} alt="Pinrang" />
+                    <img src={LOGO_MALIMPUNG} alt="Malimpung" />
                 </div>
-                <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Tersanjung</h1>
-                <p className="text-[10px] text-slate-400 font-bold tracking-[0.2em] mt-1 uppercase">Puskesmas Malimpung</p>
-                <p className="mt-4 rounded-full bg-teal-50 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-teal-700">
+                <h1 className="login-app-title">Tersanjung</h1>
+                <p className="login-app-subtitle">Puskesmas Malimpung</p>
+                <div className="login-system-badge">
                     Sistem Layanan Cek Kesehatan Gratis
-                </p>
+                </div>
             </div>
 
             {error && (
-                <div className="bg-rose-50 border-l-4 border-rose-500 text-rose-700 p-4 rounded-xl mb-6 text-xs font-bold animate-shake">
+                <div className="login-error animate-shake">
                     {error}
                     {cooldownRemaining > 0 && (
-                        <span className="mt-2 block text-rose-600">
+                        <span className="login-error-note">
                             Coba lagi dalam {cooldownSeconds} detik.
                         </span>
                     )}
                 </div>
             )}
 
-            <form onSubmit={handleLogin} className="space-y-5">
-                <AppInput
-                    label="ID Pengguna"
-                    name="username"
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Username staf..."
-                    required
-                />
+            <form onSubmit={handleLogin} className="login-form">
+                <div className="login-form-group">
+                    <label htmlFor="username" className="login-form-label">ID Pengguna</label>
+                    <div className="login-input-wrap">
+                        <UserIcon />
+                        <input
+                            id="username"
+                            name="username"
+                            type="text"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            placeholder="Username staf..."
+                            className="login-form-input"
+                            required
+                        />
+                    </div>
+                </div>
 
-                <AppInput
-                    label="PIN Keamanan"
-                    name="pin"
-                    type="password"
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value)}
-                    inputClassName="tracking-[0.5em]"
-                    placeholder="******"
-                    required
-                />
+                <div className="login-form-group">
+                    <label htmlFor="pin" className="login-form-label">PIN Keamanan</label>
+                    <div className="login-input-wrap">
+                        <LockIcon />
+                        <input
+                            id="pin"
+                            name="pin"
+                            type="password"
+                            value={pin}
+                            onChange={(e) => setPin(e.target.value)}
+                            placeholder="******"
+                            className="login-form-input login-pin-input"
+                            required
+                        />
+                    </div>
+                </div>
 
-                <AppButton type="submit" disabled={loginDisabled} size="xl" className="w-full mt-4 font-black tracking-widest uppercase">
-                  {authLoading ? 'Memverifikasi...' : cooldownRemaining > 0 ? `Tunggu ${cooldownSeconds} Detik` : 'Masuk Ke Sistem'}
-                </AppButton>
+                <button type="submit" disabled={loginDisabled} className={`login-button ${authLoading ? 'is-loading' : ''}`}>
+                  {authLoading ? (
+                    <>
+                      <span className="login-spinner" />
+                      Memeriksa Akses...
+                    </>
+                  ) : cooldownRemaining > 0 ? (
+                    `Tunggu ${cooldownSeconds} Detik`
+                  ) : (
+                    <>
+                      <LogInIcon />
+                      Masuk Ke Sistem
+                    </>
+                  )}
+                </button>
             </form>
 
-            <div className="mt-10 text-center">
-                <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest leading-relaxed">
+            <div className="login-footer">
+                <p>
                     Khusus Tenaga Medis & Staf Resmi<br/>Akses Terintegrasi RME
                 </p>
+                <span>© 2026 Puskesmas Malimpung</span>
             </div>
-        </AppCard>
+        </div>
         </section>
     </div>
   );

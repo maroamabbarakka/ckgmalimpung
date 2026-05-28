@@ -1,5 +1,24 @@
 # CHANGELOG INTERNAL
 
+## 2026-05-29 - SMART UI/UX healthcare workflow consolidation
+
+- Menetapkan `docs/core/SMART_UI_UX_STANDARD.md` sebagai standar aktif desain UI/UX.
+- Menambahkan `docs/core/IMPLEMENTATION_HISTORY_SMART_UI_UX.md` sebagai catatan riwayat perubahan detail.
+- Merapikan Dashboard/Home menjadi Healthcare Workflow Hub dengan bottom navigation super app.
+- Menyembunyikan module section dashboard pada mobile karena modul sudah tersedia lewat panel Menu.
+- Menstandarkan header, form card, input, segmented control, queue list, dan sticky action untuk Pos 1-7.
+- Menambahkan reusable `QueueCallList` untuk daftar panggilan pasien semua Pos.
+- Menambahkan umur dan klaster pada kartu antrean pasien.
+- Menyamakan action bar Pos dan Door to Door dengan tema tombol Pos 1.
+- Merapikan Pos 2 sebagai standar form pemeriksaan per blok.
+- Merapikan Pos 3-7 agar question card panjang lebih mudah dibaca dan tidak melelahkan.
+- Merapikan Door to Door agar lebih konsisten dengan SMART healthcare UI.
+- Merapikan Loket sebagai modern healthcare queue kiosk.
+- Merapikan Admin Analitik Wilayah: filter mobile collapsible dan tabel dusun menjadi card list mobile.
+- Memperbarui halaman Tentang dan laporan final publik.
+- Verifikasi:
+  - `npm run build`
+
 ## 2026-05-28 - Hardening route, auth claims, dan dashboard service
 
 - Menambahkan halaman 404 untuk route tidak dikenal agar tidak otomatis menyamar sebagai dashboard.

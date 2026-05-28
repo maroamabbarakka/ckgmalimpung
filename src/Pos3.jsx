@@ -11,7 +11,7 @@ import { updateVisit } from './services/visitService';
 import useQueue from './hooks/useQueue';
 import PatientStickyHeader from './components/patient/PatientStickyHeader';
 import PosBottomActionBar from './components/patient/PosBottomActionBar';
-import QueueEmptyState from './components/patient/QueueEmptyState';
+import QueueCallList from './components/patient/QueueCallList';
 
 function Pos3() {
   const { user } = useAuth();
@@ -124,38 +124,30 @@ function Pos3() {
   const getActiveSchema = () => getSchemaForVisit(pasienAktif);
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto mobile-safe-page px-2 md:px-0 font-sans">
+    <div className="pos-page-container space-y-6 max-w-5xl mx-auto mobile-safe-page px-2 md:px-0 font-sans">
       {!pasienAktif ? (
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-6 border-b border-slate-100 pb-3">POS 3: INDERA & FISIK DASAR ({antrian.length})</h3>
-            {antrian.length === 0 ? (
-              <QueueEmptyState accentClass="text-[#e11d48]" />
-            ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                {antrian.map((item) => (
-                <button type="button" key={item.id} onClick={() => handlePanggil(item)} disabled={Boolean(callingVisitId)} className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col items-center justify-center cursor-pointer hover:border-[#e11d48] group shadow-sm disabled:cursor-wait disabled:opacity-60">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 group-hover:text-[#e11d48]">Antrian</p>
-                    <h3 className="text-3xl font-black text-slate-800 mb-3 group-hover:text-[#e11d48]">{item.nomor_antrian}</h3>
-                    <div className="bg-slate-100 text-slate-600 text-[8px] font-black px-3 py-1 rounded uppercase tracking-widest">{callingVisitId === item.id ? 'Memanggil...' : item.kategori_usia_satusehat}</div>
-                </button>
-                ))}
-            </div>
-            )}
-        </div>
+        <>
+        <QueueCallList
+          queue={antrian}
+          onCall={handlePanggil}
+          callingVisitId={callingVisitId}
+        />
+        </>
       ) : (
-      <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
+      <div className="pos-main-card bg-white rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
         <PatientStickyHeader
           visit={pasienAktif}
-          posLabel="Pos 3: Indera & Fisik Dasar"
+          posLabel="Pos 3: Pemeriksaan Fisik"
           accentClass="bg-[#e11d48]"
           onCancel={handleBatal}
+          queueCount={antrian.length}
         />
         <div className="hidden bg-[#e11d48] p-6 text-white flex justify-between items-center">
             <h2 className="text-4xl font-black">{pasienAktif.nomor_antrian}</h2>
             <button type="button" onClick={handleBatal} className="bg-white/20 text-white px-4 py-2 rounded-xl font-bold text-xs">✕ Batal</button>
         </div>
-        <form onSubmit={handleSimpanData} className="p-4 md:p-6 bg-[#f8fafc] mobile-safe-page">
-            <div className="bg-white px-6 py-5 rounded-2xl shadow-sm border border-slate-200">
+        <form onSubmit={handleSimpanData} className="pos-form-surface p-4 md:p-6 bg-[#f8fafc] mobile-safe-page">
+            <div className="patient-summary-card bg-white px-6 py-5 rounded-2xl shadow-sm border border-slate-200">
                 <h3 className="font-black text-lg">{pasienAktif.pasien_snapshot?.nama || "Tanpa Nama"}</h3>
                 <p className="text-[10px] font-bold text-slate-400 uppercase">{umurPasien} THN • {kategoriPasien}</p>
             </div>
@@ -167,7 +159,6 @@ function Pos3() {
               primaryLabel="Simpan & Lanjut Pos 4"
               loading={loading}
               onBack={handleKembaliPosSebelumnya}
-              primaryColorClass="bg-[#e11d48] hover:bg-rose-700"
             />
         </form>
       </div>

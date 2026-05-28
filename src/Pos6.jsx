@@ -11,7 +11,7 @@ import { updateVisit } from './services/visitService';
 import useQueue from './hooks/useQueue';
 import PatientStickyHeader from './components/patient/PatientStickyHeader';
 import PosBottomActionBar from './components/patient/PosBottomActionBar';
-import QueueEmptyState from './components/patient/QueueEmptyState';
+import QueueCallList from './components/patient/QueueCallList';
 
 function Pos6() {
   const { user } = useAuth();
@@ -135,32 +135,23 @@ function Pos6() {
   const getActiveSchema = () => getSchemaForVisit(pasienAktif);
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto mobile-safe-page px-2 md:px-0 font-sans">
+    <div className="pos-page-container space-y-6 max-w-5xl mx-auto mobile-safe-page px-2 md:px-0 font-sans">
       {!pasienAktif ? (
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
-            <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-3">
-              <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">POS 6: DIAGNOSIS DOKTER ({antrian.length})</h3>
-            </div>
-            
-            {antrian.length === 0 ? (<QueueEmptyState accentClass="text-[#059669]" />) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                {antrian.map((item) => (
-                <button type="button" key={item.id} onClick={() => handlePanggil(item)} disabled={Boolean(callingVisitId)} className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col items-center justify-center cursor-pointer hover:border-[#10b981] group shadow-sm transition-all disabled:cursor-wait disabled:opacity-60">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 group-hover:text-[#10b981]">Antrian</p>
-                    <h3 className="text-3xl font-black text-slate-800 mb-3 group-hover:text-[#10b981]">{item.nomor_antrian}</h3>
-                    <div className="bg-slate-100 text-slate-600 text-[8px] font-black px-3 py-1 rounded uppercase tracking-widest group-hover:bg-[#ecfdf5] group-hover:text-[#059669]">{callingVisitId === item.id ? 'Memanggil...' : item.kategori_usia_satusehat}</div>
-                </button>
-                ))}
-            </div>
-            )}
-        </div>
+        <>
+        <QueueCallList
+          queue={antrian}
+          onCall={handlePanggil}
+          callingVisitId={callingVisitId}
+        />
+        </>
       ) : (
-      <div className="bg-slate-50 rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
+      <div className="pos-main-card bg-slate-50 rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
         <PatientStickyHeader
           visit={pasienAktif}
-          posLabel="Pos 6: Diagnosis Dokter"
+          posLabel="Pos 6: Diagnosis"
           accentClass="bg-[#10b981]"
           onCancel={handleBatal}
+          queueCount={antrian.length}
         />
         <div className="hidden bg-[#10b981] p-6 text-white flex justify-between items-center">
             <div className="flex items-center gap-3">
@@ -169,10 +160,10 @@ function Pos6() {
             </div>
             <button type="button" onClick={handleBatal} className="bg-white/20 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-white/30 transition-all">✕ Batal</button>
         </div>
-        <form onSubmit={handleSimpanData} className="p-4 md:p-6 bg-[#f8fafc] mobile-safe-page">
+        <form onSubmit={handleSimpanData} className="pos-form-surface p-4 md:p-6 bg-[#f8fafc] mobile-safe-page">
             {pesan && <div className={`p-4 rounded-xl font-bold text-xs shadow-sm mb-6 ${pesan.includes('❌') ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>{pesan}</div>}
             
-            <div className="bg-white px-6 py-5 rounded-2xl shadow-sm border border-slate-200">
+            <div className="patient-summary-card bg-white px-6 py-5 rounded-2xl shadow-sm border border-slate-200">
                 <h3 className="font-black text-lg">{pasienAktif.pasien_snapshot?.nama || "Tanpa Nama"}</h3>
                 <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{umurPasien} THN • {pasienAktif.kategori_usia_satusehat}</p>
             </div>
@@ -183,7 +174,6 @@ function Pos6() {
               primaryLabel="Simpan & Lanjut Pos 7"
               loading={loading}
               onBack={handleKembaliPosSebelumnya}
-              primaryColorClass="bg-[#059669] hover:bg-emerald-700"
             />
         </form>
       </div>
