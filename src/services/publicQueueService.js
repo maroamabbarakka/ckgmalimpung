@@ -61,7 +61,7 @@ export function subscribePublicTvQueueGrid(onChange, onError) {
 
     snapshot.forEach((queueDoc) => {
       const item = { id: queueDoc.id, ...queueDoc.data() };
-      if (!item.nomor_antrian || item.status_antrian === STATUS_MAPPING.SELESAI) return;
+      if (item.status_antrian === STATUS_MAPPING.SELESAI) return;
 
       const key = getQueueStatusKey(item.status_antrian);
       if (key === 'POS1') grid.pos1.push(item);

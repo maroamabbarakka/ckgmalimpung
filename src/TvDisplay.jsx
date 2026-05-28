@@ -32,15 +32,19 @@ function TvDisplay() {
   const [antrianGrid, setAntrianGrid] = useState({
       pos1: [], pos2: [], pos3: [], pos4: [], pos5: [], pos6: [], pos7: []
   });
-  const [fallbackAntrianGrid, setFallbackAntrianGrid] = useState({
-      pos1: [], pos2: [], pos3: [], pos4: [], pos5: [], pos6: [], pos7: []
-  });
+  const [internalAntrianGrid, setInternalAntrianGrid] = useState(null);
 
   const lastCallId = useRef(null);
   const initialLoadRef = useRef(true); 
   const callTimeoutRef = useRef(null);
+  const tickerTrackRef = useRef(null);
+  const tickerAnimationRef = useRef(null);
   const publicQueueTotal = useMemo(() => Object.values(antrianGrid).reduce((total, items) => total + items.length, 0), [antrianGrid]);
-  const displayGrid = publicQueueTotal > 0 ? antrianGrid : fallbackAntrianGrid;
+  const internalQueueTotal = useMemo(() => {
+    if (!internalAntrianGrid) return 0;
+    return Object.values(internalAntrianGrid).reduce((total, items) => total + items.length, 0);
+  }, [internalAntrianGrid]);
+  const displayGrid = internalQueueTotal > 0 ? internalAntrianGrid : antrianGrid;
   const antreanBerikutnya = useMemo(() => (
     Object.values(displayGrid)
       .flat()
@@ -131,8 +135,7 @@ function TvDisplay() {
           setAntrianGrid(nextGrid);
           setLastSyncAt(new Date());
           setTvQueueError('');
-      }, (error) => {
-          console.error('Gagal memuat antrean TV:', error);
+      }, () => {
           setTvQueueError('Koneksi data antrean sedang tidak stabil. Menampilkan data terakhir yang tersedia.');
       });
 
@@ -143,14 +146,46 @@ function TvDisplay() {
       if (!isStarted) return;
 
       const unsubscribe = subscribeTvQueueGrid((nextGrid) => {
-          setFallbackAntrianGrid(nextGrid);
-          setLastSyncAt((value) => value || new Date());
-      }, (error) => {
-          console.error('Gagal memuat fallback antrean TV:', error);
+          setInternalAntrianGrid(nextGrid);
+          setLastSyncAt(new Date());
+      }, () => {
+          setInternalAntrianGrid(null);
       });
 
       return () => unsubscribe();
   }, [isStarted]);
+
+  useEffect(() => {
+      if (!isStarted) return undefined;
+
+      const track = tickerTrackRef.current;
+      if (!track) return undefined;
+
+      let lastFrame = performance.now();
+      let offset = 0;
+      const speed = 120;
+
+      const tick = (now) => {
+          const deltaSeconds = Math.min((now - lastFrame) / 1000, 0.08);
+          lastFrame = now;
+
+          const loopWidth = track.scrollWidth / 2;
+          if (loopWidth > 0) {
+              offset = (offset + speed * deltaSeconds) % loopWidth;
+              track.style.transform = `translate3d(${-offset}px, 0, 0)`;
+          }
+
+          tickerAnimationRef.current = requestAnimationFrame(tick);
+      };
+
+      track.style.transform = 'translate3d(0, 0, 0)';
+      tickerAnimationRef.current = requestAnimationFrame(tick);
+
+      return () => {
+          if (tickerAnimationRef.current) cancelAnimationFrame(tickerAnimationRef.current);
+          tickerAnimationRef.current = null;
+      };
+  }, [isStarted, tickerQueueText]);
 
   // --- LOGIKA: SYNTHESIZER BEL ---
   const putarBelSynthesizerLaluBicara = (teks) => {
@@ -231,41 +266,52 @@ function TvDisplay() {
   }
 
   // --- KOMPONEN KOTAK ANTREAN ---
-  const BoxPos = ({ namaPos, headerClass, textClass, borderClass, dataAntrian, currentCall }) => {
+  const BoxPos = ({ namaPos, theme, dataAntrian, currentCall }) => {
     const visibleQueue = dataAntrian.length > 0 ? dataAntrian : currentCall ? [currentCall] : [];
     const countLabel = visibleQueue.length.toString().padStart(2, '0');
+    const currentNumber = visibleQueue[0]?.nomor_antrian || visibleQueue[0]?.queueNumber || '...';
+    const nextNumbers = visibleQueue
+      .slice(1, 3)
+      .map((item) => item.nomor_antrian || item.queueNumber)
+      .filter(Boolean);
 
     return (
-      <div className={`bg-white rounded-xl flex flex-col h-full overflow-hidden shadow-lg border-b-[10px] ${borderClass} relative`}>
-          <div className={`${headerClass} text-white flex flex-col items-center justify-center py-2 shadow-sm`}>
-              <h3 className="font-black text-2xl lg:text-3xl tracking-widest leading-none mt-1">{namaPos}</h3>
-              <div className="bg-white/20 px-3 py-0.5 rounded-full text-[9px] xl:text-[10px] font-bold tracking-widest mt-1 mb-1">
+      <div className="tv-pos-card relative flex h-full flex-col overflow-hidden rounded-2xl border bg-white shadow-[0_12px_28px_rgba(15,23,42,0.12)]" style={{ borderColor: theme.border }}>
+          <div className="flex flex-col items-center justify-center py-1.5 text-white shadow-sm" style={{ background: theme.solid }}>
+              <h3 className="mt-0.5 text-2xl font-black leading-none tracking-widest lg:text-[28px]">{namaPos}</h3>
+              <div className="mt-1 rounded-full bg-white/20 px-3 py-0.5 text-[9px] font-bold tracking-widest xl:text-[10px]">
                   {currentCall && dataAntrian.length === 0 ? 'DIPANGGIL' : `${countLabel} PASIEN`}
               </div>
           </div>
-          <div className="flex-1 flex flex-col justify-center items-center p-2 bg-white">
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-white px-3 py-3">
               {visibleQueue.length > 0 ? (
                   <>
                       {/* PENGGUNAAN FONT BEBAS NEUE */}
-                      <h4 className={`text-[85px] xl:text-[100px] 2xl:text-[120px] font-normal ${textClass} font-['Bebas_Neue'] tracking-normal leading-none mt-4 mb-2 drop-shadow-sm`}>
-                          {visibleQueue[0].nomor_antrian}
+                      <h4 className="font-['Bebas_Neue'] text-[68px] font-normal leading-none tracking-normal drop-shadow-sm xl:text-[82px] 2xl:text-[98px]" style={{ color: theme.solid }}>
+                          {currentNumber}
                       </h4>
-                      {visibleQueue.length > 1 ? (
-                          <div className="border border-amber-400 text-amber-500 px-2 py-0.5 rounded-full text-[8px] xl:text-[9px] font-black uppercase tracking-widest truncate w-[95%] text-center mb-1 bg-amber-50">
-                              Menyusul: {visibleQueue.slice(1, 3).map(v => v.nomor_antrian).join(', ')}
-                          </div>
-                      ) : currentCall ? (
-                          <div className="rounded-full bg-teal-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-teal-700">
-                              Sedang dipanggil
-                          </div>
-                      ) : (
-                           <div className="h-5 mb-1"></div> 
-                      )}
+                      <div className="flex min-h-[30px] w-full items-center justify-center">
+                          {nextNumbers.length > 0 ? (
+                              <div className="w-full truncate rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-center text-[10px] font-black uppercase tracking-widest text-amber-600 xl:text-[11px]">
+                                  Berikut: {nextNumbers.join(', ')}
+                              </div>
+                          ) : !visibleQueue[0]?.nomor_antrian && !visibleQueue[0]?.queueNumber ? (
+                              <div className="w-full truncate rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-center text-[10px] font-black uppercase tracking-widest text-sky-700 xl:text-[11px]">
+                                  Sinkron nomor
+                              </div>
+                          ) : currentCall ? (
+                              <div className="rounded-full bg-teal-50 px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-teal-700 xl:text-[11px]">
+                                  Sedang dipanggil
+                              </div>
+                          ) : (
+                              <div className="h-[28px]"></div>
+                          )}
+                      </div>
                   </>
               ) : (
-                  <div className="text-center opacity-45 flex flex-col items-center justify-center h-full">
+                  <div className="flex h-full flex-col items-center justify-center text-center opacity-55">
                       <span className="mb-2 text-5xl font-black leading-none text-slate-300">-</span>
-                      <p className="font-bold text-[9px] xl:text-[10px] text-slate-500 uppercase tracking-widest">Antrean Kosong</p>
+                      <p className="font-bold text-[9px] uppercase tracking-widest text-slate-500 xl:text-[10px]">Antrean Kosong</p>
                   </div>
               )}
           </div>
@@ -274,26 +320,70 @@ function TvDisplay() {
   };
 
   return (
-    <div className="h-screen w-screen bg-[#e2e8f0] flex flex-col overflow-hidden font-sans select-none cursor-default">
+    <div className="tv-display-root h-screen w-screen overflow-hidden bg-[#eaf3f8] font-sans select-none cursor-default">
         {/* IMPORT FONT BEBAS NEUE DARI GOOGLE FONTS */}
         <style>
             {`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
-              @keyframes tvTicker { from { transform: translateX(100vw); } to { transform: translateX(-100%); } }
-              .tv-ticker-track { animation: tvTicker 26s linear infinite; will-change: transform; }`}
+              .tv-ticker-track {
+                min-width: max-content;
+                transform: translate3d(0,0,0);
+                will-change: transform;
+              }
+              .tv-fullscreen-btn { opacity: .56; transition: all .18s ease; }
+              .tv-fullscreen-btn:hover { opacity: 1; transform: translateY(-1px); }
+              .tv-pos-card { transition: transform .18s ease, box-shadow .18s ease; }
+              .tv-pos-card:has(h4) { box-shadow: 0 14px 34px rgba(15,23,42,.16); }
+              .tv-mobile-guard { display: none; }
+              @media (max-width: 767px) {
+                .tv-display-shell { display: none !important; }
+                .tv-mobile-guard {
+                  display: flex;
+                  height: 100vh;
+                  width: 100vw;
+                  align-items: center;
+                  justify-content: center;
+                  background: linear-gradient(180deg, #10233F 0%, #0C1B30 100%);
+                  padding: 24px;
+                  color: white;
+                  text-align: center;
+                }
+              }`}
         </style>
+        <div className="tv-mobile-guard">
+            <div className="max-w-sm rounded-[28px] border border-white/15 bg-white/10 p-7 shadow-2xl backdrop-blur-md">
+                <div className="mx-auto mb-5 flex items-center justify-center gap-4">
+                    <img src={LOGO_PINRANG} alt="Pinrang" className="h-12 w-auto" />
+                    <div className="h-10 w-px bg-white/25"></div>
+                    <img src={LOGO_MALIMPUNG} alt="Malimpung" className="h-12 w-auto" />
+                </div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-teal-200">Layar Antrean TV</p>
+                <h1 className="mt-2 text-2xl font-black uppercase tracking-tight">Gunakan Layar Besar</h1>
+                <p className="mt-3 text-sm font-semibold leading-6 text-slate-200">
+                    Mode TV dirancang untuk monitor, proyektor, atau perangkat landscape agar nomor antrean terbaca jelas oleh masyarakat.
+                </p>
+                <button
+                    type="button"
+                    onClick={() => enterFullscreen()}
+                    className="mt-6 h-12 rounded-2xl bg-white px-5 text-xs font-black uppercase tracking-widest text-slate-900"
+                >
+                    Coba Fullscreen
+                </button>
+            </div>
+        </div>
+        <div className="tv-display-shell flex h-screen w-screen flex-col overflow-hidden">
         
         {/* HEADER */}
-        <header className="bg-[#009288] text-white h-[9vh] flex justify-between items-center px-6 lg:px-10 shadow-md shrink-0 z-20">
+        <header className="h-[9vh] shrink-0 z-20 flex items-center justify-between bg-gradient-to-r from-[#0f766e] via-[#0080ff] to-[#2563eb] px-6 text-white shadow-md lg:px-10">
             <div className="flex flex-col">
                 <h1 className="text-2xl 2xl:text-3xl font-black tracking-widest drop-shadow-md uppercase">LAYANAN CKG TERPADU</h1>
-                <p className="text-[10px] 2xl:text-[11px] font-bold text-teal-200 tracking-[0.2em] uppercase mt-1">DINAS KESEHATAN KAB. PINRANG - UPT PUSKESMAS MALIMPUNG</p>
+                <p className="text-[10px] 2xl:text-[11px] font-bold text-white/70 tracking-[0.2em] uppercase mt-1">DINAS KESEHATAN KAB. PINRANG - UPT PUSKESMAS MALIMPUNG</p>
             </div>
             
             <div className="flex items-center gap-6 2xl:gap-8">
                 <button
                     type="button"
                     onClick={() => enterFullscreen()}
-                    className="rounded-full border border-white/30 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-white hover:bg-white/20"
+                    className="tv-fullscreen-btn rounded-full border border-white/30 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-white hover:bg-white/20"
                 >
                     Fullscreen
                 </button>
@@ -301,13 +391,13 @@ function TvDisplay() {
                     {online ? 'Online' : 'Offline'}
                 </div>
                 <div className="text-right">
-                    <p className="text-[9px] 2xl:text-[10px] font-bold text-teal-200 tracking-[0.2em] uppercase mb-1">LOKASI PEMERIKSAAN</p>
+                    <p className="text-[9px] 2xl:text-[10px] font-bold text-white/70 tracking-[0.2em] uppercase mb-1">LOKASI PEMERIKSAAN</p>
                     <p className="text-sm 2xl:text-base font-black tracking-widest drop-shadow-md uppercase leading-none">{lokasiAktif}</p>
                 </div>
-                <div className="w-px h-10 bg-teal-600"></div>
+                <div className="w-px h-10 bg-white/25"></div>
                 <div className="text-right">
                     <p className="text-3xl 2xl:text-4xl font-black font-mono tracking-tighter drop-shadow-md leading-none">{waktuSekarang.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
-                    <p className="text-[10px] 2xl:text-[11px] font-bold text-teal-200 uppercase tracking-widest mt-1">
+                    <p className="text-[10px] 2xl:text-[11px] font-bold text-white/70 uppercase tracking-widest mt-1">
                         {waktuSekarang.toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
                     </p>
                 </div>
@@ -331,23 +421,23 @@ function TvDisplay() {
         </section>
 
         {/* MAIN LAYOUT */}
-        <main className="flex-1 flex flex-col p-3 xl:p-4 2xl:p-6 gap-3 xl:gap-4 2xl:gap-6 bg-[#e2e8f0] min-h-0">
+        <main className="flex-1 flex flex-col p-3 xl:p-4 2xl:p-6 gap-3 xl:gap-4 2xl:gap-6 bg-[#eaf3f8] min-h-0">
             
             {/* Sektor Atas: Info Panggilan & Video Edukasi */}
-            <div className="grid flex-1 grid-cols-[minmax(420px,0.85fr)_minmax(0,1.25fr)] gap-3 xl:gap-4 2xl:gap-6 min-h-0">
+            <div className="grid flex-1 grid-cols-2 gap-3 xl:gap-4 2xl:gap-6 min-h-0">
                 
                 {/* Kotak Kiri: Info Panggilan / Standby */}
-                <div className="bg-white rounded-3xl shadow-xl border border-white flex flex-col justify-center items-center p-6 xl:p-8 relative overflow-hidden min-w-0">
+                <div className="relative flex min-w-0 flex-col items-center justify-center overflow-hidden rounded-3xl border border-white bg-white p-6 shadow-[0_18px_46px_rgba(48,64,80,.14)] xl:p-8">
                     {panggilanTerbaru ? (
                         <div className="text-center w-full animate-fade-in-up">
                             <p className="text-2xl font-black text-slate-500 uppercase tracking-[0.3em] mb-2">Nomor Antrean</p>
                             
                             {/* PENGGUNAAN FONT BEBAS NEUE UNTUK PANGGILAN AKTIF */}
-                            <h2 className="text-[180px] 2xl:text-[220px] font-normal text-[#009288] leading-none font-['Bebas_Neue'] mb-4 drop-shadow-lg">
+                            <h2 className="mb-4 font-['Bebas_Neue'] text-[176px] font-normal leading-none text-[#0080FF] drop-shadow-lg 2xl:text-[216px]">
                                 {panggilanTerbaru.identitas_layar}
                             </h2>
                             
-                            <div className="bg-[#009288] text-white py-3 px-10 rounded-full inline-block shadow-lg animate-pulse">
+                            <div className="inline-block animate-pulse rounded-full bg-gradient-to-r from-[#18B6A4] to-[#0080FF] px-10 py-3 text-white shadow-lg">
                                 <h3 className="text-3xl font-black tracking-widest uppercase">MENUJU {panggilanTerbaru.pos}</h3>
                             </div>
                         </div>
@@ -359,10 +449,10 @@ function TvDisplay() {
                                 <img src={LOGO_MALIMPUNG} alt="Logo Malimpung" className="h-24 w-auto drop-shadow-sm" />
                             </div>
                             
-                            <h2 className="text-6xl font-black text-[#009288] mb-2 tracking-tight">TERSANJUNG</h2>
+                            <h2 className="mb-2 text-6xl font-black tracking-tight text-[#304050]">TERSANJUNG</h2>
                             <p className="text-xl font-bold text-slate-400 uppercase tracking-[0.3em] mb-10">Sistem Informasi CKG</p>
                             
-                            <div className="px-10 py-3 bg-teal-50 border border-teal-100 rounded-full shadow-inner">
+                            <div className="rounded-full border border-teal-100 bg-teal-50 px-10 py-3 shadow-inner">
                                 <p className="font-bold text-teal-600 uppercase tracking-[0.2em] text-xs xl:text-sm animate-pulse">
                                     Menunggu Panggilan Pasien...
                                 </p>
@@ -386,22 +476,22 @@ function TvDisplay() {
             </div>
 
             {/* Sektor Bawah: Grid 7 Kotak POS Sejajar */}
-            <div className="h-[35%] xl:h-[38%] min-h-[190px] shrink-0 grid grid-cols-7 gap-2 xl:gap-3 2xl:gap-4">
-                <BoxPos namaPos="POS 1" dataAntrian={displayGrid.pos1} currentCall={getCurrentCallForPos('POS 1')} headerClass="bg-[#2563eb]" textClass="text-[#2563eb]" borderClass="border-[#2563eb]" />
-                <BoxPos namaPos="POS 2" dataAntrian={displayGrid.pos2} currentCall={getCurrentCallForPos('POS 2')} headerClass="bg-[#4f46e5]" textClass="text-[#4f46e5]" borderClass="border-[#4f46e5]" />
-                <BoxPos namaPos="POS 3" dataAntrian={displayGrid.pos3} currentCall={getCurrentCallForPos('POS 3')} headerClass="bg-[#e11d48]" textClass="text-[#e11d48]" borderClass="border-[#e11d48]" />
-                <BoxPos namaPos="POS 4" dataAntrian={displayGrid.pos4} currentCall={getCurrentCallForPos('POS 4')} headerClass="bg-[#0f766e]" textClass="text-[#0f766e]" borderClass="border-[#0f766e]" />
-                <BoxPos namaPos="POS 5" dataAntrian={displayGrid.pos5} currentCall={getCurrentCallForPos('POS 5')} headerClass="bg-[#059669]" textClass="text-[#059669]" borderClass="border-[#059669]" />
-                <BoxPos namaPos="POS 6" dataAntrian={displayGrid.pos6} currentCall={getCurrentCallForPos('POS 6')} headerClass="bg-[#0284c7]" textClass="text-[#0284c7]" borderClass="border-[#0284c7]" />
-                <BoxPos namaPos="POS 7" dataAntrian={displayGrid.pos7} currentCall={getCurrentCallForPos('POS 7')} headerClass="bg-[#0ea5e9]" textClass="text-[#0ea5e9]" borderClass="border-[#0ea5e9]" />
+            <div className="grid h-[33%] min-h-[186px] shrink-0 grid-cols-7 gap-2 xl:h-[36%] xl:gap-3 2xl:gap-4">
+                <BoxPos namaPos="POS 1" dataAntrian={displayGrid.pos1} currentCall={getCurrentCallForPos('POS 1')} theme={{ solid: '#0080FF', border: '#BAE1FF' }} />
+                <BoxPos namaPos="POS 2" dataAntrian={displayGrid.pos2} currentCall={getCurrentCallForPos('POS 2')} theme={{ solid: '#4F46E5', border: '#C7D2FE' }} />
+                <BoxPos namaPos="POS 3" dataAntrian={displayGrid.pos3} currentCall={getCurrentCallForPos('POS 3')} theme={{ solid: '#DB2777', border: '#FBCFE8' }} />
+                <BoxPos namaPos="POS 4" dataAntrian={displayGrid.pos4} currentCall={getCurrentCallForPos('POS 4')} theme={{ solid: '#7C3AED', border: '#DDD6FE' }} />
+                <BoxPos namaPos="POS 5" dataAntrian={displayGrid.pos5} currentCall={getCurrentCallForPos('POS 5')} theme={{ solid: '#8B5CF6', border: '#DDD6FE' }} />
+                <BoxPos namaPos="POS 6" dataAntrian={displayGrid.pos6} currentCall={getCurrentCallForPos('POS 6')} theme={{ solid: '#0891B2', border: '#A5F3FC' }} />
+                <BoxPos namaPos="POS 7" dataAntrian={displayGrid.pos7} currentCall={getCurrentCallForPos('POS 7')} theme={{ solid: '#059669', border: '#A7F3D0' }} />
             </div>
 
         </main>
 
         {/* FOOTER */}
-        <footer className="bg-[#0f172a] h-[8vh] flex items-center shrink-0 relative z-20 overflow-hidden border-t-4 border-slate-700">
-            <div className="w-full h-full flex items-center bg-[#0f172a] px-4">
-                <div className="tv-ticker-track flex w-max whitespace-nowrap pt-1 text-xl font-black tracking-widest xl:text-2xl">
+        <footer className="relative z-20 flex h-[9vh] min-h-[70px] shrink-0 items-center overflow-hidden border-t-4 border-slate-700 bg-[#0f172a]">
+            <div className="flex h-full w-full items-center bg-[#0f172a] px-4">
+                <div ref={tickerTrackRef} className="tv-ticker-track flex w-max items-center whitespace-nowrap text-lg font-black tracking-widest xl:text-xl 2xl:text-2xl">
                     {Array.from({ length: 2 }).map((_, index) => (
                         <div key={index} className="flex items-center">
                             <span className="text-pink-300">SELAMAT DATANG DI PUSKESMAS MALIMPUNG</span>
@@ -419,6 +509,7 @@ function TvDisplay() {
                 </div>
             </div>
         </footer>
+        </div>
 
     </div>
   );

@@ -14,7 +14,7 @@ export function maskPublicQueueName(name = '') {
 
 export function sanitizePublicQueueItem(visit = {}) {
   return {
-    nomorAntrian: visit.nomor_antrian || visit.queueNumber || '-',
+    nomorAntrian: visit.nomor_antrian || visit.queueNumber || 'Nomor sinkronisasi tertunda',
     namaSingkat: maskPublicQueueName(visit.nama || visit.patientName || ''),
     posTujuan: visit.posTujuan || visit.status_antrian || visit.status || '-',
     status: visit.status_antrian || visit.status || '-',

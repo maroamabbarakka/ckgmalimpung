@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { upsertPublicQueueFromVisit } from './publicQueueService';
 
@@ -10,9 +10,12 @@ export async function updateVisit(visitId, payload) {
   const safePayload = payload?.petugas_aktif === null
     ? { ...payload, lock: null, lockedBy: null, lockedModule: null }
     : payload;
-  await updateDoc(doc(db, 'visits', visitId), safePayload);
+  const visitRef = doc(db, 'visits', visitId);
+  await updateDoc(visitRef, safePayload);
   if (Object.prototype.hasOwnProperty.call(safePayload, 'status_antrian') || Object.prototype.hasOwnProperty.call(safePayload, 'nomor_antrian')) {
-    await upsertPublicQueueFromVisit(visitId, safePayload).catch((error) => {
+    const latestVisit = await getDoc(visitRef);
+    const publicPayload = latestVisit.exists() ? latestVisit.data() : safePayload;
+    await upsertPublicQueueFromVisit(visitId, publicPayload).catch((error) => {
       console.warn('Gagal memperbarui antrean publik:', error);
     });
   }
