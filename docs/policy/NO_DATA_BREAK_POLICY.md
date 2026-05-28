@@ -128,6 +128,52 @@ Jika suatu hari schema berubah:
 
 ---
 
+# Smart UI / Smart Fill Policy
+
+## Tujuan
+Aplikasi boleh menyederhanakan pengalaman input tanpa mengubah struktur output resmi.
+
+## Prinsip
+`formSchemas.json` adalah kontrak output data resmi.
+
+UI aplikasi:
+- boleh lebih ringkas,
+- boleh berjenjang,
+- boleh memakai Smart Fill,
+- boleh memakai helper otomatis,
+- boleh memakai auto-calculation,
+- boleh memakai conditional rendering.
+
+Namun hasil akhir wajib:
+- tetap kompatibel dengan FormSchemas,
+- tetap memakai ID resmi,
+- tetap kompatibel dengan export,
+- tetap kompatibel dengan laporan,
+- tetap kompatibel dengan rapor,
+- tetap kompatibel dengan data lama.
+
+## Diperbolehkan
+- menggabungkan pertanyaan panjang menjadi wizard
+- auto-fill jawaban turunan
+- pertanyaan adaptif berdasarkan umur/gender
+- pertanyaan berjenjang
+- smart suggestion
+- auto-calculation
+- hidden helper field sementara
+
+## Dilarang
+- membuat ID baru tanpa mapping
+- menyimpan field helper ke output resmi
+- menimpa jawaban manual tanpa konfirmasi
+- mengubah struktur output export
+- membuat Smart Fill menghasilkan data berbeda dari schema resmi
+- membuat logic yang tidak bisa direkonstruksi kembali ke FormSchemas
+
+## Prinsip Utama
+Smart UI adalah lapisan UX.
+
+FormSchemas tetap sumber struktur output resmi.
+
 # Prinsip Utama
 
 # FORM SCHEMA IS SACRED
