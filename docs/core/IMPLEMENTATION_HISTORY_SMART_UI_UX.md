@@ -150,6 +150,7 @@ Dokumen ini menyimpan riwayat detail perubahan UI/UX agar pengembangan berikutny
 - Membuat komponen antarmuka admin `src/components/DummyDataManager.jsx` yang menampilkan statistik data dummy dan tombol pembersihan massal sekali klik (DELETE ALL DUMMY DATA) dengan konfirmasi keamanan teks "HAPUS".
 - Mengintegrasikan menu Dummy Data Manager pada sidebar admin grup sarana di `src/AdminDashboard.jsx` dan menyusun rendering halamannya secara responsif.
 - Membuat skrip CLI pembersih `scripts/deleteDummyData.js` untuk menghapus seluruh dokumen dengan tag `isDummy === true` secara aman dari command line.
+- Memperbaiki sinkronisasi nomor antrean pada kartu BoxPos TV (`src/TvDisplay.jsx`) agar memprioritaskan penampilan nomor antrean yang sedang aktif dipanggil (currentCall) di posisi paling atas antrean visual pos tersebut, lengkap dengan highlight warna merah rose dan animasi pulse yang menarik perhatian.
 
 ## Verifikasi Terakhir
 
