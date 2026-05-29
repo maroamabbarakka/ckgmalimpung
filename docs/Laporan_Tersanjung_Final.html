@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laporan Komprehensif TERSANJUNG v4.4</title>
+    <title>Laporan Komprehensif TERSANJUNG v4.5</title>
     <style>
         :root {
             --ink: #1f2937;
@@ -313,15 +313,15 @@
             <tr><td>Database real-time</td><td>Firebase Firestore</td><td>Sinkronisasi antrean, kunjungan, pasien, dan dashboard secara langsung.</td></tr>
             <tr><td>UI dan tata letak</td><td>Tailwind CSS, react-grid-layout</td><td>Antarmuka mobile-friendly dan dashboard yang dapat dikustomisasi.</td></tr>
             <tr><td>Ekspor laporan</td><td>XLSX, jsPDF, jspdf-autotable</td><td>Generasi Excel/PDF langsung dari browser tanpa template berat.</td></tr>
-            <tr><td>OCR lokal browser</td><td>Tesseract.js</td><td>Fallback offline untuk membaca dokumen identitas saat backend OCR tidak aktif.</td></tr>
-            <tr><td>OCR backend opsional</td><td>PaddleOCR, FastAPI</td><td>Mesin OCR lokal yang lebih kuat untuk foto buram, dokumen lapangan, dan KK/BPJS.</td></tr>
+            <tr><td>OCR lokal browser</td><td>Tesseract.js</td><td>Fallback offline otomatis di browser lokal jika backend server atau koneksi internet terganggu.</td></tr>
+            <tr><td>Backend OCR Utama</td><td>Node.js Express + Gemini 2.5 Flash</td><td>Server backend aman yang menggunakan vision AI Gemini 2.5 Flash untuk ekstraksi dokumen berakurasi tinggi.</td></tr>
             <tr><td>PWA</td><td>Service Worker, manifest</td><td>Aplikasi dapat dipasang dan tetap mudah diakses pada perangkat lapangan.</td></tr>
         </tbody>
     </table>
 
     <div class="note-box">
         <div class="note-title">Prinsip Arsitektur</div>
-        Data klinis tetap berada di Firestore dan workflow utama tetap berjalan di browser. Backend PaddleOCR bersifat opsional: bila aktif, sistem memakainya untuk OCR yang lebih presisi; bila tidak aktif, aplikasi otomatis kembali ke Tesseract.js lokal.
+        Data klinis tetap berada di Firestore dan workflow utama berjalan di browser. Untuk pemindaian dokumen, sistem menggunakan arsitektur hybrid: prioritas utama diarahkan ke vision AI Gemini 2.5 Flash melalui backend server Node.js terenkripsi, dan jika gagal atau offline, sistem beralih otomatis ke Tesseract.js lokal di sisi klien.
     </div>
 
     <h2>3. Modul Operasional Utama</h2>
@@ -369,11 +369,11 @@
 
     <h3>Strategi Presisi OCR</h3>
     <ul>
-        <li>Gambar ditingkatkan sebelum OCR: pembesaran resolusi, grayscale, peningkatan kontras, dan sharpening ringan.</li>
-        <li>Jika hasil awal belum menemukan NIK atau nama, sistem menjalankan OCR ulang dengan mode kontras tinggi.</li>
-        <li>PaddleOCR backend lokal dicoba lebih dulu bila tersedia karena lebih kuat untuk dokumen buram dan teks kecil.</li>
-        <li>Tesseract.js tetap menjadi fallback lokal agar pemindaian tetap berjalan tanpa server OCR.</li>
-        <li>Pesan hasil selalu meminta petugas memeriksa ulang NIK dan nama, terutama pada confidence rendah.</li>
+        <li>Kompresi & Peningkatan Gambar: Gambar dikompresi di sisi klien (maksimal 1600px, JPEG kualitas 0.82) untuk menghemat bandwidth tanpa mengurangi kualitas detail teks.</li>
+        <li>Mesin Vision Gemini 2.5 Flash: Menggunakan kemampuan AI vision yang canggih untuk menganalisis layout KTP/KK/BPJS secara kontekstual, bahkan untuk gambar yang miring atau kurang cahaya.</li>
+        <li>Penanganan Skema JSON Ketat: Backend memaksa Gemini mengeluarkan format JSON terstruktur untuk menghindari kesalahan parsing.</li>
+        <li>Fallback Otomatis Tesseract.js: Jika backend tidak terjangkau atau jaringan offline, Tesseract.js lokal di browser langsung mengambil alih proses OCR.</li>
+        <li>Normalisasi Wilayah Kerja: Hasil OCR dicocokkan dengan data alias untuk dinormalisasi ke desa/kelurahan resmi (Desa Malimpung, Desa Padang Loang, Kelurahan Maccirinna).</li>
     </ul>
 
     <h2>5. Skema Formulir Elektronik RME</h2>
@@ -598,7 +598,7 @@
         <li><strong>High-Density Analytics UI:</strong> Visualisasi grafik dusun dan demografi diganti menjadi tabel analitik padat-karya (High-Density) standar Kemenkes.</li>
         <li><strong>Firebase Transactional Security:</strong> Menutup kerentanan manipulasi massal dengan implementasi <code>runTransaction</code>.</li>
         <li><strong>Smart Quota Management:</strong> Menutup kebocoran kuota baca Firebase dengan pembatasan <code>limit()</code> di semua dashboard monitoring.</li>
-        <li><strong>Scan Identitas multi-dokumen:</strong> KTP, KK, BPJS/KIS/JKN, dan dokumen identitas umum didukung dalam satu pipeline OCR.</li>
+        <li><strong>Smart Scan Dokumen Hybrid OCR:</strong> Implementasi pipeline OCR hybrid menggunakan Gemini 2.5 Flash Vision di sisi backend Node.js (prioritas utama) dan Tesseract.js di sisi frontend (fallback) untuk scan KTP, KK, dan BPJS.</li>
         <li><strong>Perbaikan Purity Code:</strong> Aplikasi 100% lulus standar <i>Linting</i> React dengan mengeliminasi fungsi mati (<i>dead code</i>) dan perbaikan manajemen <i>state</i> waktu.</li>
         <li><strong>Smart Fill CKG:</strong> Pertanyaan dibuat berjenjang, interpretasi dibantu otomatis, dan output tetap dikunci ke <code>formSchemas.json</code>.</li>
         <li><strong>Optimasi Share Link &amp; SEO:</strong> Mengimplementasikan pratinjau thumbnail/cover otomatis beresolusi tinggi (1200x675px) serta konfigurasi Open Graph/Twitter Card yang kompatibel dengan WhatsApp, Facebook, dan Telegram.</li>
@@ -606,15 +606,15 @@
 
     <h2>12. Rekomendasi Lanjutan</h2>
     <ul>
-        <li><strong>Uji lapangan OCR:</strong> kumpulkan 20-50 sampel foto KTP, KK, dan BPJS dengan variasi cahaya/buram untuk mengukur akurasi field NIK, nama, dan tanggal lahir.</li>
-        <li><strong>Service PaddleOCR permanen:</strong> jalankan backend OCR pada laptop/server lokal Puskesmas agar akurasi lapangan lebih stabil.</li>
-        <li><strong>Audit trail perubahan identitas:</strong> simpan log ketika hasil OCR dikoreksi manual oleh petugas.</li>
-        <li><strong>Pagination dashboard:</strong> bila volume kunjungan tinggi, dashboard dan export perlu pemuatan bertahap agar browser tetap ringan.</li>
-        <li><strong>Bridging SATUSEHAT:</strong> siapkan pemetaan Encounter, Observation, Condition, dan DiagnosticReport dari data internal.</li>
-        <li><strong>Hardening RBAC:</strong> batasi export massal hanya untuk admin atau role yang diberi mandat.</li>
+        <li><strong>Uji lapangan OCR:</strong> kumpulkan sampel foto KTP, KK, dan BPJS dalam berbagai kondisi pencahayaan untuk memvalidasi performa ekstraksi Gemini 2.5 Flash.</li>
+        <li><strong>Server Produksi Backend:</strong> Deploy backend server Node.js ke lingkungan cloud production yang aman agar dapat diakses oleh semua nakes di lapangan.</li>
+        <li><strong>Audit trail perubahan identitas:</strong> Simpan riwayat perubahan data ketika hasil pemindaian OCR dikoreksi secara manual oleh petugas.</li>
+        <li><strong>Pagination dashboard:</strong> Implementasikan paginasi untuk memuat data bertahap ketika volume kunjungan meningkat demi kestabilan browser.</li>
+        <li><strong>Bridging SATUSEHAT:</strong> Siapkan pemetaan standar data klinis ke FHIR resource (Encounter, Observation, Condition) untuk integrasi masa depan.</li>
+        <li><strong>Hardening RBAC:</strong> Perketat hak ekspor data pasien massal agar hanya dapat dilakukan oleh peran administrator.</li>
     </ul>
 
-    <div class="footer">Laporan disusun oleh Tim Pengembang Aplikasi TERSANJUNG v4.4 (MAROA Project)</div>
+    <div class="footer">Laporan disusun oleh Tim Pengembang Aplikasi TERSANJUNG v4.5 (MAROA Project)</div>
     </main>
 </body>
 </html>
