@@ -90,11 +90,13 @@ Tindak lanjut dan penyelesaian pelayanan.
 * Dukungan multi-tab browser.
 * Ketahanan terhadap gangguan jaringan.
 
-## OCR dan Digitalisasi Dokumen
+## OCR dan Digitalisasi Dokumen (Smart Scan Hybrid)
 
-* Pembacaan dokumen melalui OCR.
-* Ekstraksi data dasar peserta.
-* Membantu percepatan input data.
+* Pembacaan dokumen identitas (KTP, KK, BPJS) secara pintar berbasis vision AI.
+* Menggunakan Google Gemini 2.5 Flash sebagai mesin pemindaian utama untuk akurasi tinggi.
+* Fallback otomatis ke Tesseract.js lokal di sisi klien apabila offline atau server sibuk.
+* Normalisasi otomatis wilayah kerja canonical Puskesmas Malimpung.
+* Validasi data manual (preview editable) sebelum data disuntikkan ke formulir pendaftaran.
 
 ---
 
@@ -178,8 +180,10 @@ Frontend:
 * React Router
 * Tailwind CSS
 
-Backend Services:
+Backend & AI Services:
 
+* Node.js + Express (Server Pembantu Lokal)
+* Google Gemini API SDK (`@google/genai`)
 * Firebase Authentication
 * Cloud Firestore
 
@@ -192,9 +196,10 @@ Dokumen:
 * jsPDF
 * ExcelJS
 
-OCR:
+OCR Engine:
 
-* Tesseract.js
+* Gemini 2.5 Flash Vision (API Utama)
+* Tesseract.js (Local Fallback Engine)
 
 Testing:
 

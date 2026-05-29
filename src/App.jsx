@@ -440,6 +440,7 @@ function Tentang() {
     ['Workflow Pos', 'Loket sampai Pos 7 dengan antrean, pemeriksaan, validasi dokter, dan rapor digital.'],
     ['Smart Form', 'Form dinamis mengikuti umur, jenis kelamin, klaster, dan kebutuhan pemeriksaan tanpa mengubah FormSchemas.'],
     ['Super App Mobile', 'Bottom nav Home, Loket, Antrean, Pos, dan Menu untuk akses cepat satu tangan.'],
+    ['Smart Scan Dokumen', 'Perekaman data identitas (KTP/KK/BPJS) cerdas berbasis Gemini 2.5 Flash dengan fallback offline Tesseract.js.'],
     ['Analitik Wilayah', 'Demografi, PTM, capaian dusun, ekspor laporan, dan insight operasional untuk Puskesmas.'],
   ];
 
