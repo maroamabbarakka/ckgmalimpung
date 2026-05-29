@@ -1,18 +1,15 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { formatVisitDate } from './utils/ckgValidation';
-import { runIdentityOcr, toLegacyOcrFormData } from './features/ocr/ocrPipeline';
 import { createQrDataUrl } from './utils/qrCode';
 import { STATUS_MAPPING } from './utils/constants';
 import { writeAuditLog } from './services/auditService';
 import { buildPatientPayload, findCurrentYearCkgVisit, upsertPatient } from './services/patientService';
 import { buildPatientSnapshot, createVisitDocRef, createVisitWithRef, nowTimestamp } from './services/visitService';
-import OcrResultReview from './features/ocr/OcrResultReview';
 import { alertDialog } from './utils/appDialog';
-
-const OPENCV_SCRIPT_ID = 'opencv-script';
-const OPENCV_SCRIPT_SRC = '/vendor/opencv-4.8.0.js';
+import SmartDocumentScanner from './components/SmartDocumentScanner';
+import { Camera } from 'lucide-react';
 
 // ==========================================
 // KONSTANTA WILAYAH & DEFAULT DATA
@@ -224,54 +221,96 @@ function KunjunganRumah() {
   const [visitId, setVisitId] = useState(null);
   const [qrCodeUrl, setQrCodeUrl] = useState('');
 
-  // --- INISIALISASI OPENCV.JS ---
-  const [cvReady, setCvReady] = useState(false);
-  useEffect(() => {
-    if (!window.cv && !document.getElementById(OPENCV_SCRIPT_ID)) {
-      const script = document.createElement("script");
-      script.id = OPENCV_SCRIPT_ID;
-      script.src = OPENCV_SCRIPT_SRC;
-      script.async = true;
-      script.crossOrigin = 'anonymous';
-      script.referrerPolicy = 'no-referrer';
-      script.onload = () => { setTimeout(() => setCvReady(true), 1000); };
-      script.onerror = () => { setCvReady(false); };
-      document.body.appendChild(script);
-    } else if (window.cv) {
-      setCvReady(true);
-    } else {
-      const checkCV = setInterval(() => {
-        if (window.cv && window.cv.Mat) {
-          setCvReady(true);
-          clearInterval(checkCV);
-        }
-      }, 500);
-      return () => clearInterval(checkCV);
-    }
-    return undefined;
-  }, []);
-
-  // --- STATE POS 1 (IDENTITAS & OCR) ---
-  const fileInputRef = useRef(null);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const processCanvasRef = useRef(null);
-  const scanRafRef = useRef(null);
-  const alignCountRef = useRef(0);
-  const isCapturingRef = useRef(false);
-  const ocrJobRef = useRef(0);
-
-  const [ocrLoading, setOcrLoading] = useState(false);
-  const [ocrProgress, setOcrProgress] = useState(0);
-  const [ocrMode, setOcrMode] = useState('');
-  const [ocrCandidates, setOcrCandidates] = useState([]);
-  const [ocrReview, setOcrReview] = useState(null);
+  // --- STATE POS 1 (IDENTITAS & SMART SCAN HYBRID) ---
+  const [isSmartScanOpen, setIsSmartScanOpen] = useState(false);
   const [ocrMeta, setOcrMeta] = useState(null);
   const [ocrDuplicateWarning, setOcrDuplicateWarning] = useState('');
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [facingMode, setFacingMode] = useState('environment');
-  const [kameraStatus, setKameraStatus] = useState('idle');
-  const [isTorchOn, setIsTorchOn] = useState(false);
+
+  // --- CALLBACK SMART SCAN DOCUMENT HYBRID ---
+  const handleSmartScanData = (scanned) => {
+    if (!scanned.nik && !scanned.nama) return;
+
+    // Petakan jenis kelamin
+    const mappedGender = scanned.jenisKelamin === 'LAKI-LAKI' ? 'L' : 'P';
+
+    // Petakan desa
+    let mappedDesa = 'Luar Wilayah';
+    if (scanned.desaKelurahan === 'MALIMPUNG' || scanned.desaKelurahan === 'Desa Malimpung') mappedDesa = 'Desa Malimpung';
+    else if (scanned.desaKelurahan === 'PADANG LOANG' || scanned.desaKelurahan === 'Desa Padang Loang') mappedDesa = 'Desa Padang Loang';
+    else if (scanned.desaKelurahan === 'MACCIRINNA' || scanned.desaKelurahan === 'Kelurahan Maccirinna') mappedDesa = 'Kelurahan Maccirinna';
+
+    // Petakan dusun cerdas
+    let mappedDusun = WILAYAH_KERJA[mappedDesa]?.[0] || 'Lainnya';
+    const dusunQuery = String(scanned.alamatDusun || '').toUpperCase();
+    if (mappedDesa !== 'Luar Wilayah') {
+      const listDusun = WILAYAH_KERJA[mappedDesa] || [];
+      for (const d of listDusun) {
+        const cleanD = d.toUpperCase().replace('DUSUN ', '');
+        if (dusunQuery.includes(cleanD)) {
+          mappedDusun = d;
+          break;
+        }
+      }
+    }
+
+    const validBirthDate = isValidIsoDate(scanned.tanggalLahir) ? scanned.tanggalLahir : '';
+    const newTglView = validBirthDate ? validBirthDate.split('-').reverse().join('/') : '';
+
+    if (tanpaNik) {
+      setFormData(prev => ({
+        ...prev,
+        nik_wali: scanned.nik || prev.nik_wali,
+        nama_wali: scanned.nama || prev.nama_wali,
+        tgl_lahir_wali: validBirthDate || prev.tgl_lahir_wali
+      }));
+      if (newTglView) setTglLahirWaliView(newTglView);
+      setPesan('✅ Data wali berhasil diisi dari hasil scan dokumen.');
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        nik: scanned.nik || prev.nik,
+        nama: scanned.nama || prev.nama,
+        tgl_lahir: validBirthDate || prev.tgl_lahir,
+        j_kelamin: mappedGender,
+        desa: mappedDesa,
+        dusun: mappedDusun
+      }));
+      if (newTglView) setTglLahirView(newTglView);
+      if (scanned.nik) setTanpaNik(false);
+      setPesan('✅ Data pasien berhasil diisi dari hasil scan dokumen.');
+    }
+
+    setOcrMeta({
+      documentType: scanned.documentType || 'UNKNOWN',
+      confidence: Math.round(Number(scanned.confidence || 0) * 100),
+      usedAt: new Date().toISOString(),
+      usedBy: user?.uid || user?.email || 'unknown',
+      warnings: scanned.warnings || [],
+      source: scanned.source || 'Smart Scan Document'
+    });
+  };
+
+  const currentDomain = window.location.origin;
+  const raporLink = visitId ? `${currentDomain}/rapor/${visitId}` : '';
+  useEffect(() => {
+    let isActive = true;
+    if (!raporLink) {
+      setQrCodeUrl('');
+      return undefined;
+    }
+
+    createQrDataUrl(raporLink)
+      .then((dataUrl) => {
+        if (isActive) setQrCodeUrl(dataUrl);
+      })
+      .catch(() => {
+        if (isActive) setQrCodeUrl('');
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [raporLink]);
 
   const [dataUmur, setDataUmur] = useState({ tahun: 0, bulan: 0, totalBulan: 0, kategori: '-' });
   const [tanpaNik, setTanpaNik] = useState(false);
@@ -508,7 +547,7 @@ function KunjunganRumah() {
   const { user } = useAuth();
 
   const handleSimpanKeDatabase = async () => {
-    if (loading || ocrLoading) return;
+    if (loading) return;
     setLoading(true);
     setPesan('');
     const namaPetugas = user?.nama || 'Sistem Nakes';
@@ -680,285 +719,7 @@ function KunjunganRumah() {
     }
   };
 
-  // --- OPENCV.JS EDGE DETECTION LOGIC ---
-  const processVideoFrame = () => {
-    if (!videoRef.current || !processCanvasRef.current || !window.cv || isCapturingRef.current) return;
 
-    const video = videoRef.current;
-    if (video.readyState !== 4) {
-      scanRafRef.current = requestAnimationFrame(processVideoFrame);
-      return;
-    }
-
-    const canvas = processCanvasRef.current;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const w = 400; const h = 300;
-    canvas.width = w; canvas.height = h;
-    ctx.drawImage(video, 0, 0, w, h);
-
-    try {
-      let src = window.cv.imread(canvas);
-      let gray = new window.cv.Mat();
-      window.cv.cvtColor(src, gray, window.cv.COLOR_RGBA2GRAY, 0);
-
-      let blurred = new window.cv.Mat();
-      window.cv.GaussianBlur(gray, blurred, new window.cv.Size(5, 5), 0, 0, window.cv.BORDER_DEFAULT);
-
-      let edges = new window.cv.Mat();
-      window.cv.Canny(blurred, edges, 75, 200);
-
-      let contours = new window.cv.MatVector();
-      let hierarchy = new window.cv.Mat();
-      window.cv.findContours(edges, contours, hierarchy, window.cv.RETR_EXTERNAL, window.cv.CHAIN_APPROX_SIMPLE);
-
-      let isAligned = false;
-      const minArea = (w * h) * 0.25;
-
-      for (let i = 0; i < contours.size(); ++i) {
-        let cnt = contours.get(i);
-        let area = window.cv.contourArea(cnt);
-        if (area > minArea) {
-          let peri = window.cv.arcLength(cnt, true);
-          let approx = new window.cv.Mat();
-          window.cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
-
-          if (approx.rows === 4) {
-             isAligned = true;
-          }
-          approx.delete();
-        }
-        cnt.delete();
-      }
-
-      src.delete(); gray.delete(); blurred.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-
-      if (isAligned) {
-        alignCountRef.current += 1;
-        if (alignCountRef.current > 5) setKameraStatus('aligned'); // Bingkai Hijau
-        if (alignCountRef.current > 25) { // Stabil selama ~1 detik
-           isCapturingRef.current = true;
-           captureImage();
-           return;
-        }
-      } else {
-        alignCountRef.current = 0;
-        setKameraStatus('ready');
-      }
-
-    } catch (err) {
-      console.error("OpenCV Processing Error: ", err);
-    }
-
-    if (!isCapturingRef.current) {
-      scanRafRef.current = requestAnimationFrame(processVideoFrame);
-    }
-  };
-
-  const startCamera = async (mode = facingMode) => {
-    if (!cvReady) {
-      setPesan('Sistem pemindai identitas sedang dimuat. Mohon tunggu sebentar lalu coba lagi.');
-      return;
-    }
-    setIsCameraOpen(true); setKameraStatus('focusing'); setIsTorchOn(false);
-    alignCountRef.current = 0; isCapturingRef.current = false;
-
-    if (videoRef.current && videoRef.current.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-    }
-    if (scanRafRef.current) cancelAnimationFrame(scanRafRef.current);
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 }, advanced: [{ focusMode: "continuous" }] } });
-      if (videoRef.current) videoRef.current.srcObject = stream;
-
-      setTimeout(() => {
-        setKameraStatus('ready');
-        scanRafRef.current = requestAnimationFrame(processVideoFrame);
-      }, 1500);
-    } catch (err) {
-      setPesan('Aplikasi membutuhkan izin kamera untuk membaca KTP/KK. Silakan izinkan akses kamera di browser.');
-      setIsCameraOpen(false);
-    }
-  };
-
-  const stopCamera = () => {
-    isCapturingRef.current = true;
-    if (scanRafRef.current) cancelAnimationFrame(scanRafRef.current);
-    if (videoRef.current && videoRef.current.srcObject) {
-      const tracks = videoRef.current.srcObject.getTracks();
-      tracks.forEach(track => {
-        if (track.getCapabilities && track.getCapabilities().torch) {
-            track.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
-        }
-        track.stop();
-      });
-      videoRef.current.srcObject = null;
-    }
-    setIsCameraOpen(false); setKameraStatus('idle'); setIsTorchOn(false);
-  };
-
-  useEffect(() => {
-    return () => stopCamera();
-  }, []);
-
-  const toggleCamera = () => {
-    const newMode = facingMode === 'environment' ? 'user' : 'environment';
-    setFacingMode(newMode); startCamera(newMode);
-  };
-
-  const toggleTorch = async () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const track = videoRef.current.srcObject.getVideoTracks()[0];
-      try {
-        const capabilities = track.getCapabilities();
-        if (capabilities.torch) {
-          await track.applyConstraints({
-            advanced: [{ torch: !isTorchOn }]
-          });
-          setIsTorchOn(!isTorchOn);
-        } else {
-          await alertDialog({ title: 'Senter tidak didukung', message: 'Kamera atau browser Anda tidak mendukung fitur senter WebRTC.', variant: 'warning' });
-        }
-      } catch (error) {
-        console.error("Gagal mengakses fitur senter:", error);
-      }
-    }
-  };
-
-  const captureImage = () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      const vw = video.videoWidth; const vh = video.videoHeight;
-      let cropWidth = vw * 0.85; let cropHeight = cropWidth / 1.58;
-      if (cropHeight > vh) { cropHeight = vh * 0.85; cropWidth = cropHeight * 1.58; }
-      const startX = (vw - cropWidth) / 2; const startY = (vh - cropHeight) / 2;
-
-      canvas.width = cropWidth; canvas.height = cropHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, startX, startY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-
-      canvas.toBlob((blob) => {
-        stopCamera(); processOCR(new File([blob], "ktp-scan.jpg", { type: "image/jpeg" }));
-      }, 'image/jpeg', 0.95);
-    }
-  };
-
-  const handleFileUpload = (e) => { if (e.target.files[0]) processOCR(e.target.files[0]); };
-
-  const cancelOCR = () => {
-    ocrJobRef.current += 1;
-    setOcrLoading(false);
-    setOcrProgress(0);
-    setOcrMode('');
-    setOcrCandidates([]);
-    setOcrReview(null);
-    setOcrMeta(null);
-    setOcrDuplicateWarning('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const applyOcrData = (extractedData, source = 'OCR', target = 'auto') => {
-    if (!extractedData?.nik && !extractedData?.nama) return false;
-
-    const normalizedData = {
-      ...extractedData,
-      j_kelamin: extractedData.j_kelamin || 'P',
-      status_perkawinan: extractedData.status_perkawinan || 'Belum Kawin'
-    };
-    const finalDesa = Object.keys(WILAYAH_KERJA).includes(normalizedData.desa) ? normalizedData.desa : 'Luar Wilayah';
-    const finalDusun = WILAYAH_KERJA[finalDesa][0] || 'Lainnya';
-    const validOcrNik = isSixteenDigitNik(normalizedData.nik) ? normalizedData.nik : '';
-    const validOcrBirthDate = isValidIsoDate(normalizedData.tgl_lahir) ? normalizedData.tgl_lahir : '';
-    let newTglView = '';
-    if (validOcrBirthDate) {
-      const parts = validOcrBirthDate.split('-');
-      if (parts.length === 3) newTglView = `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-
-    const shouldFillWali = target === 'wali' || (target === 'auto' && tanpaNik);
-    if (shouldFillWali) {
-      setFormData(prev => ({ ...prev, nik_wali: validOcrNik || prev.nik_wali, nama_wali: normalizedData.nama || prev.nama_wali, tgl_lahir_wali: validOcrBirthDate || prev.tgl_lahir_wali }));
-      if (newTglView) setTglLahirWaliView(newTglView);
-    } else {
-      setFormData(prev => ({ ...prev, nik: validOcrNik || prev.nik, nama: normalizedData.nama || prev.nama, tgl_lahir: validOcrBirthDate || prev.tgl_lahir, j_kelamin: normalizedData.j_kelamin || prev.j_kelamin, status_perkawinan: normalizedData.status_perkawinan || prev.status_perkawinan, desa: finalDesa, dusun: finalDusun }));
-      if (newTglView) setTglLahirView(newTglView);
-      if (validOcrNik) setTanpaNik(false);
-    }
-
-    setOcrMeta({
-      documentType: normalizedData.document_type || 'UNKNOWN',
-      confidence: Math.round(Number(normalizedData.confidence || 0) * 100),
-      usedAt: new Date().toISOString(),
-      usedBy: user?.uid || user?.email || 'unknown',
-      warnings: normalizedData.warnings || [],
-      source
-    });
-    const confidence = normalizedData.confidence ? ` (${Math.round(normalizedData.confidence * 100)}%)` : '';
-    const warningText = normalizedData.warnings?.length ? ` Ada ${normalizedData.warnings.length} warning OCR.` : '';
-    setPesan(`✅ Data ${normalizedData.document_type || 'identitas'} dibaca via ${source}${confidence}. Periksa ulang NIK dan nama.${warningText}`);
-    return true;
-  };
-
-  const processOCR = async (fileAsli) => {
-    const jobId = ocrJobRef.current + 1;
-    ocrJobRef.current = jobId;
-    const isCurrentJob = () => ocrJobRef.current === jobId;
-
-    setOcrLoading(true); setPesan(''); setOcrProgress(0); setOcrCandidates([]); setOcrReview(null); setOcrMeta(null); setOcrDuplicateWarning(''); let extractedData = null;
-
-    setOcrMode('Mempersiapkan foto KTP...');
-    try {
-      const ocrResult = await runIdentityOcr(fileAsli, {
-        onProgress: (progress) => { if (isCurrentJob()) setOcrProgress(progress); },
-        onMode: (mode) => { if (isCurrentJob()) setOcrMode(mode); },
-        preferBackend: true
-      });
-      if (!isCurrentJob()) return;
-      extractedData = toLegacyOcrFormData(ocrResult?.data || {});
-      if (extractedData) extractedData.source = ocrResult.source;
-    } catch (localError) {
-      if (!isCurrentJob()) return;
-      setPesan('❌ Gagal membaca dokumen. Lensa terlalu buram.'); setOcrLoading(false); setOcrProgress(0); return;
-    }
-
-    if (!isCurrentJob()) return;
-    if (extractedData?.nik || extractedData?.nama) {
-      if (['Kartu Keluarga', 'KK'].includes(extractedData.document_type) && extractedData.candidates?.length > 1) {
-        setOcrCandidates(extractedData.candidates.map(c => ({ ...c, confidence: extractedData.confidence })));
-        setPesan(`⚠️ Kartu Keluarga terbaca. Pilih anggota keluarga yang sedang diperiksa agar NIK tidak tertukar.`);
-      } else {
-        setOcrReview(extractedData);
-        setPesan('Review hasil OCR, lalu klik Gunakan Data Ini jika NIK dan nama sudah benar.');
-      }
-    } else {
-      setPesan('❌ KTP tidak terbaca. Harap input manual.');
-    }
-    setOcrLoading(false); setOcrProgress(0);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const currentDomain = window.location.origin;
-  const raporLink = visitId ? `${currentDomain}/rapor/${visitId}` : '';
-  useEffect(() => {
-    let isActive = true;
-    if (!raporLink) {
-      setQrCodeUrl('');
-      return undefined;
-    }
-
-    createQrDataUrl(raporLink)
-      .then((dataUrl) => {
-        if (isActive) setQrCodeUrl(dataUrl);
-      })
-      .catch(() => {
-        if (isActive) setQrCodeUrl('');
-      });
-
-    return () => {
-      isActive = false;
-    };
-  }, [raporLink]);
 
   const handleKirimWA = async () => {
     let phone = normalizeWhatsappNumber(formData.no_hp || formData.no_hp_wali);
@@ -1071,91 +832,28 @@ function KunjunganRumah() {
       <div className="px-3 md:px-0 mt-2 relative z-10">
         {pesan && step < 5 && <div className={`p-4 rounded-xl font-bold flex items-start gap-3 text-xs md:text-sm shadow-sm transition-all mb-4 no-print border ${pesan.includes('❌') || pesan.includes('⚠️') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}><span className="text-lg leading-none">{pesan.includes('❌') ? '🚫' : (pesan.includes('⚠️') ? '⚠️' : '✅')}</span><span className="leading-relaxed">{pesan.replace(/[❌⚠️✅]/g, '')}</span></div>}
 
-        {/* KAMERA SCANNER KTP UI */}
-        {isCameraOpen && (
-          <div className="fixed inset-0 z-[9999] bg-black flex flex-col justify-center items-center no-print">
-            <video ref={videoRef} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover" />
-            <canvas ref={canvasRef} className="hidden" />
-            <canvas ref={processCanvasRef} className="hidden" />
-
-            {facingMode === 'environment' && (
-              <button onClick={toggleTorch} className={`absolute top-8 right-6 z-30 p-3.5 rounded-full backdrop-blur-md border transition-all active:scale-90 shadow-xl ${isTorchOn ? 'bg-yellow-400 text-black border-yellow-300 shadow-[0_0_20px_rgba(250,204,21,0.6)]' : 'bg-black/60 text-white border-white/20 hover:bg-black/80'}`}><span className="text-2xl leading-none block">🔦</span></button>
-            )}
-
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-none overflow-hidden">
-              <div className={`w-[90%] max-w-sm aspect-[1.58/1] relative box-content ring-[9999px] ring-black/75 rounded-2xl overflow-hidden transition-all duration-300 ${kameraStatus === 'aligned' ? 'border-emerald-500 scale-105' : 'border-amber-400'}`}>
-                <div className={`absolute inset-0 border-[3px] border-dashed rounded-2xl flex items-center justify-center transition-colors duration-300 ${kameraStatus === 'aligned' ? 'border-emerald-400 bg-emerald-500/20' : (kameraStatus === 'ready' ? 'border-amber-400 bg-amber-500/10' : 'border-slate-400 bg-black/10')}`}>
-                  <div className="relative z-10 text-center bg-black/60 backdrop-blur-md px-5 py-3 rounded-xl border border-white/10 shadow-2xl">
-                    <p className={`font-black tracking-widest uppercase text-xs md:text-sm drop-shadow-md transition-colors ${kameraStatus === 'aligned' ? 'text-emerald-400 animate-pulse' : (kameraStatus === 'ready' ? 'text-amber-400' : 'text-slate-300')}`}>
-                      {kameraStatus === 'aligned' ? '✅ TAHAN POSISI...' : (kameraStatus === 'ready' ? 'Posisikan KTP ke Kotak' : 'Fokus Kamera...')}
-                    </p>
-                    <p className="text-white font-bold text-[9px] md:text-[10px] mt-1.5 opacity-80">
-                      {kameraStatus === 'aligned' ? 'Otomatis memfoto...' : 'Pastikan garis batas pas'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="absolute bottom-[80px] md:bottom-12 left-1/2 -translate-x-1/2 w-[90%] max-w-sm flex justify-between items-center bg-black/50 backdrop-blur-xl border border-white/10 px-6 py-5 rounded-[2rem] z-20 shadow-2xl">
-              <button onClick={stopCamera} className="text-white flex flex-col items-center justify-center w-14 gap-1.5 hover:text-red-400 transition active:scale-90"><span className="text-2xl font-light leading-none">✕</span><span className="text-[9px] font-bold tracking-wider">BATAL</span></button>
-              <button onClick={captureImage} className="w-20 h-20 rounded-full flex items-center justify-center border-4 bg-white/10 border-white active:scale-90 cursor-pointer shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all"><div className={`w-16 h-16 rounded-full shadow-inner ${kameraStatus === 'aligned' ? 'bg-emerald-400' : 'bg-white'}`}></div></button>
-              <button onClick={toggleCamera} className="text-white flex flex-col items-center justify-center w-14 gap-1.5 hover:text-blue-400 transition active:scale-90"><span className="text-2xl leading-none">🔄</span><span className="text-[9px] font-bold tracking-wider">GANTI</span></button>
-            </div>
-          </div>
-        )}
-
         {/* STEP 1: IDENTITAS */}
         {step === 1 && (
           <div className="bg-white p-5 md:p-8 rounded-[1.5rem] shadow-sm border border-slate-200 animate-fade-in-up">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-100 pb-5">
               <div><h3 className="text-lg md:text-xl font-black text-slate-800">1. Data Kependudukan</h3><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Sesuai KTP/KK Pasien</p></div>
-              <div className="flex w-full md:w-auto gap-3">
-                <button type="button" onClick={() => startCamera()} disabled={!cvReady} className={`flex-1 md:flex-none min-h-[50px] px-4 rounded-xl text-[11px] md:text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg active:scale-95 ${cvReady ? 'bg-blue-950 hover:bg-blue-900 text-white' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}>{cvReady ? '📷 Scan KTP' : '⏳ Memuat Scanner...'}</button>
-                <button type="button" onClick={() => fileInputRef.current.click()} className="flex-1 md:flex-none bg-slate-100 hover:bg-slate-200 text-slate-700 min-h-[50px] px-4 rounded-xl text-[11px] md:text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm active:scale-95">📁 Galeri</button>
-                <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+              <div className="flex flex-col items-end gap-1 w-full md:w-auto">
+                <button 
+                  type="button" 
+                  onClick={() => setIsSmartScanOpen(true)} 
+                  className="w-full md:w-auto min-h-[48px] px-5 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-md active:scale-95 bg-blue-900 hover:bg-blue-950 text-white"
+                >
+                  <Camera className="h-4 w-4" aria-hidden="true" /> Scan Dokumen
+                </button>
+                <span className="text-[10px] text-slate-400 font-semibold block text-right mt-1">
+                  Scan KTP, KK, BPJS, atau JKN untuk bantu isi data peserta
+                </span>
               </div>
             </div>
-
-            {ocrLoading && (
-              <div className="mb-6 p-4 bg-emerald-600 text-white rounded-xl shadow-inner flex items-center gap-4 animate-pulse">
-                <span className="text-2xl animate-spin">⚙️</span>
-                <div className="flex-1"><p className="font-bold text-xs md:text-sm leading-tight">{ocrMode}</p>{ocrProgress > 0 && <p className="text-[9px] opacity-80 uppercase tracking-widest mt-1">Memproses ({ocrProgress}%)</p>}</div>
-                <button onClick={cancelOCR} className="bg-white/20 px-3 py-1.5 rounded-lg text-[10px] font-bold active:scale-90">BATAL</button>
-              </div>
-            )}
-
-            <OcrResultReview
-              result={ocrReview}
-              onUse={() => {
-                if (applyOcrData(ocrReview, ocrReview?.source || 'OCR', 'patient')) setOcrReview(null);
-              }}
-              onCancel={() => setOcrReview(null)}
-            />
 
             {ocrDuplicateWarning && (
               <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-bold text-rose-700">
                 {ocrDuplicateWarning}
-              </div>
-            )}
-
-            {ocrCandidates.length > 0 && (
-              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl shadow-sm">
-                <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3">Pilih Anggota dari Kartu Keluarga</p>
-                <div className="grid gap-2">
-                  {ocrCandidates.map((candidate, index) => (
-                    <button
-                      key={`${candidate.nik || 'nik'}-${index}`}
-                      type="button"
-                      onClick={() => { applyOcrData(candidate, 'OCR Kartu Keluarga', 'patient'); setOcrCandidates([]); setOcrReview(null); }}
-                      className="w-full text-left bg-white hover:bg-amber-100 border border-amber-200 rounded-xl p-3 transition active:scale-[0.99]"
-                    >
-                      <span className="block text-sm font-black text-slate-800">{candidate.nama || 'Nama belum terbaca'}</span>
-                      <span className="block text-[11px] font-bold text-slate-500 mt-1">NIK: {candidate.nik || '-'} • Lahir: {candidate.tgl_lahir || candidate.tanggalLahir || '-'}</span>
-                      <span className="mt-1 block text-[10px] font-black uppercase tracking-widest text-amber-700">Confidence: {Math.round(Number(candidate.confidence || 0) * (Number(candidate.confidence || 0) <= 1 ? 100 : 1))}%</span>
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
 
@@ -1830,6 +1528,12 @@ function KunjunganRumah() {
             </p>
           </div>
         )}
+      {isSmartScanOpen && (
+        <SmartDocumentScanner 
+          onDataExtracted={handleSmartScanData} 
+          onClose={() => setIsSmartScanOpen(false)} 
+        />
+      )}
       </div>
     </div>
   );

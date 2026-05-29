@@ -11,12 +11,11 @@ import { writeAuditLog } from './services/auditService';
 import { claimVisitForStaff, createTvQueueCall } from './services/queueService';
 import { buildPatientPayload, findCurrentYearCkgVisit, getPatientByNik, upsertPatient } from './services/patientService';
 import { buildPatientSnapshot, getVisitsByPatientNik, nowTimestamp, updateVisit } from './services/visitService';
-import { runIdentityOcr, toLegacyOcrFormData } from './features/ocr/ocrPipeline';
-import OcrResultReview from './features/ocr/OcrResultReview';
 import useQueue from './hooks/useQueue';
-import { Camera, UploadCloud } from 'lucide-react';
+import { Camera } from 'lucide-react';
 import QueueCallList from './components/patient/QueueCallList';
 import { alertDialog } from './utils/appDialog';
+import SmartDocumentScanner from './components/SmartDocumentScanner';
 
 const OPENCV_SCRIPT_ID = 'opencv-script';
 const OPENCV_SCRIPT_SRC = '/vendor/opencv-4.8.0.js';
@@ -178,6 +177,7 @@ function Pos1() {
   const [ocrCandidates, setOcrCandidates] = useState([]);
   const [ocrReview, setOcrReview] = useState(null);
   const [ocrMeta, setOcrMeta] = useState(null);
+  const [isSmartScanOpen, setIsSmartScanOpen] = useState(false);
   
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [facingMode, setFacingMode] = useState('environment'); 
@@ -513,6 +513,62 @@ function Pos1() {
     }
   };
 
+  const handleSmartScanData = (scanned) => {
+    if (!scanned.nik && !scanned.nama) return;
+
+    // Petakan jenis kelamin
+    const mappedGender = scanned.jenisKelamin === 'LAKI-LAKI' ? 'L' : 'P';
+
+    // Petakan desa
+    let mappedDesa = 'Luar Wilayah';
+    if (scanned.desaKelurahan === 'MALIMPUNG') mappedDesa = 'Desa Malimpung';
+    else if (scanned.desaKelurahan === 'PADANG LOANG') mappedDesa = 'Desa Padang Loang';
+    else if (scanned.desaKelurahan === 'MACCIRINNA') mappedDesa = 'Kelurahan Maccirinna';
+
+    // Petakan dusun cerdas
+    let mappedDusun = WILAYAH_KERJA[mappedDesa]?.[0] || 'Lainnya';
+    const dusunQuery = String(scanned.alamatDusun || '').toUpperCase();
+    if (mappedDesa !== 'Luar Wilayah') {
+      const listDusun = WILAYAH_KERJA[mappedDesa] || [];
+      for (const d of listDusun) {
+        const cleanD = d.toUpperCase().replace('DUSUN ', '');
+        if (dusunQuery.includes(cleanD)) {
+          mappedDusun = d;
+          break;
+        }
+      }
+    }
+
+    const validBirthDate = isValidIsoDate(scanned.tanggalLahir) ? scanned.tanggalLahir : '';
+    const newTglView = isoToDateView(validBirthDate);
+
+    if (tanpaNik) {
+      setFormData(prev => ({
+        ...prev,
+        nik_wali: scanned.nik || prev.nik_wali,
+        nama_wali: scanned.nama || prev.nama_wali,
+        tgl_lahir_wali: validBirthDate || prev.tgl_lahir_wali
+      }));
+      if (newTglView) setTglLahirWaliView(newTglView);
+      setPesan('✅ Data wali berhasil diisi dari hasil scan dokumen.');
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        nik: scanned.nik || prev.nik,
+        nama: scanned.nama || prev.nama,
+        tgl_lahir: validBirthDate || prev.tgl_lahir,
+        j_kelamin: mappedGender,
+        desa: mappedDesa,
+        dusun: mappedDusun
+      }));
+      if (newTglView) setTglLahirView(newTglView);
+      
+      // Jika NIK terisi, matikan status tanpa NIK
+      if (scanned.nik) setTanpaNik(false);
+      setPesan('✅ Data pasien berhasil diisi dari hasil scan dokumen.');
+    }
+  };
+
   const handleDateMaskChange = (e, fieldName) => {
       let val = e.target.value.replace(/\D/g, '');
       if (val.length > 8) val = val.substring(0, 8); 
@@ -751,125 +807,69 @@ function Pos1() {
         </div>
 
         <form id="pos1-registration-form" onSubmit={handleSubmit} className="pos1-form p-6 md:p-8 space-y-6">
-          {pesan && <div className={`p-4 rounded-xl font-bold text-xs shadow-sm ${pesan.includes('❌') || pesan.includes('⚠️') ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>{pesan}</div>}
-
-          {statusPasien === 'lama' && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-[1.5rem] p-5 shadow-sm">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b border-emerald-100 pb-4 mb-4">
-                <div>
-                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] mb-1">Pasien Lama Terdeteksi</p>
-                  <h3 className="font-black text-slate-800 text-lg leading-tight">Pasien memiliki riwayat kunjungan</h3>
-                  <p className="text-xs font-bold text-emerald-700 mt-1">Identitas otomatis dimuat. Periksa riwayat terakhir sebelum lanjut ke Pos 2.</p>
-                </div>
-                <div className="bg-white text-emerald-700 border border-emerald-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest w-max">
-                  {riwayatKunjungan.length} Riwayat
-                </div>
-              </div>
-
-              <div className="grid gap-2">
-                {riwayatKunjungan.map((visit) => (
-                  <div key={visit.id} className="bg-white border border-emerald-100 rounded-2xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                    <div>
-                      <p className="font-black text-slate-800 text-sm">{formatTanggalKunjungan(visit)}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{visit.jalur_pemeriksaan || 'Kunjungan Pos'} - {visit.nomor_antrian || '-'}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase">{visit.status_antrian || '-'}</span>
-                      <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-[10px] font-black uppercase">{visit.kategori_usia_satusehat || '-'}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {statusPasien === 'terdaftar' && (
-            <div className="bg-teal-50 border border-teal-200 rounded-[1.5rem] p-5 shadow-sm">
-              <p className="text-[10px] font-black text-teal-600 uppercase tracking-[0.2em] mb-1">Master Pasien Ditemukan</p>
-              <h3 className="font-black text-slate-800 text-lg leading-tight">Identitas pasien sudah ada</h3>
-              <p className="text-xs font-bold text-teal-700 mt-1">Belum ada riwayat kunjungan sebelumnya. Data identitas dimuat agar petugas tidak mengetik ulang.</p>
-            </div>
-          )}
-
-          {statusPasien === 'baru' && (
-            <div className="bg-sky-50 border border-sky-200 rounded-[1.5rem] p-5 shadow-sm">
-              <p className="text-[10px] font-black text-sky-600 uppercase tracking-[0.2em] mb-1">Pasien Baru</p>
-              <h3 className="font-black text-slate-800 text-lg leading-tight">NIK belum pernah terdaftar</h3>
-              <p className="text-xs font-bold text-sky-700 mt-1">Lengkapi identitas pasien, lalu sistem akan membuat master pasien baru saat disimpan.</p>
-            </div>
-          )}
-
-          <div className="form-section bg-slate-50/50 p-6 rounded-[1.5rem] border border-slate-100 shadow-inner">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-slate-200 pb-4">
-                  <div>
-                      <h3 className="text-xl font-black text-slate-800">Identifikasi Pasien</h3>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Sesuai KTP / KK</p>
-                  </div>
-                  <div className="flex w-full sm:w-auto gap-2">
-                      <button type="button" onClick={() => startCamera()} className={`pos1-scan-btn flex-1 sm:flex-none min-h-[44px] px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm active:scale-95 bg-slate-800 hover:bg-slate-900 text-white`}><Camera className="h-4 w-4" aria-hidden="true" /> Scan E-KTP</button>
-                      <button type="button" onClick={() => fileInputRef.current.click()} className="pos1-upload-btn flex-1 sm:flex-none bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 min-h-[44px] px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm active:scale-95"><UploadCloud className="h-4 w-4" aria-hidden="true" /> Unggah KTP</button>
-                      <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-                  </div>
-              </div>
-
-              {ocrLoading && (
-                  <div className="mb-6 p-4 bg-teal-600 text-white rounded-2xl shadow-inner flex items-center gap-4 animate-pulse">
-                      <span className="text-2xl animate-spin">⚙️</span>
-                      <div className="flex-1">
-                          <p className="font-bold text-sm">Mesin AI Membaca Teks...</p>
-                          <p className="text-[10px] opacity-80 uppercase tracking-widest mt-1">Mengekstrak ({ocrProgress}%)</p>
+              <div className="form-section bg-slate-50/50 p-6 rounded-[1.5rem] border border-slate-100 shadow-inner">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-slate-200 pb-4">
+                      <div>
+                          <h3 className="text-xl font-black text-slate-800">Identifikasi Pasien</h3>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Sesuai KTP / KK</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                          <button 
+                              type="button" 
+                              onClick={() => setIsSmartScanOpen(true)} 
+                              className="pos1-scan-btn w-full sm:w-auto min-h-[44px] px-5 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-md active:scale-95 bg-blue-900 hover:bg-blue-950 text-white"
+                          >
+                              <Camera className="h-4 w-4" aria-hidden="true" /> Scan Dokumen
+                          </button>
+                          <span className="text-[10px] text-slate-400 font-semibold block text-right mt-1">
+                              Scan KTP, KK, BPJS, atau JKN untuk bantu isi data peserta
+                          </span>
                       </div>
                   </div>
-              )}
 
-              <OcrResultReview
-                  result={ocrReview}
-                  onUse={() => {
-                      if (applyOcrData(ocrReview, ocrReview?.source || 'OCR')) setOcrReview(null);
-                  }}
-                  onCancel={() => setOcrReview(null)}
-              />
-
-              {ocrCandidates.length > 0 && (
-                  <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl shadow-sm">
-                      <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3">Pilih Anggota dari Kartu Keluarga</p>
-                      <div className="grid gap-2">
-                          {ocrCandidates.map((candidate, index) => (
-                              <button
-                                  key={`${candidate.nik || 'nik'}-${index}`}
-                                  type="button"
-                                  onClick={() => { applyOcrData(candidate, 'OCR Kartu Keluarga'); setOcrCandidates([]); setOcrReview(null); }}
-                                  className="w-full text-left bg-white hover:bg-amber-100 border border-amber-200 rounded-xl p-3 transition active:scale-[0.99]"
-                              >
-                                  <span className="block text-sm font-black text-slate-800">{candidate.nama || 'Nama belum terbaca'}</span>
-                                  <span className="block text-[11px] font-bold text-slate-500 mt-1">NIK: {candidate.nik || '-'} • Lahir: {candidate.tgl_lahir || candidate.tanggalLahir || '-'}</span>
-                                  <span className="mt-1 block text-[10px] font-black uppercase tracking-widest text-amber-700">Confidence: {Math.round(Number(candidate.confidence || 0) * (Number(candidate.confidence || 0) <= 1 ? 100 : 1))}%</span>
-                              </button>
-                          ))}
+                  <div className="form-grid grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
+                      <div className="form-group-heading md:col-span-2">
+                        <p>Identitas Utama</p>
+                        <span>NIK, nama, tanggal lahir, dan jenis kelamin</span>
                       </div>
-                  </div>
-              )}
+                      <div className="md:col-span-2">
+                          <InputCustom 
+                              type="tel" 
+                              label={isChildCategory(dataUmur.kategori) ? "NIK Wali (16 digit)" : "NIK Pasien (16 digit)"} 
+                              name="nik" 
+                              value={formData.nik} 
+                              onChange={handleChange} 
+                              disabled={tanpaNik} 
+                              placeholder={tanpaNik ? "Auto-generate setelah simpan" : "16 digit NIK"} 
+                              required={!tanpaNik} 
+                              maxLength="16" 
+                              autoComplete="off" 
+                              error={getFieldError('nik')} 
+                              hint={tanpaNik ? 'Untuk bayi/anak tanpa NIK, sistem memakai data wali.' : 'Ketik angka saja. Data master pasien dicari otomatis.'} 
+                          />
+                          <label className="flex items-center space-x-3 mt-3 cursor-pointer bg-white p-3 rounded-xl border border-slate-200 hover:bg-slate-100 transition shadow-sm w-max">
+                              <input type="checkbox" checked={tanpaNik} onChange={handleTanpaNikChange} className="rounded border-slate-300 text-teal-600 w-4 h-4"/>
+                              <div>
+                                  <span className="text-[11px] font-black text-slate-700 block">Belum Punya NIK?</span>
+                                  <span className="text-[9px] text-slate-500">(Khusus Bayi/Anak)</span>
+                              </div>
+                          </label>
+                      </div>
 
-              <div className="form-grid grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
-                  <div className="form-group-heading md:col-span-2">
-                    <p>Identitas Utama</p>
-                    <span>NIK, nama, tanggal lahir, dan jenis kelamin</span>
-                  </div>
-                  <div>
-                      <InputCustom type="tel" label={isChildCategory(dataUmur.kategori) ? "NIK Wali (16 digit)" : "NIK Pasien (16 digit)"} name="nik" value={formData.nik} onChange={handleChange} disabled={tanpaNik} placeholder={tanpaNik ? "Auto-generate setelah simpan" : "16 digit NIK"} required={!tanpaNik} maxLength="16" autoComplete="off" error={getFieldError('nik')} hint={tanpaNik ? 'Untuk bayi/anak tanpa NIK, sistem memakai data wali.' : 'Ketik angka saja. Data master pasien dicari otomatis.'} />
-                      <label className="flex items-center space-x-3 mt-3 cursor-pointer bg-white p-3 rounded-xl border border-slate-200 hover:bg-slate-100 transition shadow-sm w-max">
-                          <input type="checkbox" checked={tanpaNik} onChange={handleTanpaNikChange} className="rounded border-slate-300 text-teal-600 w-4 h-4"/>
-                          <div>
-                              <span className="text-[11px] font-black text-slate-700 block">Belum Punya NIK?</span>
-                              <span className="text-[9px] text-slate-500">(Khusus Bayi/Anak)</span>
-                          </div>
-                      </label>
-                  </div>
-                  
-                  <div><InputCustom label="Nama Lengkap" name="nama" value={formData.nama} onChange={handleChange} required={true} placeholder="Sesuai KTP..." autoComplete="name" /></div>
+                      <div className="md:col-span-2">
+                          <InputCustom 
+                              label="Nama Lengkap" 
+                              name="nama" 
+                              value={formData.nama} 
+                              onChange={handleChange} 
+                              required={true} 
+                              placeholder="Sesuai KTP..." 
+                              autoComplete="name" 
+                          />
+                      </div>
 
-                  {tanpaNik && (
-                      <div className="md:col-span-2 bg-gradient-to-br from-amber-50 to-orange-50 p-5 md:p-6 rounded-2xl border border-amber-200 space-y-4 shadow-inner mt-2 animate-fade-in-up">
+                      {tanpaNik && (
+                          <div className="md:col-span-2 bg-gradient-to-br from-amber-50 to-orange-50 p-5 md:p-6 rounded-2xl border border-amber-200 space-y-4 shadow-inner mt-2 animate-fade-in-up">
                           <div className="border-b border-amber-200 pb-3 flex items-center gap-3">
                               <span className="text-2xl bg-white p-2 rounded-xl shadow-sm border border-amber-100">👨‍👩‍👧</span>
                               <div>
@@ -974,6 +974,12 @@ function Pos1() {
           {loading ? 'Menyimpan...' : 'Lanjut Pos 2'}
         </button>
       </div>
+      {isSmartScanOpen && (
+        <SmartDocumentScanner 
+          onDataExtracted={handleSmartScanData} 
+          onClose={() => setIsSmartScanOpen(false)} 
+        />
+      )}
       </>
       )}
     </div>

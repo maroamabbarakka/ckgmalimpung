@@ -12,10 +12,15 @@
     "test:e2e": "playwright test",
     "migrate:auth": "node scripts/migrateStaffToFirebaseAuth.js",
     "migrate:public-queue": "node scripts/backfillPublicQueue.js",
+    "server": "node server/index.js",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/genai": "^2.7.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",
+    "express": "^5.2.1",
     "firebase": "^12.12.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",

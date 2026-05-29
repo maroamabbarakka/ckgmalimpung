@@ -368,6 +368,7 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
   });
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [selectedActivityLog, setSelectedActivityLog] = useState(null);
   const [isGlobalFilterOpen, setIsGlobalFilterOpen] = useState(false);
   const [currentDateMs] = useState(() => Date.now());
   const [hasNewNotif, setHasNewNotif] = useState(true);
@@ -1222,32 +1223,38 @@ const activeUsername = normalizeText(user?.username);
                 </button>
                 
                 {isNotifOpen && (
-                   <>
+<>
                    <div className="fixed inset-0 z-40" onClick={() => setIsNotifOpen(false)}></div>
-                   <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden z-50 animate-in slide-in-from-top-2">
-                      <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                         <h3 className="font-black text-slate-800 text-sm">Log Aktivitas Sistem</h3>
-                         <span className="text-[10px] font-bold bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full">Live</span>
+                   <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl z-50 animate-in slide-in-from-top-2">
+                      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 p-4">
+                         <h3 className="text-sm font-black text-slate-800">Log Aktivitas Sistem</h3>
+                         <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-bold text-teal-700">Live</span>
                       </div>
                       <div className="max-h-64 overflow-y-auto p-2">
-                         <div className="p-3 hover:bg-slate-50 rounded-xl transition cursor-pointer flex gap-3 border-b border-slate-50">
-                            <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 shrink-0">📝</div>
-                            <div>
-                               <p className="text-xs font-bold text-slate-700">Data kunjungan baru sinkronisasi</p>
-                               <p className="text-[10px] text-slate-400 mt-0.5">2 menit yang lalu</p>
+                        {(activityLogs.slice(0, 4).length > 0 ? activityLogs.slice(0, 4) : []).map((log) => (
+                          <button
+                            key={log.id}
+                            type="button"
+                            onClick={() => { setSelectedActivityLog(log); setIsNotifOpen(false); }}
+                            className="flex w-full gap-3 rounded-xl border-b border-slate-50 p-3 text-left transition hover:bg-slate-50"
+                          >
+                            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${String(log.aksi || '').toLowerCase().includes('hapus') || String(log.aksi || '').toLowerCase().includes('gagal') ? 'bg-rose-100 text-rose-600' : 'bg-teal-100 text-teal-600'}`}>
+                              {String(log.aksi || '').toLowerCase().includes('hapus') || String(log.aksi || '').toLowerCase().includes('gagal') ? '⚠️' : '📝'}
                             </div>
-                         </div>
-                         <div className="p-3 hover:bg-slate-50 rounded-xl transition cursor-pointer flex gap-3 border-b border-slate-50">
-                            <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">⚠️</div>
-                            <div>
-                               <p className="text-xs font-bold text-slate-700">Peringatan: 5 Pasien Hipertensi baru terdeteksi</p>
-                               <p className="text-[10px] text-slate-400 mt-0.5">15 menit yang lalu</p>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-700">{log.aksi || 'Aktivitas'}</p>
+                              <p className="mt-0.5 text-[10px] text-slate-400">{formatWaktu(log.waktu)}</p>
                             </div>
-                         </div>
+                          </button>
+                        ))}
                       </div>
-                      <div onClick={() => { setHasNewNotif(false); setIsNotifOpen(false); setActiveMenu('log'); }} className="p-3 bg-slate-50 text-center border-t border-slate-100 cursor-pointer hover:bg-slate-100 transition">
+                      <button
+                        type="button"
+                        onClick={() => { setHasNewNotif(false); setIsNotifOpen(false); setActiveMenu('simpeg'); setSimpegTab('logs'); }}
+                        className="w-full border-t border-slate-100 bg-slate-50 p-3 text-center transition hover:bg-slate-100"
+                      >
                          <span className="text-xs font-bold text-teal-600">Lihat Semua Aktivitas</span>
-                      </div>
+                      </button>
                    </div>
                    </>
                 )}
@@ -2960,6 +2967,46 @@ const activeUsername = normalizeText(user?.username);
       )}
 
       
+      {selectedActivityLog && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 p-5">
+              <div>
+                <h2 className="text-xl font-black text-slate-950">Detail Aktivitas</h2>
+                <p className="text-xs font-semibold text-slate-500">Notifikasi asli dari log sistem.</p>
+              </div>
+              <button type="button" onClick={() => setSelectedActivityLog(null)} className="rounded-lg bg-white px-3 py-2 text-sm font-black text-slate-500 shadow-sm hover:text-rose-600">
+                Tutup
+              </button>
+            </div>
+            <div className="overflow-y-auto p-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-[10px] font-black uppercase text-slate-400">Aksi</p>
+                  <p className="font-bold text-slate-900">{selectedActivityLog.aksi || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase text-slate-400">Modul</p>
+                  <p className="font-bold text-slate-900">{selectedActivityLog.modul || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase text-slate-400">Nama</p>
+                  <p className="font-bold text-slate-900">{selectedActivityLog.nama || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase text-slate-400">User</p>
+                  <p className="font-bold text-slate-900">{selectedActivityLog.user ? `@${selectedActivityLog.user}` : '-'}</p>
+                </div>
+                <div className="sm:col-span-2">
+                  <p className="text-[10px] font-black uppercase text-slate-400">Waktu</p>
+                  <p className="font-bold text-slate-900">{formatWaktu(selectedActivityLog.waktu)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedSchoolPatients && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
           <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
