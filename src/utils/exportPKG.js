@@ -105,12 +105,28 @@ const appendArraySheet = (workbook, sheetName, sheetData, {
     return worksheet;
 };
 
-const buildRowsForSheet = (sheetVisits, headers) => sheetVisits.map((v, index) => (
-    headers.map(h => {
-        if (h === 'NO') return index + 1;
-        return getPkgValue(v, h);
-    })
-));
+const getStoredQuestionValue = (visit, question) => {
+    if (!question?.id) return undefined;
+    for (const posKey of ['pos2', 'pos3', 'pos4', 'pos5', 'pos6']) {
+        const posData = visit[posKey] || {};
+        if (Object.prototype.hasOwnProperty.call(posData, question.id)) {
+            const value = posData[question.id];
+            if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+        }
+    }
+    return undefined;
+};
+
+const getQuestionExportValue = (visit, question) => {
+    const storedValue = getStoredQuestionValue(visit, question);
+    if (storedValue !== undefined) return storedValue;
+    return getPkgValue(visit, question.question_text);
+};
+
+const buildRowsForQuestions = (sheetVisits, standardHeaders, questions) => sheetVisits.map((visit, index) => [
+    ...standardHeaders.map((header) => (header === 'NO' ? index + 1 : getPkgValue(visit, header))),
+    ...questions.map((question) => getQuestionExportValue(visit, question))
+]);
 
 const appendRecapSheet = (workbook, visits, forms, allowedForms = Object.keys(forms), title = 'REKAP KESELURUHAN') => {
     const rows = allowedForms
@@ -208,7 +224,7 @@ export const exportToPKGExcel = async (visits) => {
             const questionHeaders = sortedQuestions.map(q => q.question_text);
             const allHeaders = [...STANDARD_HEADERS, ...questionHeaders];
             
-            const rows = buildRowsForSheet(sheetVisits, allHeaders);
+            const rows = buildRowsForQuestions(sheetVisits, STANDARD_HEADERS, sortedQuestions);
             
             const titleData = [
                 [`REKAPITULASI DATA KOLEKTIF - KLASTER ${sheetName.toUpperCase()}`],
@@ -485,7 +501,7 @@ export const exportToPKG_PDF = async (visits) => {
                         getPkgValue(visit, 'NIK'),
                         getPkgValue(visit, 'NAMA LENGKAP'),
                         sheetName,
-                        ...questionChunk.map((question) => getPkgValue(visit, question.question_text))
+                        ...questionChunk.map((question) => getQuestionExportValue(visit, question))
                     ];
                 });
 
@@ -616,10 +632,10 @@ export const exportClusterPDF = async (visits, clusterName) => {
             const pdfRows = [];
             
             sheetVisits.forEach((v, index) => {
-                const rawRow = originalHeaders.map((h, i) => {
-                    if (i === 0) return index + 1;
-                    return getPkgValue(v, h);
-                });
+                const rawRow = [
+                    ...standardHeaders.map((header, i) => (i === 0 ? index + 1 : getPkgValue(v, header))),
+                    ...sortedQuestions.map((question) => getQuestionExportValue(v, question))
+                ];
                 const filteredRow = validCols.map(c => rawRow[c.idx]);
                 pdfRows.push(filteredRow);
             });
@@ -684,7 +700,7 @@ export const exportClusterExcel = async (visits, clusterName) => {
             const questionHeaders = sortedQuestions.map(q => q.question_text);
             const allHeaders = [...STANDARD_HEADERS, ...questionHeaders];
             
-            const rows = buildRowsForSheet(sheetVisits, allHeaders);
+            const rows = buildRowsForQuestions(sheetVisits, STANDARD_HEADERS, sortedQuestions);
             
             const titleData = [
                 [`REKAPITULASI DATA KLASTER ${clusterName.toUpperCase()} - ${sheetName.toUpperCase()}`],

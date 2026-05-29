@@ -22,6 +22,14 @@ const extractValue = (posData, keywords, questionMap = {}) => {
     return key ? posData[key] : null;
 };
 
+const extractFirstExamValue = (posData, keywordGroups = [], questionMap = {}) => {
+    for (const keywords of keywordGroups) {
+        const value = extractValue(posData, keywords, questionMap);
+        if (value !== null && value !== undefined && !isPlaceholderValue(value)) return value;
+    }
+    return null;
+};
+
 const isPlaceholderValue = (value) => {
     const text = normalizePrintValue(value).toLowerCase();
     return !text || text.includes('data dummy') || text.includes('dummy lengkap') || text === 'undefined' || text.includes('undefined/');
@@ -50,6 +58,15 @@ const evalGula = (gds, gdp) => {
         return { nilai: `${val} mg/dL`, status: 'Diabetes', color: 'text-rose-600', pos: 85, bar: 'bg-rose-500' };
     }
     return { nilai: '-', status: 'Tidak Diperiksa', color: 'text-slate-500', pos: 0, bar: 'bg-slate-300' };
+};
+
+const evalHbA1c = (hba1c) => {
+    if (!hba1c || String(hba1c).trim() === '') return null;
+    const val = parseFloat(hba1c);
+    if (isNaN(val)) return null;
+    if (val < 5.7) return { nilai: `${val}%`, status: 'Normal', color: 'text-emerald-600', pos: 30, bar: 'bg-emerald-500' };
+    if (val <= 6.4) return { nilai: `${val}%`, status: 'Prediabetes', color: 'text-yellow-600', pos: 60, bar: 'bg-yellow-500' };
+    return { nilai: `${val}%`, status: 'Diabetes', color: 'text-rose-600', pos: 85, bar: 'bg-rose-500' };
 };
 
 const hitungIMT = (tb, bb) => {
@@ -231,14 +248,18 @@ function RaporDigital() {
     const tensiField = sistolik && diastolik ? `${sistolik}/${diastolik}` : directTd || '-';
     const tensiData = evalTensi(tensiField);
 
-    const gds = data.pos2?.gds || extractValue(data.pos2, ['gula darah sewaktu', 'gds'], data.pos2_question_map) || extractValue(data.pos4, ['gula darah sewaktu', 'gds'], data.pos4_question_map);
-    const gdp = data.pos2?.gdp || extractValue(data.pos2, ['gula darah puasa', 'gdp'], data.pos2_question_map) || extractValue(data.pos4, ['gula darah puasa', 'gdp'], data.pos4_question_map);
+    const gds = extractFirstExamValue(data.pos2, [['gula darah sewaktu'], ['gds']], data.pos2_question_map) || extractFirstExamValue(data.pos4, [['gula darah sewaktu'], ['gds']], data.pos4_question_map);
+    const gdp = extractFirstExamValue(data.pos2, [['gula darah puasa'], ['gdp']], data.pos2_question_map) || extractFirstExamValue(data.pos4, [['gula darah puasa'], ['gdp']], data.pos4_question_map);
+    const hba1c = extractFirstExamValue(data.pos2, [['hba1c'], ['hb1ac'], ['gula darah lanjutan']], data.pos2_question_map) || extractFirstExamValue(data.pos4, [['hba1c'], ['hb1ac'], ['gula darah lanjutan']], data.pos4_question_map);
     const gulaData = evalGula(gds, gdp);
+    const gulaDisplayData = gulaData.nilai !== '-' ? gulaData : (evalHbA1c(hba1c) || gulaData);
 
     // IMT Parsing
-    const imtHitung = hitungIMT(data.pos2?.tb, data.pos2?.bb);
+    const tinggiBadan = extractFirstExamValue(data.pos2, [['tinggi badan'], ['pengukuran tinggi badan'], ['panjang badan']], data.pos2_question_map);
+    const beratBadan = extractFirstExamValue(data.pos2, [['berat badan']], data.pos2_question_map);
+    const imtHitung = hitungIMT(tinggiBadan, beratBadan);
     const computedImt = imtHitung.nilai !== '-' ? `${imtHitung.nilai} (${imtHitung.status})` : '';
-    const imtValFull = extractValue(data.pos2, ['imt'], data.pos2_question_map) || computedImt || '-';
+    const imtValFull = extractFirstExamValue(data.pos2, [['index massa tubuh'], ['indeks massa tubuh'], ['imt/u'], ['imt']], data.pos2_question_map) || computedImt || '-';
     let imtValue = '-'; let imtStatus = 'BELUM DIPERIKSA'; let imtColor = 'text-slate-500'; let imtPos = 0;
     if (imtValFull !== '-') {
         const parts = imtValFull.split(' ');
@@ -393,7 +414,7 @@ function RaporDigital() {
                     {/* VIsual Rangkuman Section (Sesuai Screenshot Terbaru) */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
                         <RangkumanCard icon="❤️" title="Tensi" value={tensiField} status={tensiData.status} textColor={tensiData.color} dotPos={tensiData.pos} />
-                        <RangkumanCard icon="🩸" title="Gula Darah" value={gulaData.nilai} status={gulaData.status} textColor={gulaData.color} dotPos={gulaData.pos} />
+                        <RangkumanCard icon="🩸" title="Gula Darah" value={gulaDisplayData.nilai} status={gulaDisplayData.status} textColor={gulaDisplayData.color} dotPos={gulaDisplayData.pos} />
                         <RangkumanCard icon="⚖️" title="IMT / Gizi" value={imtValue} status={imtStatus} textColor={imtColor} dotPos={imtPos} />
                         <RangkumanCard icon="🫁" title="TB/Paru" value={tbValue} status={tbStatus} textColor={tbColor} dotPos={tbPos} />
                     </div>
@@ -527,7 +548,7 @@ function RaporDigital() {
                                 <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-2">1. RANGKUMAN INDIKATOR KRITIS</h3>
                                 <div className="grid grid-cols-4 gap-3 mb-5 print-avoid-break">
                                     <RangkumanCard icon="❤️" title="Tensi" value={tensiField} status={tensiData.status} textColor={tensiData.color} dotPos={tensiData.pos} />
-                                    <RangkumanCard icon="🩸" title="Gula Darah" value={gulaData.nilai} status={gulaData.status} textColor={gulaData.color} dotPos={gulaData.pos} />
+                                    <RangkumanCard icon="🩸" title="Gula Darah" value={gulaDisplayData.nilai} status={gulaDisplayData.status} textColor={gulaDisplayData.color} dotPos={gulaDisplayData.pos} />
                                     <RangkumanCard icon="⚖️" title="IMT / Gizi" value={imtValue} status={imtStatus} textColor={imtColor} dotPos={imtPos} />
                                     <RangkumanCard icon="🫁" title="TB/Paru" value={tbValue} status={tbStatus} textColor={tbColor} dotPos={tbPos} />
                                 </div>

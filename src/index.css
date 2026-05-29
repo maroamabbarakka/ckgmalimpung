@@ -6098,3 +6098,42 @@ body,
     max-width: 100% !important;
   }
 }
+
+/* Icon-safe inputs stay late so global input padding cannot cover icons. */
+.login-input-wrap .login-form-input,
+.app-input-with-leading-icon {
+  padding-left: 48px !important;
+  padding-right: 16px !important;
+}
+
+.dashboard-patient-search .app-input-with-leading-icon {
+  padding-left: 56px !important;
+}
+
+.login-input-wrap .login-pin-input {
+  padding-left: 48px !important;
+  letter-spacing: 0.28em !important;
+}
+
+.login-input-icon,
+.input-leading-icon {
+  pointer-events: none !important;
+  z-index: 2 !important;
+}
+
+@media (max-width: 767px) {
+  .dashboard-mobile-clinical-grid {
+    grid-auto-rows: minmax(112px, auto);
+    align-items: stretch;
+    overflow: visible;
+  }
+
+  .dashboard-mobile-clinical-grid > div {
+    min-height: 112px;
+  }
+
+  .dashboard-mobile-clinical-grid > div > div {
+    min-height: 112px;
+    height: 100%;
+  }
+}

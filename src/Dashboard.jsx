@@ -152,6 +152,14 @@ const extractDashboardValue = (posData, keywords, questionMap = {}) => {
     return key ? posData[key] : null;
 };
 
+const extractDashboardFirstValue = (posData, keywordGroups = [], questionMap = {}) => {
+    for (const keywords of keywordGroups) {
+        const value = extractDashboardValue(posData, keywords, questionMap);
+        if (value !== null && value !== undefined && String(value).trim() !== '') return value;
+    }
+    return null;
+};
+
 const getVisitBloodPressure = (visit) => {
     const td = String(visit.pos2?.td || extractDashboardValue(visit.pos2, ['tekanan darah'], visit.pos2_question_map) || '');
     const sys = extractDashboardValue(visit.pos2, ['sistolik'], visit.pos2_question_map) || (td.includes('/') ? td.split('/')[0] : td);
@@ -160,9 +168,24 @@ const getVisitBloodPressure = (visit) => {
 };
 
 const getVisitGlucose = (visit) => {
-    const gds = visit.pos4?.gds || extractDashboardValue(visit.pos4, ['gula darah sewaktu', 'gds'], visit.pos4_question_map) || visit.pos2?.gds || extractDashboardValue(visit.pos2, ['gula darah sewaktu', 'gds'], visit.pos2_question_map);
-    const gdp = visit.pos4?.gdp || extractDashboardValue(visit.pos4, ['gula darah puasa', 'gdp'], visit.pos4_question_map) || visit.pos2?.gdp || extractDashboardValue(visit.pos2, ['gula darah puasa', 'gdp'], visit.pos2_question_map);
+    const gds = extractDashboardFirstValue(visit.pos2, [['gula darah sewaktu'], ['gds']], visit.pos2_question_map) || extractDashboardFirstValue(visit.pos4, [['gula darah sewaktu'], ['gds']], visit.pos4_question_map);
+    const gdp = extractDashboardFirstValue(visit.pos2, [['gula darah puasa'], ['gdp']], visit.pos2_question_map) || extractDashboardFirstValue(visit.pos4, [['gula darah puasa'], ['gdp']], visit.pos4_question_map);
     return { gds, gdp, label: gds || gdp || '-' };
+};
+
+const getVisitBodyMassIndex = (visit) => {
+    const savedImt = extractDashboardFirstValue(visit.pos2, [['index massa tubuh'], ['indeks massa tubuh'], ['imt/u'], ['imt']], visit.pos2_question_map);
+    const tbRaw = extractDashboardFirstValue(visit.pos2, [['tinggi badan'], ['pengukuran tinggi badan'], ['panjang badan']], visit.pos2_question_map);
+    const bbRaw = extractDashboardFirstValue(visit.pos2, [['berat badan']], visit.pos2_question_map);
+    const tb = parseFloat(tbRaw);
+    const bb = parseFloat(bbRaw);
+    const calculated = tb > 0 && bb > 0 ? bb / Math.pow(tb / 100, 2) : null;
+    const numeric = Number.isFinite(parseFloat(savedImt)) ? parseFloat(savedImt) : calculated;
+    return {
+        value: Number.isFinite(numeric) ? numeric : null,
+        label: Number.isFinite(numeric) ? numeric.toFixed(1) : '-',
+        saved: savedImt || ''
+    };
 };
 
 const POS_QUEUE_OPTIONS = [
@@ -236,6 +259,7 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDesa, setFilterDesa] = useState('Semua');
+  const [patientPage, setPatientPage] = useState(1);
 
   const [selectedRows, setSelectedRows] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: 'waktu_ambil_tiket', direction: 'desc' });
@@ -337,18 +361,14 @@ function Dashboard() {
         const dia = parseInt(diaRaw);
         if ((!isNaN(sys) && sys >= 140) || (!isNaN(dia) && dia >= 90)) s.klinis.hipertensi++;
 
-        const gds = parseInt(v.pos4?.gds || extractDashboardValue(v.pos4, ['gula darah sewaktu', 'gds'], v.pos4_question_map) || v.pos2?.gds || extractDashboardValue(v.pos2, ['gula darah sewaktu', 'gds'], v.pos2_question_map) || 0);
-        const gdp = parseInt(v.pos4?.gdp || extractDashboardValue(v.pos4, ['gula darah puasa', 'gdp'], v.pos4_question_map) || v.pos2?.gdp || extractDashboardValue(v.pos2, ['gula darah puasa', 'gdp'], v.pos2_question_map) || 0);
+        const visitGlucose = getVisitGlucose(v);
+        const gds = parseInt(visitGlucose.gds || 0);
+        const gdp = parseInt(visitGlucose.gdp || 0);
         if (gds >= 200 || gdp >= 126) s.klinis.hiperglikemia++;
 
-        const tbRaw = v.pos2?.tb || extractDashboardValue(v.pos2, ['tinggi badan'], v.pos2_question_map);
-        const bbRaw = v.pos2?.bb || extractDashboardValue(v.pos2, ['berat badan'], v.pos2_question_map);
-        if (kat !== 'Bayi' && kat !== 'Balita' && tbRaw && bbRaw) {
-            const tb = parseFloat(tbRaw); const bb = parseFloat(bbRaw);
-            if(tb > 0 && bb > 0) {
-                const imt = bb / Math.pow(tb/100, 2);
-                if (imt >= 25.0) s.klinis.obesitas++;
-            }
+        const bodyMassIndex = getVisitBodyMassIndex(v);
+        if (kat !== 'Bayi' && kat !== 'Balita' && bodyMassIndex.value >= 25.0) {
+            s.klinis.obesitas++;
         }
 
         const p4 = v.pos4 || {}; const p5 = v.pos5 || {};
@@ -409,6 +429,24 @@ function Dashboard() {
 
     return result;
   }, [visits, searchTerm, filterDesa, sortConfig]);
+
+  const patientPageSize = isMobile ? 5 : 10;
+  const patientTotalPages = Math.max(1, Math.ceil(filteredVisits.length / patientPageSize));
+  const visibleVisits = useMemo(() => {
+    const safePage = Math.min(patientPage, patientTotalPages);
+    const start = (safePage - 1) * patientPageSize;
+    return filteredVisits.slice(start, start + patientPageSize);
+  }, [filteredVisits, patientPage, patientPageSize, patientTotalPages]);
+  const patientPageStart = filteredVisits.length === 0 ? 0 : (Math.min(patientPage, patientTotalPages) - 1) * patientPageSize + 1;
+  const patientPageEnd = Math.min(filteredVisits.length, Math.min(patientPage, patientTotalPages) * patientPageSize);
+
+  useEffect(() => {
+    setPatientPage(1);
+  }, [searchTerm, filterDesa, sortConfig, isMobile]);
+
+  useEffect(() => {
+    if (patientPage > patientTotalPages) setPatientPage(patientTotalPages);
+  }, [patientPage, patientTotalPages]);
 
   const completedFilteredVisits = useMemo(() => {
     return filteredVisits.filter(v => v.status_antrian === STATUS_MAPPING.SELESAI);
@@ -475,11 +513,8 @@ function Dashboard() {
           }
           if (popupConfig.type === 'obesitas') {
               const kat = v.kategori_usia_satusehat;
-              if (kat !== 'Bayi' && kat !== 'Balita' && v.pos2?.tb && v.pos2?.bb) {
-                  const tb = parseFloat(v.pos2.tb); const bb = parseFloat(v.pos2.bb);
-                  if (tb > 0 && bb > 0) return (bb / Math.pow(tb/100, 2)) >= 25.0;
-              }
-              return false;
+              const bodyMassIndex = getVisitBodyMassIndex(v);
+              return kat !== 'Bayi' && kat !== 'Balita' && bodyMassIndex.value >= 25.0;
           }
           if (popupConfig.type === 'paru_ppok') return v.pos4?.ppok?.nafas_pendek === 'Ya' || v.pos4?.merokok?.batuk_lama === 'Ya' || v.pos4?.resiko_ca_paru?.riw_merokok === 'Ya' || v.pos4?.resiko_tb?.batuk_lama === '>2Mg';
           if (popupConfig.type === 'mental') {
@@ -545,7 +580,10 @@ function Dashboard() {
 
   // --- HANDLER LAINNYA ---
   const handleSelectAll = (e) => {
-      if (e.target.checked) setSelectedRows(filteredVisits.map(v => v.id));
+      if (e.target.checked) {
+          const visibleIds = visibleVisits.map(v => v.id);
+          setSelectedRows(prev => Array.from(new Set([...prev, ...visibleIds])));
+      }
       else setSelectedRows([]);
   };
 
@@ -798,9 +836,9 @@ function Dashboard() {
     'tabel': isAdmin ? (
         <div key="tabel" className={`bg-white rounded-[2.5rem] shadow-xl border overflow-hidden flex flex-col h-full min-h-[400px] ${isEditMode && !isMobile ? 'border-amber-400 cursor-move border-2' : 'border-slate-200'}`}>
             <div className="p-5 border-b flex flex-col lg:flex-row justify-between items-center gap-4 bg-slate-50/80 backdrop-blur-md sticky top-0 z-20">
-                <div className="relative w-full lg:w-80">
-                    <input type="text" placeholder="Cari NIK / Nama / Antrian..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-2xl border-2 border-slate-200 text-xs font-bold focus:border-blue-500 outline-none transition-all shadow-inner" />
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+                <div className="dashboard-patient-search relative w-full lg:w-80">
+                    <input type="text" placeholder="Cari NIK / Nama / Antrian..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="app-input-with-leading-icon w-full pr-4 py-3 rounded-2xl border-2 border-slate-200 text-xs font-bold focus:border-blue-500 outline-none transition-all shadow-inner" />
+                    <span className="input-leading-icon absolute left-4 top-1/2 -translate-y-1/2 w-5 text-center text-slate-400">🔍</span>
                 </div>
                 {selectedRows.length > 0 && (
                     <div className="flex gap-2 w-full lg:w-auto">
@@ -814,7 +852,7 @@ function Dashboard() {
                     {filteredVisits.length === 0 ? (
                         <div className="p-10 text-center text-slate-300 font-black uppercase tracking-widest italic">Tidak ada data ditemukan</div>
                     ) : (
-                        filteredVisits.map(v => (
+                        visibleVisits.map(v => (
                             <div key={v.id} className={`p-4 ${selectedRows.includes(v.id) ? 'bg-blue-50' : 'bg-white'}`}>
                                 <div className="flex items-start gap-3">
                                     <input type="checkbox" checked={selectedRows.includes(v.id)} onChange={() => handleSelectRow(v.id)} className="mt-1 w-5 h-5 rounded border-slate-300 cursor-pointer shrink-0" />
@@ -842,7 +880,7 @@ function Dashboard() {
                 <table className="hidden md:table w-full text-left text-xs border-collapse min-w-[800px]">
                     <thead className="bg-white border-b-2 border-slate-100 sticky top-0 z-10 shadow-sm">
                         <tr className="font-black uppercase text-slate-400 text-[10px] tracking-widest">
-                            <th className="px-4 py-3 w-12 text-center"><input type="checkbox" onChange={handleSelectAll} checked={selectedRows.length === filteredVisits.length && filteredVisits.length > 0} className="w-4 h-4 rounded border-slate-300 cursor-pointer" /></th>
+                            <th className="px-4 py-3 w-12 text-center"><input type="checkbox" onChange={handleSelectAll} checked={visibleVisits.length > 0 && visibleVisits.every(v => selectedRows.includes(v.id))} className="w-4 h-4 rounded border-slate-300 cursor-pointer" /></th>
                             <th className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => requestSort('identitas')}>Identitas Pasien {sortConfig.key === 'identitas' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}</th>
                             <th className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => requestSort('kategori')}>Kategori Umur {sortConfig.key === 'kategori' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}</th>
                             <th className="px-4 py-3 cursor-pointer hover:bg-slate-50 transition" onClick={() => requestSort('klinis')}>Status Klinis Dasar {sortConfig.key === 'klinis' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}</th>
@@ -854,7 +892,7 @@ function Dashboard() {
                         {filteredVisits.length === 0 ? (
                             <tr><td colSpan="6" className="p-20 text-center text-slate-300 font-black uppercase tracking-widest italic">Tidak ada data ditemukan</td></tr>
                         ) : (
-                            filteredVisits.map(v => (
+                            visibleVisits.map(v => (
                                 <tr key={v.id} className={`hover:bg-blue-50/40 transition-colors ${selectedRows.includes(v.id) ? 'bg-blue-50' : ''}`}>
                                     <td className="px-4 py-2 text-center"><input type="checkbox" checked={selectedRows.includes(v.id)} onChange={() => handleSelectRow(v.id)} className="w-4 h-4 rounded border-slate-300 cursor-pointer" /></td>
                                     <td className="px-4 py-2">
@@ -886,6 +924,34 @@ function Dashboard() {
                     </tbody>
                 </table>
             </div>
+            {filteredVisits.length > 0 && (
+                <div className="border-t border-slate-100 bg-white px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        Menampilkan {patientPageStart}-{patientPageEnd} dari {filteredVisits.length} pasien
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setPatientPage(page => Math.max(1, page - 1))}
+                            disabled={patientPage <= 1}
+                            className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition"
+                        >
+                            Sebelumnya
+                        </button>
+                        <span className="h-9 min-w-12 px-3 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center text-[10px] font-black">
+                            {Math.min(patientPage, patientTotalPages)} / {patientTotalPages}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => setPatientPage(page => Math.min(patientTotalPages, page + 1))}
+                            disabled={patientPage >= patientTotalPages}
+                            className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase text-slate-600 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition"
+                        >
+                            Berikutnya
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     ) : (
         <div key="tabel" className="bg-slate-50 rounded-[2.5rem] shadow-inner border border-slate-200 overflow-hidden flex flex-col items-center justify-center h-full min-h-[400px] text-slate-400 p-8">
@@ -985,7 +1051,7 @@ function Dashboard() {
                       {widgets['quality']}
                       {widgets['bottleneck']}
                       {/* Grid khusus untuk 6 Kartu Klinik di Mobile */}
-                      <div className="grid grid-cols-2 gap-3 h-56">
+                        <div className="dashboard-mobile-clinical-grid grid grid-cols-2 gap-3">
                           {widgets['stat-hipertensi']}
                           {widgets['stat-diabetes']}
                           {widgets['stat-obesitas']}
@@ -1054,7 +1120,7 @@ function Dashboard() {
                                   <div className="mt-4 flex flex-wrap gap-2">
                                       {popupConfig.type === 'hipertensi' && <span className="bg-rose-50 text-rose-700 px-3 py-1 rounded-lg text-[10px] font-black border border-rose-200">🩺 TD: {getVisitBloodPressure(p).label}</span>}
                                       {popupConfig.type === 'diabetes' && <span className="bg-orange-50 text-orange-700 px-3 py-1 rounded-lg text-[10px] font-black border border-orange-200">🩸 Gula: {getVisitGlucose(p).label}</span>}
-                                      {popupConfig.type === 'obesitas' && <span className="bg-amber-50 text-amber-700 px-3 py-1 rounded-lg text-[10px] font-black border border-amber-200">⚖️ IMT: {(parseFloat(p.pos2?.bb) / Math.pow(parseFloat(p.pos2?.tb)/100, 2)).toFixed(1)}</span>}
+                                      {popupConfig.type === 'obesitas' && <span className="bg-amber-50 text-amber-700 px-3 py-1 rounded-lg text-[10px] font-black border border-amber-200">⚖️ IMT: {getVisitBodyMassIndex(p).label}</span>}
                                   </div>
                               </div>
                           ))}
