@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, writeBatch, doc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { alertDialog } from '../utils/appDialog';
 
 function DummyDataManager() {
   const [stats, setStats] = useState({ patients: 0, visits: 0 });
@@ -43,7 +44,7 @@ function DummyDataManager() {
   // Hapus semua data dummy secara batch
   const handleDeleteAll = async () => {
     if (confirmInput.trim().toUpperCase() !== 'HAPUS') {
-      alert('Teks konfirmasi salah. Silakan ketik HAPUS.');
+      await alertDialog({ title: 'Konfirmasi belum sesuai', message: 'Silakan ketik HAPUS untuk melanjutkan.', variant: 'warning' });
       return;
     }
 

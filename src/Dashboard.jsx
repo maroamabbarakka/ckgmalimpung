@@ -6,6 +6,7 @@ import { useAuth } from './auth/AuthContext';
 import { writeAuditLog } from './services/auditService';
 import { maskNik } from './utils/privacy';
 import QueueStatusBadge from './design-system/components/QueueStatusBadge';
+import { alertDialog, confirmDialog } from './utils/appDialog';
 import {
   calculateBottleneck,
   calculateDashboardMetrics,
@@ -310,9 +311,14 @@ function Dashboard() {
       setTimeout(() => setPesan(""), 4000);
   };
 
-  const resetLayout = () => {
+  const resetLayout = async () => {
     if (!isAdmin) return;
-    if(window.confirm("Kembalikan tata letak dashboard ke Standar Pabrik?")){
+    if(await confirmDialog({
+        title: 'Reset tata letak dashboard?',
+        message: 'Tata letak dashboard akan dikembalikan ke standar pabrik.',
+        confirmLabel: 'Reset Layout',
+        variant: 'warning'
+    })){
         setLayouts(defaultLayouts);
         localStorage.removeItem("dashboardLayout_v21");
         setIsEditMode(false);
@@ -592,7 +598,12 @@ function Dashboard() {
   const handleBulkDelete = async () => {
       if (!isAdmin) return;
       if (selectedRows.length === 0) return;
-      if (!window.confirm(`Yakin menghapus ${selectedRows.length} data secara permanen?`)) return;
+      if (!await confirmDialog({
+          title: 'Hapus data kunjungan?',
+          message: `${selectedRows.length} data kunjungan akan dihapus permanen. Master pasien tetap disimpan untuk menjaga riwayat pasien.`,
+          confirmLabel: 'Hapus Data',
+          variant: 'danger'
+      })) return;
       try {
           await deleteDashboardVisits(selectedRows);
           await writeAuditLog({
@@ -601,8 +612,9 @@ function Dashboard() {
               before: { visitIds: selectedRows },
               after: { totalDeleted: selectedRows.length }
           });
-          setSelectedRows([]); alert("Data kunjungan dihapus. Master pasien tetap disimpan untuk menjaga riwayat pasien.");
-      } catch (e) { alert("Gagal: " + e.message); }
+          setSelectedRows([]);
+          await alertDialog({ title: 'Data kunjungan dihapus', message: 'Master pasien tetap disimpan untuk menjaga riwayat pasien.', variant: 'success' });
+      } catch (e) { await alertDialog({ title: 'Gagal menghapus data', message: e.message, variant: 'error' }); }
   };
 
   const openEditModal = (visit) => {
@@ -621,7 +633,7 @@ function Dashboard() {
       try {
           const nikTrimmed = String(editForm.nik || '').trim();
           if (nikTrimmed && !nikTrimmed.startsWith('NONIK') && !/^\d{16}$/.test(nikTrimmed)) {
-              alert("NIK harus 16 digit angka, atau gunakan format NONIK untuk pasien tanpa NIK.");
+              await alertDialog({ title: 'NIK tidak valid', message: 'NIK harus 16 digit angka, atau gunakan format NONIK untuk pasien tanpa NIK.', variant: 'warning' });
               return;
           }
           const after = {
@@ -651,8 +663,9 @@ function Dashboard() {
               },
               after
           });
-          setEditingVisit(null); alert("✅ Data diperbarui.");
-      } catch (e) { alert("Gagal: " + e.message); }
+          setEditingVisit(null);
+          await alertDialog({ title: 'Data diperbarui', message: 'Perubahan data kunjungan berhasil disimpan.', variant: 'success' });
+      } catch (e) { await alertDialog({ title: 'Gagal menyimpan data', message: e.message, variant: 'error' }); }
   };
 
   const handleLogout = () => { signOut(); navigate('/'); };

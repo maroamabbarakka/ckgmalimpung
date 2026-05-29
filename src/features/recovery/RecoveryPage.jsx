@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { listDrafts, removeDraftByKey } from '../../utils/draftStorage';
+import { confirmDialog } from '../../utils/appDialog';
 
 function formatSavedAt(value) {
   if (!value) return '-';
@@ -19,8 +20,13 @@ export default function RecoveryPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const drafts = useMemo(() => listDrafts().sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0)), [refreshKey]);
 
-  const handleDelete = (key) => {
-    const confirmDelete = window.confirm('Hapus draft lokal ini? Data draft tidak bisa dipulihkan setelah dihapus.');
+  const handleDelete = async (key) => {
+    const confirmDelete = await confirmDialog({
+      title: 'Hapus draft lokal?',
+      message: 'Data draft tidak bisa dipulihkan setelah dihapus.',
+      confirmLabel: 'Hapus Draft',
+      variant: 'danger'
+    });
     if (!confirmDelete) return;
     removeDraftByKey(key);
     setRefreshKey((value) => value + 1);
@@ -73,4 +79,3 @@ export default function RecoveryPage() {
     </div>
   );
 }
-

@@ -7,6 +7,7 @@ import RequireRole from './auth/RequireRole';
 import InstallAppBanner from './components/system/InstallAppBanner';
 import DraftRecoveryBanner from './components/system/DraftRecoveryBanner';
 import SyncStatusBanner from './components/system/SyncStatusBanner';
+import AppDialogProvider from './components/system/AppDialog';
 import { MODULE_ACCESS } from './features/auth/roles';
 import { MOBILE_NAV_ITEMS, POS_CARDS, POS_NAV_ITEMS } from './app/navigation';
 import { APP_VERSION, BUILD_DATE } from './version';
@@ -671,6 +672,7 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
+        <AppDialogProvider />
         <AppShell />
       </AuthProvider>
     </ErrorBoundary>

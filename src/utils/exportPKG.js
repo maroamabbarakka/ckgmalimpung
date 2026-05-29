@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getPkgValue } from './pkgMapper';
 import formSchemas from '../formSchemas.json';
+import { alertDialog } from './appDialog';
 
 const SCHOOL_FORMS = ['SD', 'SMP', 'SMA'];
 const STANDARD_HEADERS = ["NO", "DESA/KELURAHAN", "DUSUN/LINGKUNGAN", "TANGGAL PEMERIKSAAN", "NIK", "NAMA LENGKAP", "TANGGAL LAHIR", "JENIS KELAMIN", "NO WA", "STATUS PERKAWINAN"];
@@ -250,7 +251,7 @@ export const exportToPKGExcel = async (visits) => {
         });
         
         if (workbook.worksheets.length <= 1) {
-            alert("Tidak ada data yang tersedia untuk diekspor ke semua kelompok umur.");
+            await alertDialog({ title: 'Tidak ada data ekspor', message: 'Tidak ada data yang tersedia untuk diekspor ke semua kelompok umur.', variant: 'warning' });
             return false;
         }
         
@@ -259,7 +260,7 @@ export const exportToPKGExcel = async (visits) => {
         return true;
     } catch (error) {
         console.error("Error exporting to PKG Excel:", error);
-        alert("Gagal mengekspor data Excel.");
+        await alertDialog({ title: 'Gagal mengekspor Excel', message: 'Silakan coba kembali atau periksa data yang dipilih.', variant: 'error' });
         return false;
     }
 };
@@ -542,7 +543,7 @@ export const exportToPKG_PDF = async (visits) => {
         });
         
         if (!hasData) {
-            alert("Tidak ada data yang tersedia untuk diekspor PDF.");
+            await alertDialog({ title: 'Tidak ada data ekspor', message: 'Tidak ada data yang tersedia untuk diekspor PDF.', variant: 'warning' });
             return false;
         }
         
@@ -552,7 +553,7 @@ export const exportToPKG_PDF = async (visits) => {
         return true;
     } catch (error) {
         console.error("Error exporting to PKG PDF:", error);
-        alert("Gagal mengekspor PDF.");
+        await alertDialog({ title: 'Gagal mengekspor PDF', message: 'Silakan coba kembali atau periksa data yang dipilih.', variant: 'error' });
         return false;
     }
 };
@@ -662,7 +663,7 @@ export const exportClusterPDF = async (visits, clusterName) => {
         });
         
         if (!hasData) {
-            alert(`Tidak ada data klaster ${clusterName} yang tersedia untuk diekspor.`);
+            await alertDialog({ title: 'Tidak ada data klaster', message: `Tidak ada data klaster ${clusterName} yang tersedia untuk diekspor.`, variant: 'warning' });
             return false;
         }
         
@@ -671,7 +672,7 @@ export const exportClusterPDF = async (visits, clusterName) => {
         return true;
     } catch (error) {
         console.error("Error exporting to PKG PDF:", error);
-        alert("Gagal mengekspor PDF.");
+        await alertDialog({ title: 'Gagal mengekspor PDF', message: 'Silakan coba kembali atau periksa data yang dipilih.', variant: 'error' });
         return false;
     }
 };
@@ -726,7 +727,7 @@ export const exportClusterExcel = async (visits, clusterName) => {
         });
         
         if (workbook.worksheets.length <= 1) {
-            alert(`Tidak ada data klaster ${clusterName} yang tersedia untuk diekspor.`);
+            await alertDialog({ title: 'Tidak ada data klaster', message: `Tidak ada data klaster ${clusterName} yang tersedia untuk diekspor.`, variant: 'warning' });
             return false;
         }
         
@@ -735,7 +736,7 @@ export const exportClusterExcel = async (visits, clusterName) => {
         return true;
     } catch (error) {
         console.error("Error exporting to PKG Excel:", error);
-        alert("Gagal mengekspor data Excel.");
+        await alertDialog({ title: 'Gagal mengekspor Excel', message: 'Silakan coba kembali atau periksa data yang dipilih.', variant: 'error' });
         return false;
     }
 };
@@ -758,6 +759,6 @@ export const exportJsonToExcel = async (data, sheetName, fileName) => {
         await downloadWorkbook(workbook, fileName);
     } catch (error) {
         console.error("Error exporting JSON to Excel:", error);
-        alert("Gagal mengekspor data Excel.");
+        await alertDialog({ title: 'Gagal mengekspor Excel', message: 'Silakan coba kembali atau periksa data yang dipilih.', variant: 'error' });
     }
 };

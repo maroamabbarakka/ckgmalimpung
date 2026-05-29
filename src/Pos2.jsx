@@ -18,6 +18,7 @@ import WorkflowStepper from './components/patient/WorkflowStepper';
 import QueueStatusBadge from './design-system/components/QueueStatusBadge';
 import { maskNik } from './utils/privacy';
 import QueueCallList from './components/patient/QueueCallList';
+import { alertDialog, confirmDialog } from './utils/appDialog';
 
 function Pos2() {
   const { user } = useAuth();
@@ -56,14 +57,19 @@ function Pos2() {
       const activeSchema = getSchemaForVisit(activeVisit);
       const serverFormData = sanitizeFormDataForSchema(activeSchema, activeVisit.pos2 || {});
       const draft = loadDraft('pos2', activeVisit.id);
-      const shouldRestoreDraft = draft?.data && window.confirm(`Ada draft Pos 2 tersimpan pada ${draft.savedAt}. Pulihkan draft ini?`);
+      const shouldRestoreDraft = draft?.data && await confirmDialog({
+        title: 'Pulihkan draft Pos 2?',
+        message: `Ada draft Pos 2 tersimpan pada ${draft.savedAt}.`,
+        confirmLabel: 'Pulihkan',
+        variant: 'info'
+      });
       setPasienAktif(activeVisit);
       setDraftSavedAt(draft?.savedAt ? new Date(draft.savedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '');
       setFormData(shouldRestoreDraft ? draft.data : serverFormData);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       try { await createTvQueueCall({ pos: "POS 2", queueNumber: activeVisit.nomor_antrian, speechText: buildQueueSpeech(activeVisit.nomor_antrian, 'Silakan menuju Pos Dua.') }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 2:", e); }
     } catch (e) {
-      alert("⚠️ " + e.message);
+      await alertDialog({ title: 'Pasien belum dapat dipanggil', message: e.message, variant: 'warning' });
     } finally {
       setCallingVisitId(null);
     }
@@ -88,7 +94,7 @@ function Pos2() {
         extra: { status: VISIT_STATUS.POS2_COMPLETE, petugas_pos2: user?.nama || 'Sistem' }
       });
       setTimeout(() => setPasienAktif(null), 1000); 
-    } catch (error) { console.error("Gagal menyimpan data Pos 2:", error); alert("Gagal menyimpan data!"); } finally { setLoading(false); }
+    } catch (error) { console.error("Gagal menyimpan data Pos 2:", error); await alertDialog({ title: 'Gagal menyimpan data Pos 2', message: error.message || 'Silakan coba lagi.', variant: 'error' }); } finally { setLoading(false); }
   };
 
   const handleBatal = async () => {
@@ -101,7 +107,12 @@ function Pos2() {
 
   const handleKembaliPosSebelumnya = async () => {
     if (!pasienAktif?.id || loading) return;
-    const lanjut = window.confirm('Kembalikan pasien ke Pos 1? Perubahan yang belum disimpan di Pos 2 tidak akan dicatat.');
+    const lanjut = await confirmDialog({
+      title: 'Kembalikan pasien ke Pos 1?',
+      message: 'Perubahan yang belum disimpan di Pos 2 tidak akan dicatat.',
+      confirmLabel: 'Kembalikan',
+      variant: 'warning'
+    });
     if (!lanjut) return;
     setLoading(true);
     try {
@@ -118,7 +129,7 @@ function Pos2() {
       setPasienAktif(null);
     } catch (error) {
       console.error("Gagal mengembalikan pasien ke Pos 1:", error);
-      alert("Gagal mengembalikan pasien ke Pos 1.");
+      await alertDialog({ title: 'Gagal mengembalikan pasien', message: 'Pasien belum dapat dikembalikan ke Pos 1.', variant: 'error' });
     } finally {
       setLoading(false);
     }

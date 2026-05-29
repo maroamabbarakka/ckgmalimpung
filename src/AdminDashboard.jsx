@@ -25,6 +25,18 @@ import { maskNik } from './utils/privacy';
 import { safeBack } from './utils/navigation';
 import { syncUserProfileFromStaff } from './services/userProfileService';
 import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  KeyRound,
+  Plus,
+  Search,
+  UserRound,
+  X,
+  XCircle
+} from 'lucide-react';
+import {
   deleteSchool,
   fetchCollectionBackup,
   removeDuplicateSchools,
@@ -249,12 +261,72 @@ const SelectField = ({ label, value, onChange, options, disabled = false }) => (
 );
 
 const SummaryMetric = ({ label, value, helper }) => (
-  <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-teal-100">
+  <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition hover:border-teal-100 hover:shadow-md">
     <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</p>
     <p className="mt-3 text-3xl font-black text-slate-900">{value}</p>
     {helper && <p className="mt-2 text-xs font-semibold text-slate-400">{helper}</p>}
   </div>
 );
+
+const AdminToast = ({ notice, onClose }) => {
+  if (!notice) return null;
+  const isError = notice.type === 'error';
+  const isWarning = notice.type === 'warning';
+  const Icon = isError ? XCircle : isWarning ? AlertTriangle : CheckCircle2;
+  const tone = isError
+    ? 'border-rose-100 bg-rose-50 text-rose-700'
+    : isWarning
+      ? 'border-amber-100 bg-amber-50 text-amber-700'
+      : 'border-emerald-100 bg-emerald-50 text-emerald-700';
+
+  return (
+    <div className="fixed right-4 top-20 z-[260] w-[calc(100vw-2rem)] max-w-sm">
+      <div className={`flex items-start gap-3 rounded-2xl border p-4 shadow-2xl shadow-slate-900/10 ${tone}`}>
+        <Icon className="mt-0.5 h-5 w-5 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-slate-900">{notice.title}</p>
+          {notice.message && <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-600">{notice.message}</p>}
+        </div>
+        <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 transition hover:bg-white hover:text-slate-700" aria-label="Tutup notifikasi">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const AdminConfirmDialog = ({ dialog, onClose }) => {
+  if (!dialog) return null;
+  const isDanger = dialog.variant === 'danger';
+  const Icon = isDanger ? AlertTriangle : CheckCircle2;
+
+  return (
+    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/70 bg-white shadow-2xl shadow-slate-950/20">
+        <div className="flex items-start gap-4 border-b border-slate-100 p-6">
+          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isDanger ? 'bg-rose-50 text-rose-600' : 'bg-teal-50 text-teal-600'}`}>
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg font-black text-slate-950">{dialog.title}</h3>
+            {dialog.message && <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-500">{dialog.message}</p>}
+          </div>
+          <button type="button" onClick={() => onClose(false)} className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700" aria-label="Tutup dialog">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex flex-col-reverse gap-2 bg-slate-50 p-4 sm:flex-row sm:justify-end">
+          <button type="button" onClick={() => onClose(false)} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-xs font-black uppercase tracking-wider text-slate-600 shadow-sm transition hover:bg-slate-100">
+            Batal
+          </button>
+          <button type="button" onClick={() => onClose(true)} className={`rounded-2xl px-5 py-3 text-xs font-black uppercase tracking-wider text-white shadow-sm transition ${isDanger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-teal-600 hover:bg-teal-700'}`}>
+            {dialog.confirmLabel || 'Lanjutkan'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 
 
@@ -276,10 +348,13 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
   const [staffSearch, setStaffSearch] = useState('');
   const [staffPosFilter, setStaffPosFilter] = useState('Semua');
   const [staffStatusFilter, setStaffStatusFilter] = useState('Semua');
+  const [staffPage, setStaffPage] = useState(1);
   const [logSearch, setLogSearch] = useState('');
   const [simpegTab, setSimpegTab] = useState('staff');
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [editStaff, setEditStaff] = useState(null);
+  const [adminNotice, setAdminNotice] = useState(null);
+  const [adminConfirm, setAdminConfirm] = useState(null);
   const [selectedRiskPatient, setSelectedRiskPatient] = useState(null);
   const [selectedSchoolPatients, setSelectedSchoolPatients] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -652,6 +727,44 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
     });
   }, [staffList, staffPosFilter, staffStatusFilter, staffSearch]);
 
+  const staffPageSize = 12;
+  const staffTotalPages = Math.max(1, Math.ceil(filteredStaff.length / staffPageSize));
+  const visibleStaff = useMemo(() => {
+    const safePage = Math.min(staffPage, staffTotalPages);
+    const start = (safePage - 1) * staffPageSize;
+    return filteredStaff.slice(start, start + staffPageSize);
+  }, [filteredStaff, staffPage, staffTotalPages]);
+  const staffPageStart = filteredStaff.length === 0 ? 0 : (Math.min(staffPage, staffTotalPages) - 1) * staffPageSize + 1;
+  const staffPageEnd = Math.min(filteredStaff.length, Math.min(staffPage, staffTotalPages) * staffPageSize);
+
+  const showAdminNotice = ({ type = 'success', title, message }) => {
+    setAdminNotice({ type, title, message });
+  };
+
+  const requestAdminConfirm = ({ title, message, confirmLabel = 'Lanjutkan', variant = 'default' }) => new Promise((resolve) => {
+    setAdminConfirm({ title, message, confirmLabel, variant, resolve });
+  });
+
+  const closeAdminConfirm = (result) => {
+    const resolver = adminConfirm?.resolve;
+    setAdminConfirm(null);
+    resolver?.(result);
+  };
+
+  useEffect(() => {
+    if (!adminNotice) return undefined;
+    const timeout = window.setTimeout(() => setAdminNotice(null), 4600);
+    return () => window.clearTimeout(timeout);
+  }, [adminNotice]);
+
+  useEffect(() => {
+    setStaffPage(1);
+  }, [staffSearch, staffPosFilter, staffStatusFilter]);
+
+  useEffect(() => {
+    if (staffPage > staffTotalPages) setStaffPage(staffTotalPages);
+  }, [staffPage, staffTotalPages]);
+
   const filteredLogs = useMemo(() => {
     const search = normalizeText(logSearch);
     if (!search) return activityLogs;
@@ -663,12 +776,18 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
 
 
   const cleanDuplicates = async () => {
-    if (!window.confirm('Bersihkan data ganda? (Total db: ' + schoolList.length + ')')) return;
+    const confirmed = await requestAdminConfirm({
+      title: 'Bersihkan data ganda?',
+      message: `Sistem akan memeriksa dan membersihkan duplikasi dari ${schoolList.length} data sarana binaan.`,
+      confirmLabel: 'Bersihkan',
+      variant: 'danger'
+    });
+    if (!confirmed) return;
     try {
       const deletedCount = await removeDuplicateSchools();
-      alert(`Berhasil membersihkan ${deletedCount} data ganda!`);
+      showAdminNotice({ title: 'Duplikasi dibersihkan', message: `${deletedCount} data ganda berhasil dibersihkan.` });
     } catch (e) {
-      alert('Error: ' + e.message);
+      showAdminNotice({ type: 'error', title: 'Gagal membersihkan data', message: e.message });
     }
   };
 
@@ -693,22 +812,30 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
         await logActivity(`Tambah Sekolah: ${schoolName}`, 'Admin Dashboard');
       }
       setIsSchoolModalOpen(false);
+      showAdminNotice({ title: 'Data sekolah tersimpan', message: `${schoolName} berhasil diperbarui di sarana binaan.` });
     } catch (error) {
       console.error(error);
-      alert('Gagal menyimpan data sekolah.');
+      showAdminNotice({ type: 'error', title: 'Gagal menyimpan data sekolah', message: error.message });
     }
   };
 
   const handleDeleteSchool = async (schoolId) => {
-    if (!window.confirm('Yakin ingin menghapus data sekolah ini secara permanen?')) return;
+    const confirmed = await requestAdminConfirm({
+      title: 'Hapus data sekolah?',
+      message: 'Data sekolah akan dihapus secara permanen dari daftar sarana binaan.',
+      confirmLabel: 'Hapus',
+      variant: 'danger'
+    });
+    if (!confirmed) return;
     try {
       await deleteSchool(schoolId);
       await logActivity('Hapus Sekolah', 'Admin Dashboard');
       setIsSchoolModalOpen(false);
       setEditSchool(null);
+      showAdminNotice({ title: 'Data sekolah dihapus', message: 'Sarana binaan berhasil dihapus dari sistem.' });
     } catch (error) {
       console.error(error);
-      alert('Gagal menghapus data sekolah.');
+      showAdminNotice({ type: 'error', title: 'Gagal menghapus data sekolah', message: error.message });
     }
   };
 
@@ -736,7 +863,11 @@ const activeUsername = normalizeText(user?.username);
     if (activeStaff) {
       openStaffForm(activeStaff);
     } else {
-      alert('Profil pengguna aktif belum ditemukan di data staff.');
+      showAdminNotice({
+        type: 'warning',
+        title: 'Profil belum ditemukan',
+        message: 'Profil pengguna aktif belum ditemukan di data staff.'
+      });
     }
   };
 
@@ -785,10 +916,16 @@ const activeUsername = normalizeText(user?.username);
 
   const handleSaveStaff = async (event) => {
     event.preventDefault();
-    if (!editStaff.role || editStaff.role.length === 0) return alert('Pilih minimal 1 hak akses.');
+    if (!editStaff.role || editStaff.role.length === 0) {
+      showAdminNotice({ type: 'warning', title: 'Hak akses belum dipilih', message: 'Pilih minimal satu hak akses untuk pegawai ini.' });
+      return;
+    }
     const username = String(editStaff.username || '').toLowerCase().replace(/\s/g, '');
     const duplicate = staffList.some((staff) => staff.username === username && staff.id !== editStaff.id);
-    if (duplicate) return alert('Username tersebut sudah digunakan pegawai lain.');
+    if (duplicate) {
+      showAdminNotice({ type: 'error', title: 'Username sudah digunakan', message: 'Gunakan username lain agar akun pegawai tidak bertabrakan.' });
+      return;
+    }
 
     try {
       const payload = { ...editStaff, username };
@@ -797,42 +934,76 @@ const activeUsername = normalizeText(user?.username);
         const syncResult = await syncUserProfileFromStaff(payload);
         await logActivity(`Mengubah data profil/hak akses pegawai: ${payload.nama}`, 'Admin Dashboard');
         if (!syncResult.synced && syncResult.reason === 'user-profile-not-found') {
-          alert('Data staff tersimpan. Profil Firebase Auth belum ditemukan; jalankan migrasi Auth agar hak akses produksi ikut tersinkron.');
+          showAdminNotice({
+            type: 'warning',
+            title: 'Data staff tersimpan',
+            message: 'Profil Firebase Auth belum ditemukan. Jalankan migrasi Auth agar hak akses produksi ikut tersinkron.'
+          });
+        } else {
+          showAdminNotice({ title: 'Data staff tersimpan', message: 'Profil dan hak akses pegawai berhasil diperbarui.' });
         }
       } else {
         await saveStaff(payload);
         await logActivity(`Menambahkan pegawai baru: ${payload.nama}`, 'Admin Dashboard');
-        alert('Data staff tersimpan. Buat akun Firebase Auth atau jalankan migrasi Auth agar pegawai bisa login di mode produksi.');
+        showAdminNotice({
+          type: 'warning',
+          title: 'Data staff tersimpan',
+          message: 'Buat akun Firebase Auth atau jalankan migrasi Auth agar pegawai bisa login di mode produksi.'
+        });
       }
       setIsStaffModalOpen(false);
     } catch (error) {
-      alert(`Gagal menyimpan data: ${error.message}`);
+      showAdminNotice({ type: 'error', title: 'Gagal menyimpan data', message: error.message });
     }
   };
 
   const handleToggleStaffActive = async (staff) => {
     const actionText = staff.isActive ? 'menonaktifkan' : 'mengaktifkan';
-    if (!window.confirm(`Yakin ingin ${actionText} akun ${staff.nama}?`)) return;
+    const confirmed = await requestAdminConfirm({
+      title: `${staff.isActive ? 'Nonaktifkan' : 'Aktifkan'} akun pegawai?`,
+      message: `Akun ${staff.nama} akan ${actionText === 'menonaktifkan' ? 'dinonaktifkan dan tidak dapat login' : 'diaktifkan kembali untuk akses sistem'}.`,
+      confirmLabel: staff.isActive ? 'Nonaktifkan' : 'Aktifkan',
+      variant: staff.isActive ? 'danger' : 'default'
+    });
+    if (!confirmed) return;
     try {
       const newStatus = await toggleStaffActive(staff);
       const syncResult = await syncUserProfileFromStaff({ ...staff, isActive: newStatus });
       await logActivity(`Mengubah status akun ${staff.nama} menjadi ${newStatus ? 'Aktif' : 'Non-Aktif'}`, 'Admin Dashboard');
       if (!syncResult.synced && syncResult.reason === 'user-profile-not-found') {
-        alert('Status staff tersimpan. Profil Firebase Auth belum ditemukan; jalankan migrasi Auth agar status produksi ikut tersinkron.');
+        showAdminNotice({
+          type: 'warning',
+          title: 'Status staff tersimpan',
+          message: 'Profil Firebase Auth belum ditemukan. Jalankan migrasi Auth agar status produksi ikut tersinkron.'
+        });
+      } else {
+        showAdminNotice({
+          title: 'Status akun diperbarui',
+          message: `Akun ${staff.nama} sekarang ${newStatus ? 'aktif' : 'nonaktif'}.`
+        });
       }
     } catch (error) {
-      alert(`Gagal mengubah status: ${error.message}`);
+      showAdminNotice({ type: 'error', title: 'Gagal mengubah status', message: error.message });
     }
   };
 
   const handleResetPIN = async (staff) => {
-    if (!window.confirm(`Reset PIN legacy ${staff.nama} menjadi 123456? Untuk akun Firebase Auth, reset password tetap dilakukan dari Firebase Console.`)) return;
+    const confirmed = await requestAdminConfirm({
+      title: 'Reset PIN legacy?',
+      message: `PIN legacy ${staff.nama} akan diubah menjadi 123456. Password Firebase Auth tetap diatur dari Firebase Console.`,
+      confirmLabel: 'Reset PIN',
+      variant: 'danger'
+    });
+    if (!confirmed) return;
     try {
       await resetStaffPin(staff.id);
       await logActivity(`Mereset PIN pegawai: ${staff.nama}`, 'Admin Dashboard');
-      alert('PIN legacy berhasil direset menjadi 123456. Jika login produksi memakai Firebase Auth, reset password akun Auth dari Firebase Console.');
+      showAdminNotice({
+        title: 'PIN legacy berhasil direset',
+        message: 'PIN berubah menjadi 123456. Jika login produksi memakai Firebase Auth, reset password akun Auth dari Firebase Console.'
+      });
     } catch (error) {
-      alert(`Gagal mereset PIN: ${error.message}`);
+      showAdminNotice({ type: 'error', title: 'Gagal mereset PIN', message: error.message });
     }
   };
 
@@ -841,7 +1012,7 @@ const activeUsername = normalizeText(user?.username);
     try {
       const data = await fetchCollectionBackup(collectionName);
       if (data.length === 0) {
-        alert(`Tabel ${collectionName} kosong.`);
+        showAdminNotice({ type: 'warning', title: 'Tabel kosong', message: `Tabel ${collectionName} belum memiliki data untuk dibackup.` });
         return;
       }
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -854,8 +1025,9 @@ const activeUsername = normalizeText(user?.username);
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       await logActivity(`Mengunduh backup tabel ${collectionName}`, 'Admin Dashboard');
+      showAdminNotice({ title: 'Backup berhasil dibuat', message: `Data ${collectionName} berhasil diunduh dalam format JSON.` });
     } catch (error) {
-      alert(`Gagal backup: ${error.message}`);
+      showAdminNotice({ type: 'error', title: 'Gagal membuat backup', message: error.message });
     } finally {
       setBackupLoading(null);
     }
@@ -946,6 +1118,8 @@ const activeUsername = normalizeText(user?.username);
 
   return (
     <div className="admin-shell fixed inset-0 z-[70] bg-white text-slate-950 font-sans overflow-y-auto">
+      <AdminToast notice={adminNotice} onClose={() => setAdminNotice(null)} />
+      <AdminConfirmDialog dialog={adminConfirm} onClose={closeAdminConfirm} />
       <div className="fixed right-3 top-3 z-[80] hidden md:block">
         <ConnectionStatus />
       </div>
@@ -2390,37 +2564,41 @@ const activeUsername = normalizeText(user?.username);
                 </div>
 
                 {simpegTab === 'staff' && (
-                  <div className="rounded-lg border border-slate-200 bg-white">
-                    <div className="flex flex-col gap-3 border-b border-slate-100 p-5 md:flex-row md:items-center md:justify-between">
-                      <div className="text-sm font-semibold text-slate-600">Atur hak akses staf puskesmas</div>
-                      <div className="flex flex-col gap-2 sm:flex-row">
-                        
-                        <button type="button" onClick={() => openStaffForm()} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-black text-white hover:bg-slate-800">
-                          Tambah Staff
-                        </button>
+                  <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                    <div className="flex flex-col gap-4 border-b border-slate-100 bg-white p-5 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <h3 className="text-lg font-black text-slate-950">Manajemen Nakes</h3>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">Atur profil, pos layanan, status akun, dan hak akses staf puskesmas.</p>
                       </div>
+                      <button type="button" onClick={() => openStaffForm()} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-teal-600 px-4 py-3 text-xs font-black uppercase tracking-wider text-white shadow-sm shadow-teal-100 transition hover:bg-teal-700 active:scale-95">
+                        <Plus className="h-4 w-4" />
+                        Tambah Staff
+                      </button>
                     </div>
-                    <div className="grid grid-cols-1 gap-3 p-5 md:grid-cols-[180px_180px_1fr]">
-                      <select value={staffStatusFilter} onChange={(event) => setStaffStatusFilter(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none focus:border-teal-500">
+                    <div className="grid grid-cols-1 gap-3 border-b border-slate-100 bg-slate-50/70 p-5 md:grid-cols-[180px_180px_1fr]">
+                      <select value={staffStatusFilter} onChange={(event) => setStaffStatusFilter(event.target.value)} className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100">
                         <option value="Semua">Semua Status</option>
                         <option value="ASN">ASN (PNS/PPPK)</option>
                         <option value="MAGANG">Non-ASN (Magang)</option>
                       </select>
-                      <select value={staffPosFilter} onChange={(event) => setStaffPosFilter(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none focus:border-teal-500">
+                      <select value={staffPosFilter} onChange={(event) => setStaffPosFilter(event.target.value)} className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100">
                         {['Semua', 'POS 1', 'POS 2', 'POS 3', 'POS 4', 'POS 5', 'POS 6', 'POS 7', 'ALL ACCESS', 'BELUM DITUGASKAN'].map((item) => (
                           <option key={item} value={item}>{item === 'Semua' ? 'Seluruh Pos' : item}</option>
                         ))}
                       </select>
-                      <input
-                        value={staffSearch}
-                        onChange={(event) => setStaffSearch(event.target.value)}
-                        placeholder="Cari nama, username, atau role..."
-                        className="h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none focus:border-teal-500"
-                      />
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                          value={staffSearch}
+                          onChange={(event) => setStaffSearch(event.target.value)}
+                          placeholder="Cari nama, username, atau role..."
+                          className="h-11 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                        />
+                      </div>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[820px] text-left text-sm">
-                        <thead className="border-y border-slate-100 bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+                        <thead className="border-b border-slate-100 bg-white text-xs uppercase tracking-wider text-slate-500">
                           <tr>
                             <th className="px-5 py-3">Pegawai</th>
                             <th className="px-5 py-3 text-center">Pos</th>
@@ -2434,30 +2612,41 @@ const activeUsername = normalizeText(user?.username);
                           ) : filteredStaff.length === 0 ? (
                             <tr><td colSpan="4" className="px-5 py-10 text-center font-semibold text-slate-400">Data pegawai tidak ditemukan.</td></tr>
                           ) : (
-                            filteredStaff.map((staff) => {
+                            visibleStaff.map((staff) => {
                               const roles = Array.isArray(staff.role) ? staff.role : [staff.role].filter(Boolean);
                               return (
-                                <tr key={staff.id} className="hover:bg-teal-50/50 cursor-pointer group transition-colors" onClick={() => openStaffForm(staff)}>
+                                <tr key={staff.id} className="group cursor-pointer transition-colors hover:bg-teal-50/50" onClick={() => openStaffForm(staff)}>
                                   <td className="px-5 py-4">
-                                    <p className="font-black text-slate-900 group-hover:text-teal-700">{staff.nama}</p>
-                                    <div className="mt-1 flex flex-wrap gap-1">
-                                      <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-500">@{staff.username}</span>
-                                      {roles.map((role) => (
-                                        <span key={role} className="rounded bg-teal-50 px-2 py-0.5 text-[10px] font-black uppercase text-teal-700">{role.replace('_', ' ')}</span>
-                                      ))}
+                                    <div className="flex items-start gap-3">
+                                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 group-hover:bg-teal-100 group-hover:text-teal-700">
+                                        <UserRound className="h-5 w-5" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="font-black text-slate-900 group-hover:text-teal-700">{staff.nama}</p>
+                                        <p className="mt-0.5 text-[11px] font-semibold text-slate-400">{staff.status_detail || staff.status || 'Status belum dilengkapi'}</p>
+                                        <div className="mt-1 flex flex-wrap gap-1">
+                                          <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-500">@{staff.username}</span>
+                                          {roles.map((role) => (
+                                            <span key={role} className="rounded bg-teal-50 px-2 py-0.5 text-[10px] font-black uppercase text-teal-700">{role.replace('_', ' ')}</span>
+                                          ))}
+                                        </div>
+                                      </div>
                                     </div>
                                   </td>
                                   <td className="px-5 py-4 text-center">
                                     <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase text-slate-600">{staff.pos || '-'}</span>
                                   </td>
                                   <td className="px-5 py-4 text-center">
-                                    <button type="button" onClick={(e) => { e.stopPropagation(); handleToggleStaffActive(staff); }} className={`relative inline-flex h-6 w-11 items-center rounded-full ${staff.isActive ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                                      <span className={`inline-block h-4 w-4 rounded-full bg-white transition ${staff.isActive ? 'translate-x-6' : 'translate-x-1'}`} />
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); handleToggleStaffActive(staff); }} className={`relative inline-flex h-7 w-12 items-center rounded-full p-1 transition ${staff.isActive ? 'bg-emerald-500' : 'bg-slate-300'}`} aria-label={staff.isActive ? 'Nonaktifkan akun' : 'Aktifkan akun'}>
+                                      <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition ${staff.isActive ? 'translate-x-5' : 'translate-x-0'}`} />
                                     </button>
                                   </td>
                                   <td className="px-5 py-4">
                                     <div className="flex justify-center gap-2">
-                                      <button type="button" onClick={(e) => { e.stopPropagation(); handleResetPIN(staff); }} className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-black text-rose-700 hover:bg-rose-50 hover:border-rose-300 transition-colors">Reset PIN</button>
+                                      <button type="button" onClick={(e) => { e.stopPropagation(); handleResetPIN(staff); }} className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-700 transition-colors hover:border-rose-300 hover:bg-rose-50">
+                                        <KeyRound className="h-3.5 w-3.5" />
+                                        Reset PIN
+                                      </button>
                                     </div>
                                   </td>
                                 </tr>
@@ -2467,6 +2656,26 @@ const activeUsername = normalizeText(user?.username);
                         </tbody>
                       </table>
                     </div>
+                    {filteredStaff.length > 0 && (
+                      <div className="flex flex-col gap-3 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                          Menampilkan {staffPageStart}-{staffPageEnd} dari {filteredStaff.length} pegawai
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={() => setStaffPage((page) => Math.max(1, page - 1))} disabled={staffPage <= 1} className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-xs font-black uppercase text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">
+                            <ChevronLeft className="h-4 w-4" />
+                            Sebelumnya
+                          </button>
+                          <span className="flex h-10 min-w-14 items-center justify-center rounded-2xl border border-teal-100 bg-teal-50 px-3 text-xs font-black text-teal-700">
+                            {Math.min(staffPage, staffTotalPages)} / {staffTotalPages}
+                          </span>
+                          <button type="button" onClick={() => setStaffPage((page) => Math.min(staffTotalPages, page + 1))} disabled={staffPage >= staffTotalPages} className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-xs font-black uppercase text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">
+                            Berikutnya
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2791,13 +3000,13 @@ const activeUsername = normalizeText(user?.username);
 
       {isStaffModalOpen && editStaff && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="flex h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-slate-50 shadow-2xl">
+          <div className="flex h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-slate-50 shadow-2xl">
             
             {/* Header Profil */}
             <div className="flex items-center justify-between border-b border-slate-200 bg-white px-8 py-5">
               <div className="flex items-center gap-4">
-                <button type="button" onClick={() => setIsStaffModalOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-100 transition">
-                  <span className="text-xl font-black text-slate-700">←</span>
+                <button type="button" onClick={() => setIsStaffModalOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-2xl text-slate-600 transition hover:bg-slate-100">
+                  <ChevronLeft className="h-5 w-5" />
                 </button>
                 <div>
                   <h2 className="text-xl font-black text-slate-950">Profil</h2>
@@ -2828,7 +3037,7 @@ const activeUsername = normalizeText(user?.username);
                         <input value={editStaff.nama} onChange={(e) => setEditStaff({...editStaff, nama: e.target.value})} placeholder="Nama Lengkap" className="block border-b border-transparent text-lg font-black text-slate-900 focus:border-teal-500 focus:outline-none" required />
                         <div className="mt-1 flex items-center gap-2 text-xs font-semibold text-slate-500">
                           <span>@{editStaff.username || 'username'}</span>
-                          <span>•</span>
+                          <span>-</span>
                           <input value={editStaff.username} onChange={(e) => setEditStaff({...editStaff, username: e.target.value.toLowerCase().replace(/\s/g, '')})} placeholder="Ubah Username" className="w-24 border-b border-dashed border-slate-300 text-teal-600 focus:outline-none" />
                         </div>
                       </div>

@@ -16,6 +16,7 @@ import OcrResultReview from './features/ocr/OcrResultReview';
 import useQueue from './hooks/useQueue';
 import { Camera, UploadCloud } from 'lucide-react';
 import QueueCallList from './components/patient/QueueCallList';
+import { alertDialog } from './utils/appDialog';
 
 const OPENCV_SCRIPT_ID = 'opencv-script';
 const OPENCV_SCRIPT_SRC = '/vendor/opencv-4.8.0.js';
@@ -330,7 +331,7 @@ function Pos1() {
           await createTvQueueCall({ pos: 'POS 1', queueNumber: latestItem.nomor_antrian, speechText: teksPanggilan });
       } catch (error) { console.warn("Gagal membuat panggilan TV Pos 1:", error); }
     } catch (e) {
-      alert("⚠️ " + e.message);
+      await alertDialog({ title: 'Pasien belum dapat dipanggil', message: e.message, variant: 'warning' });
     } finally {
       setCallingVisitId(null);
     }
@@ -664,7 +665,7 @@ function Pos1() {
                     const track = videoRef.current.srcObject.getVideoTracks()[0];
                     await track.applyConstraints({ advanced: [{ torch: !isTorchOn }] });
                     setIsTorchOn(!isTorchOn);
-                  } catch (e) { alert("Senter tidak didukung kamera ini."); }
+                  } catch (e) { alertDialog({ title: 'Senter tidak didukung', message: 'Kamera atau browser ini tidak mendukung fitur senter.', variant: 'warning' }); }
               }} className={`absolute top-8 right-6 z-30 p-3.5 rounded-full backdrop-blur-md border transition-all active:scale-90 shadow-xl ${isTorchOn ? 'bg-yellow-400 text-black border-yellow-300' : 'bg-black/60 text-white border-white/20'}`}>
                 <span className="text-2xl block">🔦</span>
               </button>

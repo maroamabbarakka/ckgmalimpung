@@ -12,6 +12,7 @@ import useQueue from './hooks/useQueue';
 import PatientStickyHeader from './components/patient/PatientStickyHeader';
 import PosBottomActionBar from './components/patient/PosBottomActionBar';
 import QueueCallList from './components/patient/QueueCallList';
+import { alertDialog, confirmDialog } from './utils/appDialog';
 
 function Pos6() {
   const { user } = useAuth();
@@ -40,7 +41,7 @@ function Pos6() {
       setPasienAktif(activeVisit); setPesan(''); setFormData(sanitizeFormDataForSchema(activeSchema, activeVisit.pos6 || {})); window.scrollTo({ top: 0, behavior: 'smooth' });
       try { await createTvQueueCall({ pos: "POS 6", queueNumber: activeVisit.nomor_antrian, speechText: buildQueueSpeech(activeVisit.nomor_antrian, 'Silakan menuju meja Pos Enam.') }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 6:", e); }
     } catch (e) {
-      alert("⚠️ " + e.message);
+      await alertDialog({ title: 'Pasien belum dapat dipanggil', message: e.message, variant: 'warning' });
     } finally {
       setCallingVisitId(null);
     }
@@ -87,7 +88,12 @@ function Pos6() {
 
   const handleKembaliPosSebelumnya = async () => {
     if (!pasienAktif?.id || loading) return;
-    const lanjut = window.confirm('Kembalikan pasien ke Pos 5? Perubahan yang belum disimpan di Pos 6 tidak akan dicatat.');
+    const lanjut = await confirmDialog({
+      title: 'Kembalikan pasien ke Pos 5?',
+      message: 'Perubahan yang belum disimpan di Pos 6 tidak akan dicatat.',
+      confirmLabel: 'Kembalikan',
+      variant: 'warning'
+    });
     if (!lanjut) return;
     setLoading(true);
     setPesan('');

@@ -10,6 +10,7 @@ import useQueue from './hooks/useQueue';
 import PatientStickyHeader from './components/patient/PatientStickyHeader';
 import PosBottomActionBar from './components/patient/PosBottomActionBar';
 import QueueCallList from './components/patient/QueueCallList';
+import { alertDialog, confirmDialog } from './utils/appDialog';
 
 const extractValue = (posData, keywords, questionMap) => {
   if (!questionMap) questionMap = {};
@@ -160,7 +161,7 @@ const VoiceTextArea = ({ value, onChange, placeholder }) => {
           recognitionRef.current.start();
         } catch(e) { console.warn("Gagal memulai voice recognition:", e); }
       } else {
-        alert("Browser Anda tidak mendukung fitur Voice Recognition.");
+        alertDialog({ title: 'Voice recognition tidak didukung', message: 'Browser Anda tidak mendukung fitur Voice Recognition.', variant: 'warning' });
       }
     }
   };
@@ -248,7 +249,7 @@ function Pos7() {
       setPasienAktif(latestData); setPesan(''); setKesimpulan(latestData.kesimpulan_dokter || ''); window.scrollTo({ top: 0, behavior: 'smooth' });
       try { await createTvQueueCall({ pos: "POS 7", queueNumber: latestData.nomor_antrian, speechText: buildQueueSpeech(latestData.nomor_antrian, 'Silakan menuju meja Dokter di Pos Tujuh.') }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 7:", e); }
     } catch (e) {
-      alert("⚠️ " + e.message);
+      await alertDialog({ title: 'Pasien belum dapat dipanggil', message: e.message, variant: 'warning' });
     } finally {
       setCallingVisitId(null);
     }
@@ -289,7 +290,12 @@ function Pos7() {
 
   const handleKembaliPosSebelumnya = async () => {
     if (!pasienAktif?.id || loading) return;
-    const lanjut = window.confirm('Kembalikan pasien ke Pos 6? Kesimpulan dokter yang belum disimpan tidak akan dicatat.');
+    const lanjut = await confirmDialog({
+      title: 'Kembalikan pasien ke Pos 6?',
+      message: 'Kesimpulan dokter yang belum disimpan tidak akan dicatat.',
+      confirmLabel: 'Kembalikan',
+      variant: 'warning'
+    });
     if (!lanjut) return;
     setLoading(true);
     setPesan('');
@@ -328,7 +334,10 @@ function Pos7() {
               if (patient) noHp = patient.phone || patient.no_hp;
           } catch(e) { console.warn("Gagal mengambil nomor HP pasien:", e); }
       }
-      if(!noHp || noHp.length < 9) { alert("Nomor HP tidak valid/tidak ada di database."); return; }
+      if(!noHp || noHp.length < 9) {
+        await alertDialog({ title: 'Nomor WhatsApp tidak valid', message: 'Nomor HP tidak valid atau belum tersedia di database.', variant: 'warning' });
+        return;
+      }
 
       // Tarik Data Ringkas (Fallback Aman)
       const imt = extractValue(pasienAktif.pos2, ['imt', 'index massa tubuh'], pasienAktif.pos2_question_map) || '-';

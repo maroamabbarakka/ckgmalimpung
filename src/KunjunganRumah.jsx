@@ -9,6 +9,7 @@ import { writeAuditLog } from './services/auditService';
 import { buildPatientPayload, findCurrentYearCkgVisit, upsertPatient } from './services/patientService';
 import { buildPatientSnapshot, createVisitDocRef, createVisitWithRef, nowTimestamp } from './services/visitService';
 import OcrResultReview from './features/ocr/OcrResultReview';
+import { alertDialog } from './utils/appDialog';
 
 const OPENCV_SCRIPT_ID = 'opencv-script';
 const OPENCV_SCRIPT_SRC = '/vendor/opencv-4.8.0.js';
@@ -816,7 +817,7 @@ function KunjunganRumah() {
           });
           setIsTorchOn(!isTorchOn);
         } else {
-          alert("Kamera/Browser Anda tidak mendukung fitur senter WebRTC.");
+          await alertDialog({ title: 'Senter tidak didukung', message: 'Kamera atau browser Anda tidak mendukung fitur senter WebRTC.', variant: 'warning' });
         }
       } catch (error) {
         console.error("Gagal mengakses fitur senter:", error);
@@ -959,10 +960,16 @@ function KunjunganRumah() {
     };
   }, [raporLink]);
 
-  const handleKirimWA = () => {
+  const handleKirimWA = async () => {
     let phone = normalizeWhatsappNumber(formData.no_hp || formData.no_hp_wali);
-    if (!phone) { alert("Nomor WhatsApp tidak diisi saat pendaftaran."); return; }
-    if (!/^62\d{8,15}$/.test(phone)) { alert("Nomor WhatsApp tidak valid. Gunakan format nomor Indonesia yang aktif."); return; }
+    if (!phone) {
+      await alertDialog({ title: 'Nomor WhatsApp belum diisi', message: 'Isi nomor WhatsApp saat pendaftaran sebelum mengirim rapor.', variant: 'warning' });
+      return;
+    }
+    if (!/^62\d{8,15}$/.test(phone)) {
+      await alertDialog({ title: 'Nomor WhatsApp tidak valid', message: 'Gunakan format nomor Indonesia yang aktif.', variant: 'warning' });
+      return;
+    }
     const nama = formData.nama || ''; const jk = formData.j_kelamin || 'P'; let sapaan;
     if (umurPasien >= 19) { sapaan = jk === 'L' ? 'Bapak' : 'Ibu'; } else if (umurPasien >= 12) { sapaan = jk === 'L' ? 'Saudara' : 'Saudari'; } else { sapaan = 'Adik'; }
     const tglPeriksa = new Date(); const hariTanggal = tglPeriksa.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });

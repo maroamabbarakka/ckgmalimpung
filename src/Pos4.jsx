@@ -12,6 +12,7 @@ import useQueue from './hooks/useQueue';
 import PatientStickyHeader from './components/patient/PatientStickyHeader';
 import PosBottomActionBar from './components/patient/PosBottomActionBar';
 import QueueCallList from './components/patient/QueueCallList';
+import { alertDialog, confirmDialog } from './utils/appDialog';
 
 function Pos4() {
   const { user } = useAuth();
@@ -41,7 +42,7 @@ function Pos4() {
       setPasienAktif(activeVisit); setFormData(sanitizeFormDataForSchema(activeSchema, activeVisit.pos4 || {})); window.scrollTo({ top: 0, behavior: 'smooth' });
       try { await createTvQueueCall({ pos: "POS 4", queueNumber: activeVisit.nomor_antrian, speechText: buildQueueSpeech(activeVisit.nomor_antrian, 'Silakan menuju Pos Empat.') }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 4:", e); }
     } catch (e) {
-      alert("⚠️ " + e.message);
+      await alertDialog({ title: 'Pasien belum dapat dipanggil', message: e.message, variant: 'warning' });
     } finally {
       setCallingVisitId(null);
     }
@@ -64,7 +65,7 @@ function Pos4() {
         extra: { status: VISIT_STATUS.POS4_COMPLETE, petugas_pos4: user?.nama || 'Sistem' }
       });
       setTimeout(() => setPasienAktif(null), 1000); 
-    } catch (error) { console.error("Gagal menyimpan data Pos 4:", error); alert("Gagal menyimpan data!"); } finally { setLoading(false); }
+    } catch (error) { console.error("Gagal menyimpan data Pos 4:", error); await alertDialog({ title: 'Gagal menyimpan data Pos 4', message: error.message || 'Silakan coba lagi.', variant: 'error' }); } finally { setLoading(false); }
   };
 
   const handleBatal = async () => {
@@ -77,7 +78,12 @@ function Pos4() {
 
   const handleKembaliPosSebelumnya = async () => {
     if (!pasienAktif?.id || loading) return;
-    const lanjut = window.confirm('Kembalikan pasien ke Pos 3? Perubahan yang belum disimpan di Pos 4 tidak akan dicatat.');
+    const lanjut = await confirmDialog({
+      title: 'Kembalikan pasien ke Pos 3?',
+      message: 'Perubahan yang belum disimpan di Pos 4 tidak akan dicatat.',
+      confirmLabel: 'Kembalikan',
+      variant: 'warning'
+    });
     if (!lanjut) return;
     setLoading(true);
     try {
@@ -94,7 +100,7 @@ function Pos4() {
       setPasienAktif(null);
     } catch (error) {
       console.error("Gagal mengembalikan pasien ke Pos 3:", error);
-      alert("Gagal mengembalikan pasien ke Pos 3.");
+      await alertDialog({ title: 'Gagal mengembalikan pasien', message: 'Pasien belum dapat dikembalikan ke Pos 3.', variant: 'error' });
     } finally {
       setLoading(false);
     }

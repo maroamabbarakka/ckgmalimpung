@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { alertDialog } from './utils/appDialog';
 
 // ==========================================
 // 🚀 THE MASTER ENGINE V22.3 (LOOKUP STABILITY PATCH)
@@ -235,7 +236,7 @@ const VoiceInput = ({ value, onChange, placeholder, type="text", inputMode, fiel
         console.error(e);
       }
     } else {
-      alert("Browser Anda tidak mendukung fitur Voice Recognition.");
+      alertDialog({ title: 'Voice recognition tidak didukung', message: 'Browser Anda tidak mendukung fitur Voice Recognition.', variant: 'warning' });
     }
   };
 
