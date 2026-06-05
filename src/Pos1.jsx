@@ -20,6 +20,12 @@ import SmartDocumentScanner from './components/SmartDocumentScanner';
 const OPENCV_SCRIPT_ID = 'opencv-script';
 const OPENCV_SCRIPT_SRC = '/vendor/opencv-4.8.0.js';
 
+const runIdentityOcr = async () => {
+  throw new Error('Legacy OCR dinonaktifkan. Gunakan Smart Scan Dokumen.');
+};
+
+const toLegacyOcrFormData = (data = {}) => data;
+
 const WILAYAH_KERJA = {
   "Desa Malimpung": ["Dusun Palita", "Dusun Malimpung", "Dusun Pajalele"],
   "Desa Padang Loang": ["Dusun Padang", "Dusun Banga", "Dusun Palita"],
@@ -77,11 +83,6 @@ const hitungUmur = (tglLahir) => {
 const getVisitMillis = (visit) => {
     const raw = visit.waktu_selesai_total || visit.tanggal_kunjungan || visit.waktu_ambil_tiket;
     return raw?.toMillis ? raw.toMillis() : 0;
-};
-const formatTanggalKunjungan = (visit) => {
-    const raw = visit.waktu_selesai_total || visit.tanggal_kunjungan || visit.waktu_ambil_tiket;
-    if (raw?.toDate) return raw.toDate().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
-    return visit.tanggal_pelaksanaan || '-';
 };
 
 const NUMERIC_FIELD_NAMES = new Set(['nik', 'nik_wali', 'no_hp', 'no_hp_wali']);
@@ -171,13 +172,13 @@ function Pos1() {
       return () => clearInterval(checkCV);
   }, []);
 
-  const fileInputRef = useRef(null);
-  const [ocrLoading, setOcrLoading] = useState(false);
-  const [ocrProgress, setOcrProgress] = useState(0);
-  const [ocrCandidates, setOcrCandidates] = useState([]);
-  const [ocrReview, setOcrReview] = useState(null);
   const [ocrMeta, setOcrMeta] = useState(null);
   const [isSmartScanOpen, setIsSmartScanOpen] = useState(false);
+  const fileInputRef = useRef(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [, setOcrProgress] = useState(0);
+  const [, setOcrCandidates] = useState([]);
+  const [, setOcrReview] = useState(null);
   
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [facingMode, setFacingMode] = useState('environment'); 
@@ -205,8 +206,8 @@ function Pos1() {
   const [loading, setLoading] = useState(false); 
   const [callingVisitId, setCallingVisitId] = useState(null);
   const [pesan, setPesan] = useState('');
-  const [statusPasien, setStatusPasien] = useState('idle');
-  const [riwayatKunjungan, setRiwayatKunjungan] = useState([]);
+  const [, setStatusPasien] = useState('idle');
+  const [, setRiwayatKunjungan] = useState([]);
 
   const getFieldError = (fieldName) => {
     if (fieldName === 'nik' && !tanpaNik && formData.nik && formData.nik.length !== 16) return 'NIK pasien harus 16 digit angka.';
@@ -244,7 +245,7 @@ function Pos1() {
   useEffect(() => {
     if (formData.nik.length < 16 && (pesan.includes('✅') || pesan.includes('✨'))) setPesan('');
     const cekDataPasien = async () => {
-      if (!tanpaNik && formData.nik.length === 16 && !ocrLoading) {
+      if (!tanpaNik && formData.nik.length === 16 && !isSmartScanOpen) {
         setLoading(true);
         try {
           const data = await getPatientByNik(formData.nik);
@@ -262,11 +263,11 @@ function Pos1() {
       }
     };
     cekDataPasien();
-  }, [formData.nik, tanpaNik, ocrLoading]);
+  }, [formData.nik, tanpaNik, isSmartScanOpen]);
 
   useEffect(() => {
     const cekRiwayatKunjungan = async () => {
-      if (tanpaNik || formData.nik.length !== 16 || ocrLoading) {
+      if (tanpaNik || formData.nik.length !== 16 || isSmartScanOpen) {
         setStatusPasien('idle');
         setRiwayatKunjungan([]);
         return;
@@ -292,7 +293,7 @@ function Pos1() {
     };
 
     cekRiwayatKunjungan();
-  }, [formData.nik, tanpaNik, ocrLoading, pasienAktif?.id]);
+  }, [formData.nik, tanpaNik, isSmartScanOpen, pasienAktif?.id]);
 
   const handlePanggil = async (item) => {
     if (callingVisitId || pasienAktif) return;
@@ -442,12 +443,17 @@ function Pos1() {
       canvas.width = cropWidth; canvas.height = cropHeight;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, startX, startY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-      canvas.toBlob((blob) => { stopCamera(); processOCR(new File([blob], "ktp.jpg", { type: "image/jpeg" })); }, 'image/jpeg', 0.95);
+      canvas.toBlob(() => {
+        stopCamera();
+        setPesan('Gunakan tombol Scan Dokumen untuk membaca identitas dengan Smart Scan.');
+      }, 'image/jpeg', 0.95);
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handleFileUpload = (e) => { if (e.target.files[0]) processOCR(e.target.files[0]); };
 
+  // eslint-disable-next-line no-unused-vars
   const applyOcrData = (extractedData, source = 'OCR') => {
     if (!extractedData?.nik && !extractedData?.nama) return false;
 

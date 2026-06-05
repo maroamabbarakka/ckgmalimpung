@@ -141,7 +141,7 @@ export const useSmartDocumentScan = () => {
       return finalResult;
     } catch (err) {
       console.error('Tesseract local scan error:', err);
-      throw new Error(`Tesseract lokal gagal membaca dokumen: ${err.message}`);
+      throw new Error(`Tesseract lokal gagal membaca dokumen: ${err.message}`, { cause: err });
     }
   };
 

@@ -1400,7 +1400,7 @@ function KunjunganRumah() {
             <div className="workflow-action-bar door-action-bar form-action-row no-print">
               <div className="contents">
                 <button type="button" onClick={handlePrevStep} className="secondary-action w-full">‹ Kembali Ke-3</button>
-                <button type="button" onClick={handleSimpanKeDatabase} disabled={loading || ocrLoading} className="primary-action w-full disabled:opacity-50 flex items-center justify-center gap-2">
+                <button type="button" onClick={handleSimpanKeDatabase} disabled={loading} className="primary-action w-full disabled:opacity-50 flex items-center justify-center gap-2">
                   {loading ? <><span className="animate-spin text-lg">⚙️</span> MEMPROSES...</> : '🎯 SIMPAN & RAPOR'}
                 </button>
               </div>

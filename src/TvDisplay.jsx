@@ -42,7 +42,6 @@ function TvDisplay() {
   const callTimeoutRef = useRef(null);
   const tickerTrackRef = useRef(null);
   const tickerAnimationRef = useRef(null);
-  const publicQueueTotal = useMemo(() => Object.values(antrianGrid).reduce((total, items) => total + items.length, 0), [antrianGrid]);
   const internalQueueTotal = useMemo(() => {
     if (!internalAntrianGrid) return 0;
     return Object.values(internalAntrianGrid).reduce((total, items) => total + items.length, 0);

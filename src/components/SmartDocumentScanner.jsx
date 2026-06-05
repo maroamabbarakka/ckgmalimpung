@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useSmartDocumentScan } from '../hooks/useSmartDocumentScan.js';
 import { validateIdentity } from '../utils/identityValidation.js';
 import { resolveWilayahKerja } from '../utils/wilayahMalimpung.js';

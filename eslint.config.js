@@ -10,6 +10,7 @@ export default defineConfig([
     'node_modules',
     'venv',
     '.firebase',
+    'backups/**',
     'scripts',
     'src - Ver*',
     'src - ver*',
@@ -18,6 +19,12 @@ export default defineConfig([
     'test-results',
     'playwright-report',
   ]),
+  {
+    files: ['server/**/*.{js,cjs,mjs}'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
   {
     files: ['**/*.{js,jsx}'],
     extends: [
