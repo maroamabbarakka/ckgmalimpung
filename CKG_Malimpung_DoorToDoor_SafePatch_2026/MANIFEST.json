@@ -1,0 +1,87 @@
+{
+  "package": "CKG_Malimpung_DoorToDoor_SafePatch_2026",
+  "repository": "maroamabbarakka/ckgmalimpung",
+  "purpose": "Safe implementation directions for Door-to-Door RBAC and related stabilization fixes",
+  "files": [
+    {
+      "name": "00_README_URUTAN_EKSEKUSI.md",
+      "sha256": "8b738ff2296716b2421dbd53228e9f328bec36283b913fdbc48fa3436829539b",
+      "bytes": 4924
+    },
+    {
+      "name": "01_BASELINE_FREEZE_DAN_SCOPE.md",
+      "sha256": "94e825bd53f021ba35e98fd7dc24b728a34e26ee85b433fa4ab5111179ba50a4",
+      "bytes": 3244
+    },
+    {
+      "name": "02_BACKUP_DATA_SOURCE_DAN_RECOVERY.md",
+      "sha256": "c2eabffc728f9c8e1ab87e1590e1c1cc3368ac58ac8d5c35459cd193b4738198",
+      "bytes": 5108
+    },
+    {
+      "name": "03_ROLE_DOOR_TO_DOOR_RBAC.md",
+      "sha256": "6f7d5e8561083dde11fadf5f930e82b38caf8136028b46805f9aa5fc2a845f33",
+      "bytes": 3086
+    },
+    {
+      "name": "04_DATA_PROVENANCE_DAN_DOKTER_PEMERIKSA.md",
+      "sha256": "0b048b2b5b4fdc30cdbc19d95183518f4b909b7fdfca6302efef25213c3d4f18",
+      "bytes": 2894
+    },
+    {
+      "name": "05_FIRESTORE_RULES_LEAST_PRIVILEGE.md",
+      "sha256": "2973f6a174c51d94bac53972765ec78f04400473b2e58ac3de96c3bcdd062c4d",
+      "bytes": 3631
+    },
+    {
+      "name": "06_UI_UX_REGRESSION_SAFETY.md",
+      "sha256": "63b0113ca801e5548507ce5ee418c14aa1a681284014054933de02852f46a82c",
+      "bytes": 3239
+    },
+    {
+      "name": "07_TEST_MATRIX_DAN_ACCEPTANCE_CRITERIA.md",
+      "sha256": "0714b776e18b27dc75723c5269337b08839c91ac08ddac293c158630f3639f16",
+      "bytes": 3700
+    },
+    {
+      "name": "08_DEPLOYMENT_BERTAHAP_DAN_ROLLBACK.md",
+      "sha256": "7b6d4fbcb082b454cae459fa79b0f3e48358ed248c9d497fdb5af52a971b7e33",
+      "bytes": 2786
+    },
+    {
+      "name": "09_POST_DEPLOY_MONITORING.md",
+      "sha256": "2b443ebcb3eece34ad6a42326aaff68aa69ca727df55fed98cff1afa4e9d7309",
+      "bytes": 2122
+    },
+    {
+      "name": "10_PROMPT_MASTER_UNTUK_CODEX_DEVELOPER.md",
+      "sha256": "86843f06a74a19e76921f9bca562f6d2a6fa13e2f5b544b26daf904398959fd8",
+      "bytes": 3860
+    },
+    {
+      "name": "11_DO_NOT_TOUCH_LIST.md",
+      "sha256": "bbafd1459fbbb5a8568ad2bbbd221ae50173a056d5465276513ed322cd2eeae7",
+      "bytes": 2104
+    },
+    {
+      "name": "12_CHANGE_CONTROL_CHECKLIST.md",
+      "sha256": "a279aba3bbc99e41ae6d3f5aab25b4b40d96d59f39c49c9ea14a2a0055824a10",
+      "bytes": 1728
+    },
+    {
+      "name": "13_CATATAN_TEKNIS_SUMBER_AUDIT.md",
+      "sha256": "037e134a0bc86e56c40624983931dc48ba64800ad0fcdf029d1bb02bdf7a94b2",
+      "bytes": 1391
+    },
+    {
+      "name": "14_GIGI_MULUT_DAN_STATUS_KELENGKAPAN_SAFE_PATCH.md",
+      "sha256": "7cfab9737e826f26e70779df823039833c5d3bf6884b8867ba9ce234d43ec349",
+      "bytes": 3226
+    },
+    {
+      "name": "15_PERMISSION_SESSION_HARDENING_DEFERRED.md",
+      "sha256": "18d3bc506cba3a1766a383541051889c6903c8ca42f5d06e86b1df12383dbead",
+      "bytes": 1436
+    }
+  ]
+}
