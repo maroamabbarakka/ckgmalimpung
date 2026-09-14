@@ -21,8 +21,9 @@ export async function updateVisit(visitId, payload) {
   }
 }
 
-export async function createVisitWithRef(visitRef, payload) {
+export async function createVisitWithRef(visitRef, payload, { syncPublicQueue = true } = {}) {
   await setDoc(visitRef, payload);
+  if (!syncPublicQueue) return;
   await upsertPublicQueueFromVisit(visitRef.id, payload).catch((error) => {
     console.warn('Gagal memperbarui antrean publik:', error);
   });

@@ -10,6 +10,7 @@ import { buildPatientSnapshot, createVisitDocRef, createVisitWithRef, nowTimesta
 import { alertDialog } from './utils/appDialog';
 import SmartDocumentScanner from './components/SmartDocumentScanner';
 import { Camera } from 'lucide-react';
+import { buildDoorToDoorProvenance, getDoorToDoorDoctorName } from './features/field/doorToDoor';
 
 // ==========================================
 // KONSTANTA WILAYAH & DEFAULT DATA
@@ -551,6 +552,13 @@ function KunjunganRumah() {
     setLoading(true);
     setPesan('');
     const namaPetugas = user?.nama || 'Sistem Nakes';
+    const dokterPemeriksa = getDoorToDoorDoctorName(user);
+
+    if (!user?.uid) {
+      setPesan('Sesi pengguna tidak valid. Silakan masuk kembali sebelum menyimpan kunjungan.');
+      setLoading(false);
+      return;
+    }
 
     const validationMessage = validateStepOne();
     if (validationMessage) {
@@ -671,6 +679,7 @@ function KunjunganRumah() {
       const visitDoc = createVisitDocRef();
       await createVisitWithRef(visitDoc, {
         jalur_pemeriksaan: "Kunjungan Rumah",
+        ...buildDoorToDoorProvenance(user),
         nomor_antrian: nomorAntrianDtd,
         patientNIK: finalNik,
         patient_identity_key: identityKey,
@@ -690,11 +699,11 @@ function KunjunganRumah() {
           status: isBayiAtauAnak(dataUmur.kategori) ? '-' : formData.status_perkawinan
         }),
         petugas_pos1: namaPetugas, petugas_pos2: namaPetugas, petugas_pos3: namaPetugas, petugas_pos4: namaPetugas, petugas_pos5: namaPetugas, petugas_pos6: namaPetugas, petugas_pos7: namaPetugas,
-        dokter_pemeriksa: namaPetugas,
+        ...(dokterPemeriksa ? { dokter_pemeriksa: dokterPemeriksa } : {}),
         kesimpulan_dokter: catatanAkhir,
         ...(ocrMeta ? { ocrMeta } : {}),
         pos2: payloadPos2, pos3: payloadPos3, pos4: payloadPos4, pos5: payloadPos5, pos6: payloadPos6
-      });
+      }, { syncPublicQueue: false });
       await writeAuditLog({
         action: 'Input dan selesaikan CKG jalur Kunjungan Rumah',
         module: 'Kunjungan Rumah',
@@ -705,7 +714,11 @@ function KunjunganRumah() {
           patient_identity_key: identityKey,
           nomor_antrian: nomorAntrianDtd,
           status_antrian: STATUS_MAPPING.SELESAI,
-          kategori_usia_satusehat: dataUmur.kategori
+          kategori_usia_satusehat: dataUmur.kategori,
+          visit_source: 'door_to_door',
+          created_by_uid: user.uid,
+          created_by_name: namaPetugas,
+          created_by_roles: user.roles || []
         }
       });
 
