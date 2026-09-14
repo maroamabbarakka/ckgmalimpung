@@ -27,6 +27,11 @@ import {
   isInderaRisk,
   getClinicalRiskBadges
 } from './utils/clinicalRiskEvaluator';
+import {
+  DENTAL_STATUS,
+  calculateDentalScreeningSummary,
+  getDentalScreeningStatus
+} from './features/dental/dentalScreening';
 
 // =====================================================================
 // IMPORT STANDAR VITE: HANYA RESPONSIVE, TANPA WIDTH PROVIDER
@@ -236,11 +241,29 @@ const defaultLayouts = {
     { i: 'stat-mental', x: 18, y: 4, w: 3, h: 4, minW: 2, minH: 3 },
     { i: 'stat-indera', x: 21, y: 4, w: 3, h: 4, minW: 2, minH: 3 },
 
-    { i: 'ekspor', x: 6, y: 8, w: 18, h: 4, minW: 10, minH: 2 },
+    { i: 'stat-dental', x: 21, y: 8, w: 3, h: 4, minW: 3, minH: 3 },
+    { i: 'ekspor', x: 6, y: 8, w: 15, h: 4, minW: 10, minH: 2 },
     { i: 'quality', x: 0, y: 12, w: 12, h: 5, minW: 8, minH: 4 },
     { i: 'bottleneck', x: 12, y: 12, w: 12, h: 5, minW: 8, minH: 4 },
     { i: 'tabel', x: 0, y: 17, w: 24, h: 8, minW: 12, minH: 6 }
   ]
+};
+
+const includeDentalInSavedLayouts = (savedLayouts) => {
+  if (!savedLayouts || typeof savedLayouts !== 'object') return defaultLayouts;
+  const dentalDefault = defaultLayouts.lg.find(item => item.i === 'stat-dental');
+  return Object.fromEntries(Object.entries(savedLayouts).map(([breakpoint, layout]) => {
+    if (!Array.isArray(layout) || layout.some(item => item.i === 'stat-dental')) {
+      return [breakpoint, layout];
+    }
+    const availableDentalSlot = { ...dentalDefault };
+    const adjustedLayout = layout.map(item => (
+      item.i === 'ekspor' && item.x === 6 && item.y === 8 && item.w === 18
+        ? { ...item, w: 15 }
+        : item
+    ));
+    return [breakpoint, [...adjustedLayout, availableDentalSlot]];
+  }));
 };
 
 // =====================================================================
@@ -271,7 +294,7 @@ function Dashboard() {
   const [layouts, setLayouts] = useState(() => {
     try {
         const saved = localStorage.getItem("dashboardLayout_v21");
-        return saved ? JSON.parse(saved) : defaultLayouts;
+        return saved ? includeDentalInSavedLayouts(JSON.parse(saved)) : defaultLayouts;
     } catch { return defaultLayouts; }
   });
 
@@ -436,6 +459,7 @@ function Dashboard() {
 
   const decisionMetrics = useMemo(() => calculateDashboardMetrics(filteredVisits), [filteredVisits]);
   const dataQuality = useMemo(() => calculateDataQuality(filteredVisits), [filteredVisits]);
+  const dentalSummary = useMemo(() => calculateDentalScreeningSummary(filteredVisits), [filteredVisits]);
   const bottleneckRows = useMemo(() => {
     const bottleneck = calculateBottleneck(filteredVisits);
     return Object.entries(bottleneck)
@@ -483,6 +507,11 @@ function Dashboard() {
   const popupPatients = useMemo(() => {
       if (!popupConfig.isOpen) return [];
 
+      if (popupConfig.type === 'dental') {
+          return filteredVisits.filter(v => [DENTAL_STATUS.NOT_EXAMINED, DENTAL_STATUS.LEGACY_REVIEW]
+              .includes(getDentalScreeningStatus(v).status));
+      }
+
       return visits.filter(v => {
           if (popupConfig.type === 'hipertensi') return isHipertensiRisk(v);
           if (popupConfig.type === 'diabetes') return isDiabetesRisk(v);
@@ -492,7 +521,7 @@ function Dashboard() {
           if (popupConfig.type === 'indera') return isInderaRisk(v);
           return false;
       });
-  }, [visits, popupConfig]);
+  }, [filteredVisits, visits, popupConfig]);
 
   const popupDetailsInfo = {
       'hipertensi': { icon: '🩺', title: 'Pasien Hipertensi (TD ≥ 140)' },
@@ -500,7 +529,8 @@ function Dashboard() {
       'obesitas': { icon: '⚖️', title: 'Pasien Overweight & Obesitas' },
       'paru_ppok': { icon: '🫁', title: 'Risiko Paru, PPOK & Perokok' },
       'mental': { icon: '🧠', title: 'Indikasi Gangguan Emosional' },
-      'indera': { icon: '👁️', title: 'Gangguan Indera Mata / Telinga' }
+      'indera': { icon: '👁️', title: 'Gangguan Indera Mata / Telinga' },
+      'dental': { icon: '🦷', title: 'Kelengkapan Pemeriksaan Gigi & Mulut', description: 'Belum diperiksa dan data legacy yang perlu diverifikasi' }
   };
   const currentPopupInfo = popupDetailsInfo[popupConfig.type] || { icon: '📋', title: 'Detail Data Pasien' };
 
@@ -785,6 +815,11 @@ function Dashboard() {
     'stat-indera': (
         <div key="stat-indera" className={`h-full ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move rounded-[1.5rem] p-0.5' : ''}`}>
             <CardStatClickable title="Indera" value={stats.klinis.indera} subtitle="Mata & Telinga" gradient="from-teal-500 to-emerald-600" icon="👁️" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'indera'}) : handlePublicRestrictedDetail()} />
+        </div>
+    ),
+    'stat-dental': (
+        <div key="stat-dental" className={`h-full ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move rounded-[1.5rem] p-0.5' : ''}`}>
+            <CardStatClickable title="Gigi & Mulut" value={dentalSummary.needsAttention} subtitle="Belum / verifikasi" gradient="from-violet-500 to-fuchsia-600" icon="🦷" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'dental'}) : handlePublicRestrictedDetail()} />
         </div>
     ),
     'ekspor': isAdmin ? (
@@ -1082,7 +1117,7 @@ function Dashboard() {
                       {widgets['demografi']}
                       {widgets['quality']}
                       {widgets['bottleneck']}
-                      {/* Grid khusus untuk 6 Kartu Klinik di Mobile */}
+                      {/* Grid khusus kartu klinik di Mobile */}
                         <div className="dashboard-mobile-clinical-grid grid grid-cols-2 gap-3">
                           {widgets['stat-hipertensi']}
                           {widgets['stat-diabetes']}
@@ -1090,6 +1125,7 @@ function Dashboard() {
                           {widgets['stat-paru']}
                           {widgets['stat-mental']}
                           {widgets['stat-indera']}
+                          {widgets['stat-dental']}
                       </div>
                       {widgets['ekspor']}
                       {widgets['tabel']}
@@ -1133,7 +1169,7 @@ function Dashboard() {
                         <div className="text-4xl">{currentPopupInfo.icon}</div>
                         <div>
                             <h3 className="font-black text-2xl text-slate-800 tracking-tight">{currentPopupInfo.title}</h3>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Daftar Pasien Hasil Skrining Risiko Tinggi</p>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{currentPopupInfo.description || 'Daftar Pasien Hasil Skrining Risiko Tinggi'}</p>
                         </div>
                       </div>
                       <button onClick={() => setPopupConfig({isOpen: false, type: '', title: ''})} className="w-12 h-12 bg-slate-100 text-slate-500 hover:bg-rose-600 hover:text-white rounded-full flex items-center justify-center transition-all font-black shadow-inner">✕</button>
@@ -1150,13 +1186,16 @@ function Dashboard() {
                                       <span className="text-2xl group-hover:translate-x-1 transition-transform">➔</span>
                                   </div>
                                   <div className="mt-4 flex flex-wrap gap-2">
-                                      {getClinicalRiskBadges(p, popupConfig.type).map((badge, idx) => (
+                                      {(popupConfig.type === 'dental'
+                                          ? [getDentalScreeningStatus(p).label]
+                                          : getClinicalRiskBadges(p, popupConfig.type)).map((badge, idx) => (
                                           <span key={idx} className={`px-3 py-1 rounded-lg text-[10px] font-black border ${
                                               popupConfig.type === 'hipertensi' ? 'bg-rose-50 text-rose-700 border-rose-200' :
                                               popupConfig.type === 'diabetes' ? 'bg-orange-50 text-orange-700 border-orange-200' :
                                               popupConfig.type === 'obesitas' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                                               popupConfig.type === 'paru_ppok' ? 'bg-cyan-50 text-cyan-700 border-cyan-200' :
                                               popupConfig.type === 'mental' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                              popupConfig.type === 'dental' ? (getDentalScreeningStatus(p).status === DENTAL_STATUS.LEGACY_REVIEW ? 'bg-slate-100 text-slate-700 border-slate-300' : 'bg-violet-50 text-violet-700 border-violet-200') :
                                               'bg-teal-50 text-teal-700 border-teal-200'
                                           }`}>
                                               {badge}
