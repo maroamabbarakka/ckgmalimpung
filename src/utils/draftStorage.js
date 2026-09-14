@@ -1,4 +1,10 @@
 const PREFIX = 'ckg_draft';
+export const DRAFTS_CHANGED_EVENT = 'ckg:drafts-changed';
+
+function notifyDraftsChanged() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(DRAFTS_CHANGED_EVENT));
+}
 
 export function draftKey(moduleName, visitId) {
   return `${PREFIX}:${moduleName}:${visitId}`;
@@ -15,6 +21,7 @@ export function saveDraft(moduleName, visitId, data) {
       savedAt: new Date().toISOString(),
     })
   );
+  notifyDraftsChanged();
 }
 
 export function loadDraft(moduleName, visitId) {
@@ -31,11 +38,13 @@ export function loadDraft(moduleName, visitId) {
 export function clearDraft(moduleName, visitId) {
   if (!visitId || typeof localStorage === 'undefined') return;
   localStorage.removeItem(draftKey(moduleName, visitId));
+  notifyDraftsChanged();
 }
 
 export function removeDraftByKey(key) {
   if (!key || typeof localStorage === 'undefined') return;
   localStorage.removeItem(key);
+  notifyDraftsChanged();
 }
 
 export function listDrafts() {

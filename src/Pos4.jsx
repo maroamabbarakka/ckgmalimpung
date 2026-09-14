@@ -9,6 +9,9 @@ import { auditQueueTransition } from './services/queueAudit';
 import { buildQueueSpeech, claimVisitForStaff, createTvQueueCall } from './services/queueService';
 import { updateVisit } from './services/visitService';
 import useQueue from './hooks/useQueue';
+import { useAutosaveDraft } from './hooks/useAutosaveDraft';
+import { clearDraft, loadDraft } from './utils/draftStorage';
+import { isBrowserOnline, recordPendingSync } from './utils/syncQueueStorage';
 import PatientStickyHeader from './components/patient/PatientStickyHeader';
 import PosBottomActionBar from './components/patient/PosBottomActionBar';
 import QueueCallList from './components/patient/QueueCallList';
@@ -21,6 +24,15 @@ function Pos4() {
   const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(false); 
   const [callingVisitId, setCallingVisitId] = useState(null);
+  const [draftSavedAt, setDraftSavedAt] = useState('');
+
+  useAutosaveDraft({
+    moduleName: 'pos4',
+    visitId: pasienAktif?.id,
+    data: formData,
+    enabled: Boolean(pasienAktif?.id && Object.keys(formData).length),
+    onSaved: () => setDraftSavedAt(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }))
+  });
 
   // PENGAMAN VARIABEL UMUR
   const umurPasien = pasienAktif?.umur_saat_periksa || 0;
@@ -39,7 +51,18 @@ function Pos4() {
         workflowStatus: VISIT_STATUS.POS4_IN_PROGRESS
       });
       const activeSchema = getSchemaForVisit(activeVisit);
-      setPasienAktif(activeVisit); setFormData(sanitizeFormDataForSchema(activeSchema, activeVisit.pos4 || {})); window.scrollTo({ top: 0, behavior: 'smooth' });
+      const serverFormData = sanitizeFormDataForSchema(activeSchema, activeVisit.pos4 || {});
+      const draft = loadDraft('pos4', activeVisit.id);
+      const shouldRestoreDraft = draft?.data && await confirmDialog({
+        title: 'Pulihkan draft Pos 4?',
+        message: `Ada draft Pos 4 tersimpan pada ${new Date(draft.savedAt).toLocaleString('id-ID')}.`,
+        confirmLabel: 'Pulihkan',
+        variant: 'info'
+      });
+      setPasienAktif(activeVisit);
+      setDraftSavedAt(draft?.savedAt ? new Date(draft.savedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '');
+      setFormData(shouldRestoreDraft ? draft.data : serverFormData);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       try { await createTvQueueCall({ pos: "POS 4", queueNumber: activeVisit.nomor_antrian, speechText: buildQueueSpeech(activeVisit.nomor_antrian, 'Silakan menuju Pos Empat.') }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 4:", e); }
     } catch (e) {
       await alertDialog({ title: 'Pasien belum dapat dipanggil', message: e.message, variant: 'warning' });
@@ -50,6 +73,7 @@ function Pos4() {
 
   const handleSimpanData = async (e) => {
     e.preventDefault(); if (!pasienAktif || loading) return; setLoading(true);
+    const wasOffline = !isBrowserOnline();
     try {
       const activeSchema = getActiveSchema();
       const sanitizedFormData = sanitizeFormDataForSchema(activeSchema, formData, {
@@ -64,6 +88,14 @@ function Pos4() {
         toStatus: STATUS_MAPPING.POS5,
         extra: { status: VISIT_STATUS.POS4_COMPLETE, petugas_pos4: user?.nama || 'Sistem' }
       });
+      clearDraft('pos4', pasienAktif.id);
+      if (wasOffline) {
+        recordPendingSync('pos4', pasienAktif.id, {
+          patientName: pasienAktif.pasien_snapshot?.nama,
+          action: 'Simpan Pos 4 dan lanjut Pos 5'
+        });
+      }
+      setDraftSavedAt('');
       setTimeout(() => setPasienAktif(null), 1000); 
     } catch (error) { console.error("Gagal menyimpan data Pos 4:", error); await alertDialog({ title: 'Gagal menyimpan data Pos 4', message: error.message || 'Silakan coba lagi.', variant: 'error' }); } finally { setLoading(false); }
   };
@@ -156,6 +188,9 @@ function Pos4() {
         <form onSubmit={handleSimpanData} className="pos-form-surface p-4 md:p-6 bg-[#f8fafc] mobile-safe-page">
             <div className="patient-summary-card bg-white px-6 py-5 rounded-2xl shadow-sm border border-slate-200">
                 <h3 className="font-black text-lg">{pasienAktif.pasien_snapshot?.nama || "Tanpa Nama"}</h3>
+                <p className="autosave-status mt-2 text-[10px] font-bold uppercase text-emerald-600">
+                  {draftSavedAt ? `Draft lokal tersimpan ${draftSavedAt}` : 'Draft lokal aktif'}
+                </p>
                 <p className="text-[10px] font-bold text-slate-400 uppercase">{umurPasien} THN • {kategoriPasien}</p>
             </div>
             

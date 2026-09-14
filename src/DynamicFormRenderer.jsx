@@ -835,6 +835,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
     if (t.includes('visus <6/60 - 3/60')) return "Gg. Berat";
     if (t.includes('visus <3/60')) return "⚠️ Buta";
     if (t.includes('visus 6/6 - 6/12')) return "Normal";
+    if (t.includes('tidak dilakukan') || t.includes('tidak diperiksa') || t.includes('belum diperiksa')) return "TIDAK DILAKUKAN";
     if (t.includes('non reaktif') || t.includes('negatif')) return text.length > 15 ? text : "NEGATIF";
     if (t.includes('reaktif') || t.includes('positif')) return text.length > 15 ? `⚠️ ${text}` : "⚠️ POSITIF";
     
@@ -952,12 +953,47 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
 
   const isYesValue = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
+    if (normalized.includes('non reaktif') || normalized.includes('tidak dilakukan') || normalized.includes('tidak diperiksa') || normalized.includes('belum diperiksa')) return false;
     return normalized === 'ya' || normalized === 'yes' || normalized.includes('positif') || normalized.includes('reaktif');
   };
 
   const isNoValue = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
+    if (normalized.includes('tidak dilakukan') || normalized.includes('tidak diperiksa') || normalized.includes('belum diperiksa')) return false;
     return normalized === 'tidak' || normalized === 'tdk' || normalized === 'no' || normalized.includes('negatif') || normalized.includes('non reaktif');
+  };
+
+  const NOT_EXAMINED_OPTION = 'Tidak dilakukan pemeriksaan';
+  const isNotExaminedValue = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized.includes('tidak dilakukan') || normalized.includes('tidak diperiksa') || normalized.includes('belum diperiksa');
+  };
+
+  const isOptionalExamQuestion = (question) => {
+    const text = String(question?.question_text || '').toLowerCase();
+    return [
+      'rapid test',
+      'hiv',
+      'sifilis',
+      'hbsag',
+      'hcv',
+      'anti hcv',
+      'malaria',
+      'rdt',
+      'rontgen',
+      'x-ray',
+      'thorax',
+      'toraks',
+      'foto dada',
+      'tcm',
+      'bta'
+    ].some(keyword => text.includes(keyword));
+  };
+
+  const withNotExaminedOption = (question, options = []) => {
+    if (!isOptionalExamQuestion(question)) return options;
+    const hasOption = options.some((option) => isNotExaminedValue(option));
+    return hasOption ? options : [...options, NOT_EXAMINED_OPTION];
   };
 
   const getAnswerProfile = (question, options = []) => {
@@ -1014,9 +1050,10 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
             {options.map((opt, i) => {
               const isActive = val === opt;
               const visualText = parseOption(opt);
+              const isNotExamined = isNotExaminedValue(opt);
               const isWarning = String(opt).toLowerCase().includes('abnormal') || String(opt).toLowerCase().includes('positif') || String(opt).toLowerCase().includes('karies') || String(opt).toLowerCase().includes('buruk') || String(opt).toLowerCase() === 'ya';
               const dotClass = isActive
-                ? (isWarning ? 'border-rose-500 bg-rose-500' : 'border-emerald-500 bg-emerald-500')
+                ? (isNotExamined ? 'border-slate-400 bg-slate-400' : (isWarning ? 'border-rose-500 bg-rose-500' : 'border-emerald-500 bg-emerald-500'))
                 : 'border-slate-200 bg-white';
               return (
                 <label key={i} className={`flex items-start gap-3 rounded-xl px-2 py-1.5 transition-all cursor-pointer ${isActive ? 'text-slate-900' : 'text-slate-600 hover:bg-slate-50'}`}>
@@ -1035,8 +1072,9 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
       return (
           <div className={`segmented-control ${hasLongOption ? 'grid grid-cols-1 sm:grid-cols-2' : 'flex'} bg-slate-50/50 rounded-xl p-1 border border-slate-200 w-full mt-2 shadow-sm gap-1`}>
             {options.map((opt, i) => {
+              const isNotExamined = isNotExaminedValue(opt);
               const isWarning = opt.toLowerCase().includes('abnormal') || opt.toLowerCase().includes('positif') || opt.toLowerCase().includes('karies') || opt.toLowerCase().includes('buruk') || opt.toLowerCase().includes('ya');
-              const activeClass = isWarning ? 'bg-rose-500 text-white shadow-md border-transparent' : `${getThemeColor()} text-white shadow-md border-transparent`;
+              const activeClass = isNotExamined ? 'bg-slate-500 text-white shadow-md border-transparent' : (isWarning ? 'bg-rose-500 text-white shadow-md border-transparent' : `${getThemeColor()} text-white shadow-md border-transparent`);
               const isActive = val === opt;
               return (
                 <button key={i} type="button" onClick={() => onChange(question.id, opt)} 
@@ -1053,6 +1091,7 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
     const safeOptions = customOptions || (Array.isArray(question.options) ? question.options : []);
     if (safeOptions.length === 0) return null;
     const questionText = String(question.question_text || '').toLowerCase();
+    if (isOptionalExamQuestion(question)) return null;
 
     if (questionText.includes('pupil')) {
       return safeOptions.find(opt => String(opt).toLowerCase() === 'normal') || null;
@@ -1107,9 +1146,10 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
     const value = getValue(question.id);
     const questionText = question.question_text.toLowerCase();
     const baseOptions = customOptions || (Array.isArray(question.options) ? question.options : []);
-    const safeOptions = questionText.includes('hasil pemeriksaan pupil') && !baseOptions.some(opt => String(opt).toLowerCase() === 'normal')
-      ? ['Normal', ...baseOptions]
-      : baseOptions;
+    const enhancedOptions = withNotExaminedOption(question, baseOptions);
+    const safeOptions = questionText.includes('hasil pemeriksaan pupil') && !enhancedOptions.some(opt => String(opt).toLowerCase() === 'normal')
+      ? ['Normal', ...enhancedOptions]
+      : enhancedOptions;
     const isBool = safeOptions.length === 2 || safeOptions.length === 3;
     const answerProfile = getAnswerProfile(question, safeOptions);
 
@@ -1132,9 +1172,10 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
               {safeOptions.map((opt) => {
                 const visualText = parseOption(opt);
                 const isActive = value === opt;
+                const isNotExamined = isNotExaminedValue(opt);
                 const isWarning = visualText.includes('âš ï¸') || visualText.toLowerCase().includes('buta') || visualText.toLowerCase().includes('berat') || visualText.toLowerCase().includes('positif');
                 const dotClass = isActive
-                  ? (isWarning ? 'border-rose-500 bg-rose-500' : 'border-emerald-500 bg-emerald-500')
+                  ? (isNotExamined ? 'border-slate-400 bg-slate-400' : (isWarning ? 'border-rose-500 bg-rose-500' : 'border-emerald-500 bg-emerald-500'))
                   : 'border-slate-200 bg-white';
                 return (
                   <label key={opt} className={`flex items-start gap-3 rounded-xl px-2 py-1.5 transition-all cursor-pointer ${isActive ? 'text-slate-900' : 'text-slate-600 hover:bg-slate-50'}`}>
@@ -1153,8 +1194,9 @@ const DynamicFormRenderer = ({ schema, formData, fullData, onChange, posNumber, 
           <div className={`grid ${hasLongOption ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-2'} gap-1.5 mt-1.5`}>
             {safeOptions.map((opt) => {
               const visualText = parseOption(opt);
+              const isNotExamined = isNotExaminedValue(opt);
               const isWarning = visualText.includes('⚠️') || visualText.toLowerCase().includes('buta') || visualText.toLowerCase().includes('berat') || visualText.toLowerCase().includes('positif');
-              const activeClass = isWarning ? 'bg-rose-500 text-white shadow-md border-transparent' : `${getThemeColor()} text-white shadow-md border-transparent`;
+              const activeClass = isNotExamined ? 'bg-slate-500 text-white shadow-md border-transparent' : (isWarning ? 'bg-rose-500 text-white shadow-md border-transparent' : `${getThemeColor()} text-white shadow-md border-transparent`);
               
               return (
               <label key={opt} className={`min-w-0 flex-1 flex items-center ${hasLongOption ? 'justify-start text-left' : 'justify-center text-center'} py-3 px-3 rounded-xl border transition-all cursor-pointer font-black shadow-sm ${

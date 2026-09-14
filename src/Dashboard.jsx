@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { exportToPKGExcel, exportClusterExcel, exportToPKG_PDF, exportClusterPDF } from './utils/exportPKG';
 import { STATUS_MAPPING } from './utils/constants';
@@ -15,6 +15,18 @@ import {
   subscribeDashboardVisits,
   updateDashboardVisit
 } from './features/dashboard/dashboardService';
+import {
+  getVisitBloodPressure,
+  getVisitGlucose,
+  getVisitBodyMassIndex,
+  isHipertensiRisk,
+  isDiabetesRisk,
+  isObesitasRisk,
+  isParuRisk,
+  isMentalRisk,
+  isInderaRisk,
+  getClinicalRiskBadges
+} from './utils/clinicalRiskEvaluator';
 
 // =====================================================================
 // IMPORT STANDAR VITE: HANYA RESPONSIVE, TANPA WIDTH PROVIDER
@@ -22,6 +34,39 @@ import {
 import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
+
+const toVisitDate = (value) => {
+  if (!value) return null;
+  if (value.toDate) return value.toDate();
+  if (value.toMillis) return new Date(value.toMillis());
+  if (value instanceof Date) return value;
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+};
+
+const getVisitDate = (visit = {}) =>
+  toVisitDate(visit.waktu_selesai_total || visit.tanggal_kunjungan || visit.waktu_ambil_tiket || visit.createdAt || visit.lastUpdated);
+
+const toDateInputValue = (date) => {
+  if (!date) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const isVisitInDateRange = (visit, startDate, endDate) => {
+  if (!startDate && !endDate) return true;
+  const visitDate = getVisitDate(visit);
+  if (!visitDate) return false;
+  const visitDateKey = toDateInputValue(visitDate);
+  if (startDate && visitDateKey < startDate) return false;
+  if (endDate && visitDateKey > endDate) return false;
+  return true;
+};
 
 // =====================================================================
 // WRAPPER AUTO-WIDTH: MENGISOLIR MASALAH LEBAR LAYAR PADA VITE
@@ -143,52 +188,6 @@ const DashboardInsightPanel = ({ insights = [] }) => (
     </section>
 );
 
-const extractDashboardValue = (posData, keywords, questionMap = {}) => {
-    if (!posData) return null;
-    const key = Object.keys(posData).find(k => {
-        const keyText = String(k).toLowerCase();
-        const questionText = String(questionMap[k] || '').toLowerCase();
-        return keywords.some(kw => keyText.includes(kw) || questionText.includes(kw));
-    });
-    return key ? posData[key] : null;
-};
-
-const extractDashboardFirstValue = (posData, keywordGroups = [], questionMap = {}) => {
-    for (const keywords of keywordGroups) {
-        const value = extractDashboardValue(posData, keywords, questionMap);
-        if (value !== null && value !== undefined && String(value).trim() !== '') return value;
-    }
-    return null;
-};
-
-const getVisitBloodPressure = (visit) => {
-    const td = String(visit.pos2?.td || extractDashboardValue(visit.pos2, ['tekanan darah'], visit.pos2_question_map) || '');
-    const sys = extractDashboardValue(visit.pos2, ['sistolik'], visit.pos2_question_map) || (td.includes('/') ? td.split('/')[0] : td);
-    const dia = extractDashboardValue(visit.pos2, ['diastolik'], visit.pos2_question_map) || (td.includes('/') ? td.split('/')[1] : '');
-    return { sys, dia, label: sys ? `${sys}/${dia || '-'}` : '-' };
-};
-
-const getVisitGlucose = (visit) => {
-    const gds = extractDashboardFirstValue(visit.pos2, [['gula darah sewaktu'], ['gds']], visit.pos2_question_map) || extractDashboardFirstValue(visit.pos4, [['gula darah sewaktu'], ['gds']], visit.pos4_question_map);
-    const gdp = extractDashboardFirstValue(visit.pos2, [['gula darah puasa'], ['gdp']], visit.pos2_question_map) || extractDashboardFirstValue(visit.pos4, [['gula darah puasa'], ['gdp']], visit.pos4_question_map);
-    return { gds, gdp, label: gds || gdp || '-' };
-};
-
-const getVisitBodyMassIndex = (visit) => {
-    const savedImt = extractDashboardFirstValue(visit.pos2, [['index massa tubuh'], ['indeks massa tubuh'], ['imt/u'], ['imt']], visit.pos2_question_map);
-    const tbRaw = extractDashboardFirstValue(visit.pos2, [['tinggi badan'], ['pengukuran tinggi badan'], ['panjang badan']], visit.pos2_question_map);
-    const bbRaw = extractDashboardFirstValue(visit.pos2, [['berat badan']], visit.pos2_question_map);
-    const tb = parseFloat(tbRaw);
-    const bb = parseFloat(bbRaw);
-    const calculated = tb > 0 && bb > 0 ? bb / Math.pow(tb / 100, 2) : null;
-    const numeric = Number.isFinite(parseFloat(savedImt)) ? parseFloat(savedImt) : calculated;
-    return {
-        value: Number.isFinite(numeric) ? numeric : null,
-        label: Number.isFinite(numeric) ? numeric.toFixed(1) : '-',
-        saved: savedImt || ''
-    };
-};
-
 const POS_QUEUE_OPTIONS = [
   { key: 'pos1', value: STATUS_MAPPING.POS1, label: 'Pos 1 (Registrasi)', trafficLabel: 'Pos 1: Registrasi', colorClass: 'bg-blue-500' },
   { key: 'pos2', value: STATUS_MAPPING.POS2, label: 'Pos 2 (Antropometri)', trafficLabel: 'Pos 2: Antropometri', colorClass: 'bg-indigo-500' },
@@ -245,8 +244,6 @@ const defaultLayouts = {
 };
 
 // =====================================================================
-
-// =====================================================================
 // KOMPONEN UTAMA DASHBOARD
 // =====================================================================
 function Dashboard() {
@@ -260,6 +257,8 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDesa, setFilterDesa] = useState('Semua');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   const [patientPage, setPatientPage] = useState(1);
 
   const [selectedRows, setSelectedRows] = useState([]);
@@ -360,36 +359,12 @@ function Dashboard() {
         const kat = ['SD', 'SMP', 'SMA'].includes(rawKat) ? 'Anak/Siswa' : rawKat;
         s.usia[kat] = (s.usia[kat] || 0) + 1;
 
-        const tdRaw = String(v.pos2?.td || extractDashboardValue(v.pos2, ['tekanan darah'], v.pos2_question_map) || '');
-        const sysRaw = extractDashboardValue(v.pos2, ['sistolik'], v.pos2_question_map) || (tdRaw.includes('/') ? tdRaw.split('/')[0] : tdRaw);
-        const diaRaw = extractDashboardValue(v.pos2, ['diastolik'], v.pos2_question_map) || (tdRaw.includes('/') ? tdRaw.split('/')[1] : '');
-        const sys = parseInt(sysRaw);
-        const dia = parseInt(diaRaw);
-        if ((!isNaN(sys) && sys >= 140) || (!isNaN(dia) && dia >= 90)) s.klinis.hipertensi++;
-
-        const visitGlucose = getVisitGlucose(v);
-        const gds = parseInt(visitGlucose.gds || 0);
-        const gdp = parseInt(visitGlucose.gdp || 0);
-        if (gds >= 200 || gdp >= 126) s.klinis.hiperglikemia++;
-
-        const bodyMassIndex = getVisitBodyMassIndex(v);
-        if (kat !== 'Bayi' && kat !== 'Balita' && bodyMassIndex.value >= 25.0) {
-            s.klinis.obesitas++;
-        }
-
-        const p4 = v.pos4 || {}; const p5 = v.pos5 || {};
-        if (p4.ppok?.nafas_pendek === 'Ya' || p5.ppok?.nafas_pendek === 'Ya' || p4.merokok?.batuk_lama === 'Ya' || p5.merokok?.batuk_lama === 'Ya' || p4.resiko_ca_paru?.riw_merokok === 'Ya' || p4.resiko_tb?.batuk_lama === '>2Mg' || p5.resiko_tb?.batuk === 'Ya' || extractDashboardValue(p5, ['batuk'], v.pos5_question_map) === 'Ya') s.klinis.paru_ppok++;
-
-        const p3 = v.pos3 || {}; const p6 = v.pos6 || {}; const skilas = p3.skilas || p6.skilas || {};
-        const isMental = Object.values(p3.jiwa_srq20 || {}).some(val => String(val) !== 'Tidak' && String(val) !== 'Tdk' && val !== undefined && val !== '') ||
-                         Object.values(p6.jiwa_srq20 || {}).some(val => String(val) !== 'Tidak' && String(val) !== 'Tdk' && val !== undefined && val !== '') ||
-                         Object.values(p3.jiwa_sdq || {}).some(val => String(val) === 'Ya') ||
-                         Object.values(p6.jiwa_sdq || {}).some(val => String(val) === 'Ya') ||
-                         skilas.dep_sedih === 'Ya' || skilas.dep_minat_turun === 'Ya' || skilas.depl_tak_berdaya === 'Ya';
-        if (isMental) s.klinis.mental++;
-
-        const visusStr = String(p3.mata?.visus || extractDashboardValue(p3, ['visus', 'snellen'], v.pos3_question_map) || '');
-        if ((visusStr && !['6/6', 'normal'].includes(visusStr.toLowerCase())) || p3.telinga?.gg_pendengaran === 'Ya' || p3.telinga?.infeksi === 'Ya' || extractDashboardValue(p3, ['pendengaran'], v.pos3_question_map) === 'Ya') s.klinis.indera++;
+        if (isHipertensiRisk(v)) s.klinis.hipertensi++;
+        if (isDiabetesRisk(v)) s.klinis.hiperglikemia++;
+        if (isObesitasRisk(v)) s.klinis.obesitas++;
+        if (isParuRisk(v)) s.klinis.paru_ppok++;
+        if (isMentalRisk(v)) s.klinis.mental++;
+        if (isInderaRisk(v)) s.klinis.indera++;
     });
     setStats(s);
   };
@@ -401,7 +376,8 @@ function Dashboard() {
       const search = searchTerm.toLowerCase();
       const matchSearch = name.includes(search) || nik.includes(search);
       const matchDesa = filterDesa === 'Semua' || v.pasien_snapshot?.desa === filterDesa;
-      return matchSearch && matchDesa;
+      const matchDate = isVisitInDateRange(v, filterStartDate, filterEndDate);
+      return matchSearch && matchDesa && matchDate;
     });
 
     result.sort((a, b) => {
@@ -434,7 +410,7 @@ function Dashboard() {
     });
 
     return result;
-  }, [visits, searchTerm, filterDesa, sortConfig]);
+  }, [visits, searchTerm, filterDesa, filterStartDate, filterEndDate, sortConfig]);
 
   const patientPageSize = isMobile ? 5 : 10;
   const patientTotalPages = Math.max(1, Math.ceil(filteredVisits.length / patientPageSize));
@@ -448,7 +424,7 @@ function Dashboard() {
 
   useEffect(() => {
     setPatientPage(1);
-  }, [searchTerm, filterDesa, sortConfig, isMobile]);
+  }, [searchTerm, filterDesa, filterStartDate, filterEndDate, sortConfig, isMobile]);
 
   useEffect(() => {
     if (patientPage > patientTotalPages) setPatientPage(patientTotalPages);
@@ -504,33 +480,16 @@ function Dashboard() {
     setSortConfig({ key, direction });
   };
 
-  // OPTIMASI: useMemo untuk popup pasien
   const popupPatients = useMemo(() => {
       if (!popupConfig.isOpen) return [];
 
       return visits.filter(v => {
-          if (popupConfig.type === 'hipertensi') {
-              const bp = getVisitBloodPressure(v);
-              return parseInt(bp.sys || 0) >= 140 || parseInt(bp.dia || 0) >= 90;
-          }
-          if (popupConfig.type === 'diabetes') {
-              const glucose = getVisitGlucose(v);
-              return parseInt(glucose.gds || 0) >= 200 || parseInt(glucose.gdp || 0) >= 126;
-          }
-          if (popupConfig.type === 'obesitas') {
-              const kat = v.kategori_usia_satusehat;
-              const bodyMassIndex = getVisitBodyMassIndex(v);
-              return kat !== 'Bayi' && kat !== 'Balita' && bodyMassIndex.value >= 25.0;
-          }
-          if (popupConfig.type === 'paru_ppok') return v.pos4?.ppok?.nafas_pendek === 'Ya' || v.pos4?.merokok?.batuk_lama === 'Ya' || v.pos4?.resiko_ca_paru?.riw_merokok === 'Ya' || v.pos4?.resiko_tb?.batuk_lama === '>2Mg';
-          if (popupConfig.type === 'mental') {
-              const p3 = v.pos3 || {}; const skilas = p3.skilas || {};
-              return Object.values(p3.jiwa_srq20 || {}).some(val => String(val) !== 'Tidak' && String(val) !== 'Tdk' && val !== undefined && val !== '') || Object.values(p3.jiwa_sdq || {}).some(val => String(val) === 'Ya') || skilas.dep_sedih === 'Ya';
-          }
-          if (popupConfig.type === 'indera') {
-              const visusStr = String(v.pos3?.mata?.visus || '');
-              return (visusStr && !['6/6', 'normal'].includes(visusStr.toLowerCase())) || v.pos3?.telinga?.gg_pendengaran === 'Ya' || v.pos3?.telinga?.infeksi === 'Ya';
-          }
+          if (popupConfig.type === 'hipertensi') return isHipertensiRisk(v);
+          if (popupConfig.type === 'diabetes') return isDiabetesRisk(v);
+          if (popupConfig.type === 'obesitas') return isObesitasRisk(v);
+          if (popupConfig.type === 'paru_ppok') return isParuRisk(v);
+          if (popupConfig.type === 'mental') return isMentalRisk(v);
+          if (popupConfig.type === 'indera') return isInderaRisk(v);
           return false;
       });
   }, [visits, popupConfig]);
@@ -548,39 +507,60 @@ function Dashboard() {
   // =====================================================================
   // FUNGSI EKSPOR FLAT
   // =====================================================================
+  const getExportContext = () => {
+      if (filterStartDate && filterEndDate) return `tanggal ${filterStartDate} s.d. ${filterEndDate}`;
+      if (filterStartDate) return `mulai ${filterStartDate}`;
+      if (filterEndDate) return `sampai ${filterEndDate}`;
+      return 'semua tanggal';
+  };
+
+  const ensureExportHasData = async (data) => {
+      if (data.length > 0) return true;
+      await alertDialog({
+          title: 'Tidak ada data untuk diunduh',
+          message: 'Belum ada pasien selesai CKG pada filter tanggal/wilayah yang dipilih.',
+          variant: 'warning'
+      });
+      return false;
+  };
+
   const exportExcelKategori = async (kategori) => {
+      if (!(await ensureExportHasData(completedFilteredVisits))) return;
       await exportClusterExcel(completedFilteredVisits, kategori);
       await writeAuditLog({
           action: `Export Excel klaster ${kategori}`,
           module: 'Dashboard',
-          after: { kategori, total: completedFilteredVisits.length }
+          after: { kategori, total: completedFilteredVisits.length, filterTanggal: getExportContext() }
       });
   };
 
   const exportPdfKategori = async (kategori) => {
+      if (!(await ensureExportHasData(completedFilteredVisits))) return;
       await exportClusterPDF(completedFilteredVisits, kategori);
       await writeAuditLog({
           action: `Export PDF klaster ${kategori}`,
           module: 'Dashboard',
-          after: { kategori, total: completedFilteredVisits.length }
+          after: { kategori, total: completedFilteredVisits.length, filterTanggal: getExportContext() }
       });
   };
 
   const exportExcelKolektif = async () => {
+      if (!(await ensureExportHasData(completedFilteredVisits))) return;
       await exportToPKGExcel(completedFilteredVisits);
       await writeAuditLog({
           action: 'Export Excel kolektif',
           module: 'Dashboard',
-          after: { total: completedFilteredVisits.length }
+          after: { total: completedFilteredVisits.length, filterTanggal: getExportContext() }
       });
   };
 
   const exportPdfKolektif = async () => {
+      if (!(await ensureExportHasData(completedFilteredVisits))) return;
       await exportToPKG_PDF(completedFilteredVisits);
       await writeAuditLog({
           action: 'Export PDF kolektif',
           module: 'Dashboard',
-          after: { total: completedFilteredVisits.length }
+          after: { total: completedFilteredVisits.length, filterTanggal: getExportContext() }
       });
   };
 
@@ -810,7 +790,12 @@ function Dashboard() {
     'ekspor': isAdmin ? (
         <div key="ekspor" className={`bg-white rounded-[1.5rem] shadow-sm border p-4 lg:p-6 flex flex-col justify-center h-full ${isEditMode && !isMobile ? 'border-amber-400 cursor-move border-2' : 'border-slate-200'}`}>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-3 mb-4 gap-3">
-                <h3 className="font-black text-[11px] text-slate-800 uppercase tracking-widest">📂 UNDUH LAPORAN</h3>
+                <div>
+                    <h3 className="font-black text-[11px] text-slate-800 uppercase tracking-widest">📂 UNDUH LAPORAN</h3>
+                    <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                        Siap unduh: {completedFilteredVisits.length} pasien selesai • {getExportContext()}
+                    </p>
+                </div>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 {/* KOLEKTIF */}
@@ -1037,6 +1022,40 @@ function Dashboard() {
                       </select>
                   </div>
 
+                  <div className="flex w-full flex-col gap-1 rounded-lg border border-white/20 bg-white/10 px-2 py-1.5 backdrop-blur-md sm:w-auto">
+                      <span className="text-[8px] font-black uppercase tracking-widest text-emerald-100">Download CKG baru</span>
+                      <div className="flex items-center gap-1">
+                          <input
+                              type="date"
+                              value={filterStartDate}
+                              onChange={(e) => setFilterStartDate(e.target.value)}
+                              className="w-full rounded-md bg-white px-2 py-1.5 text-[10px] font-black text-slate-900 outline-none sm:w-32"
+                              aria-label="Tanggal mulai download data CKG"
+                          />
+                          <span className="text-[10px] font-black text-white">s/d</span>
+                          <input
+                              type="date"
+                              value={filterEndDate}
+                              onChange={(e) => setFilterEndDate(e.target.value)}
+                              className="w-full rounded-md bg-white px-2 py-1.5 text-[10px] font-black text-slate-900 outline-none sm:w-32"
+                              aria-label="Tanggal akhir download data CKG"
+                          />
+                          {(filterStartDate || filterEndDate) && (
+                              <button
+                                  type="button"
+                                  onClick={() => {
+                                      setFilterStartDate('');
+                                      setFilterEndDate('');
+                                  }}
+                                  className="rounded-md bg-white/15 px-2 py-1.5 text-[10px] font-black text-white transition hover:bg-white/25"
+                                  aria-label="Hapus filter tanggal"
+                              >
+                                  RESET
+                              </button>
+                          )}
+                      </div>
+                  </div>
+
                   {!isMobile && isAdmin && (
                       <button onClick={resetLayout} className="w-full sm:w-auto bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 border border-rose-500 active:scale-95 shrink-0">
                           🔄 RESET LAYOUT
@@ -1125,15 +1144,24 @@ function Dashboard() {
                               <div key={p.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-blue-500 transition-colors cursor-pointer" onClick={() => window.open(`/rapor/${p.id}`, '_blank')}>
                                   <div className="flex justify-between">
                                       <div>
-                                          <p className="font-black text-slate-800 text-base">{p.pasien_snapshot?.nama}</p>
-                                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{p.kategori_usia_satusehat} • {p.umur_saat_periksa} THN</p>
+                                          <p className="font-black text-slate-800 text-base">{p.pasien_snapshot?.nama || 'Tanpa Nama'}</p>
+                                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{p.kategori_usia_satusehat || '-'} • {p.umur_saat_periksa || 0} THN</p>
                                       </div>
                                       <span className="text-2xl group-hover:translate-x-1 transition-transform">➔</span>
                                   </div>
                                   <div className="mt-4 flex flex-wrap gap-2">
-                                      {popupConfig.type === 'hipertensi' && <span className="bg-rose-50 text-rose-700 px-3 py-1 rounded-lg text-[10px] font-black border border-rose-200">🩺 TD: {getVisitBloodPressure(p).label}</span>}
-                                      {popupConfig.type === 'diabetes' && <span className="bg-orange-50 text-orange-700 px-3 py-1 rounded-lg text-[10px] font-black border border-orange-200">🩸 Gula: {getVisitGlucose(p).label}</span>}
-                                      {popupConfig.type === 'obesitas' && <span className="bg-amber-50 text-amber-700 px-3 py-1 rounded-lg text-[10px] font-black border border-amber-200">⚖️ IMT: {getVisitBodyMassIndex(p).label}</span>}
+                                      {getClinicalRiskBadges(p, popupConfig.type).map((badge, idx) => (
+                                          <span key={idx} className={`px-3 py-1 rounded-lg text-[10px] font-black border ${
+                                              popupConfig.type === 'hipertensi' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                              popupConfig.type === 'diabetes' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                              popupConfig.type === 'obesitas' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                              popupConfig.type === 'paru_ppok' ? 'bg-cyan-50 text-cyan-700 border-cyan-200' :
+                                              popupConfig.type === 'mental' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                              'bg-teal-50 text-teal-700 border-teal-200'
+                                          }`}>
+                                              {badge}
+                                          </span>
+                                      ))}
                                   </div>
                               </div>
                           ))}
@@ -1174,6 +1202,5 @@ function Dashboard() {
     </div>
   );
 }
-
 
 export default Dashboard;

@@ -1,3 +1,12 @@
+import {
+  isHipertensiRisk,
+  isDiabetesRisk,
+  isObesitasRisk,
+  isParuRisk,
+  isMentalRisk,
+  isInderaRisk
+} from './clinicalRiskEvaluator';
+
 const STATUS_SELESAI = 'Selesai';
 
 const escapeHtml = (value) =>
@@ -77,40 +86,12 @@ const getRiskStats = (visits) => {
   const stats = { hipertensi: 0, hiperglikemia: 0, obesitas: 0, paru: 0, mental: 0, indera: 0 };
 
   visits.forEach((visit) => {
-    const td = String(visit.pos2?.td || extractValue(visit.pos2, ['tekanan darah'], visit.pos2_question_map) || '');
-    const systolic = parseInt(extractValue(visit.pos2, ['sistolik'], visit.pos2_question_map) || td.split('/')[0], 10);
-    const diastolic = parseInt(extractValue(visit.pos2, ['diastolik'], visit.pos2_question_map) || td.split('/')[1], 10);
-    if ((!Number.isNaN(systolic) && systolic >= 140) || (!Number.isNaN(diastolic) && diastolic >= 90)) stats.hipertensi += 1;
-
-    const gds = parseInt(visit.pos4?.gds || extractValue(visit.pos4, ['gula darah sewaktu', 'gds'], visit.pos4_question_map) || visit.pos2?.gds || extractValue(visit.pos2, ['gula darah sewaktu', 'gds'], visit.pos2_question_map) || 0, 10);
-    const gdp = parseInt(visit.pos4?.gdp || extractValue(visit.pos4, ['gula darah puasa', 'gdp'], visit.pos4_question_map) || visit.pos2?.gdp || extractValue(visit.pos2, ['gula darah puasa', 'gdp'], visit.pos2_question_map) || 0, 10);
-    if (gds >= 200 || gdp >= 126) stats.hiperglikemia += 1;
-
-    const tb = parseFloat(visit.pos2?.tb || extractValue(visit.pos2, ['tinggi badan'], visit.pos2_question_map) || 0);
-    const bb = parseFloat(visit.pos2?.bb || extractValue(visit.pos2, ['berat badan'], visit.pos2_question_map) || 0);
-    if (tb > 0 && bb > 0 && getCluster(visit) !== 'Bayi/Balita') {
-      const imt = bb / Math.pow(tb / 100, 2);
-      if (imt >= 25) stats.obesitas += 1;
-    }
-
-    const p3 = visit.pos3 || {};
-    const p4 = visit.pos4 || {};
-    const p5 = visit.pos5 || {};
-    const p6 = visit.pos6 || {};
-    const skilas = p3.skilas || p6.skilas || {};
-
-    if (p4.ppok?.nafas_pendek === 'Ya' || p5.ppok?.nafas_pendek === 'Ya' || p4.resiko_ca_paru?.riw_merokok === 'Ya' || p4.resiko_tb?.batuk_lama === '>2Mg' || p5.resiko_tb?.batuk === 'Ya') stats.paru += 1;
-
-    const mental =
-      Object.values(p3.jiwa_srq20 || {}).some((value) => String(value) !== 'Tidak' && String(value) !== 'Tdk' && value !== '') ||
-      Object.values(p6.jiwa_srq20 || {}).some((value) => String(value) !== 'Tidak' && String(value) !== 'Tdk' && value !== '') ||
-      Object.values(p3.jiwa_sdq || {}).some((value) => String(value) === 'Ya') ||
-      skilas.dep_sedih === 'Ya' ||
-      skilas.dep_minat_turun === 'Ya';
-    if (mental) stats.mental += 1;
-
-    const visus = String(p3.mata?.visus || '').toLowerCase();
-    if ((visus && !['6/6', 'normal'].includes(visus)) || p3.telinga?.gg_pendengaran === 'Ya' || p3.telinga?.infeksi === 'Ya') stats.indera += 1;
+    if (isHipertensiRisk(visit)) stats.hipertensi += 1;
+    if (isDiabetesRisk(visit)) stats.hiperglikemia += 1;
+    if (isObesitasRisk(visit)) stats.obesitas += 1;
+    if (isParuRisk(visit)) stats.paru += 1;
+    if (isMentalRisk(visit)) stats.mental += 1;
+    if (isInderaRisk(visit)) stats.indera += 1;
   });
 
   return stats;

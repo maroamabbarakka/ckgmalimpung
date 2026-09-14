@@ -57,7 +57,9 @@ service cloud.firestore {
     }
 
     match /visits/{docId} {
-      allow read: if activeUser();
+      allow read: if activeUser() ||
+        resource.data.status == 'FINALIZED' ||
+        resource.data.status_antrian == 'Selesai';
       allow create: if hasAnyRole(['admin', 'petugas', 'ttlm', 'dokter', 'perawat', 'perawat_bidan', 'apoteker']);
       allow update: if hasAnyRole(['admin', 'petugas', 'ttlm', 'dokter', 'perawat', 'perawat_bidan', 'apoteker']);
       allow delete: if hasRole('admin');

@@ -9,6 +9,9 @@ import { auditQueueTransition } from './services/queueAudit';
 import { buildQueueSpeech, claimVisitForStaff, createTvQueueCall } from './services/queueService';
 import { updateVisit } from './services/visitService';
 import useQueue from './hooks/useQueue';
+import { useAutosaveDraft } from './hooks/useAutosaveDraft';
+import { clearDraft, loadDraft } from './utils/draftStorage';
+import { isBrowserOnline, recordPendingSync } from './utils/syncQueueStorage';
 import PatientStickyHeader from './components/patient/PatientStickyHeader';
 import PosBottomActionBar from './components/patient/PosBottomActionBar';
 import QueueCallList from './components/patient/QueueCallList';
@@ -22,6 +25,15 @@ function Pos6() {
   const [loading, setLoading] = useState(false); 
   const [callingVisitId, setCallingVisitId] = useState(null);
   const [pesan, setPesan] = useState('');
+  const [draftSavedAt, setDraftSavedAt] = useState('');
+
+  useAutosaveDraft({
+    moduleName: 'pos6',
+    visitId: pasienAktif?.id,
+    data: formData,
+    enabled: Boolean(pasienAktif?.id && Object.keys(formData).length),
+    onSaved: () => setDraftSavedAt(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }))
+  });
 
   const umurPasien = pasienAktif?.umur_saat_periksa || 0;
 
@@ -38,7 +50,19 @@ function Pos6() {
         workflowStatus: VISIT_STATUS.POS6_IN_PROGRESS
       });
       const activeSchema = getSchemaForVisit(activeVisit);
-      setPasienAktif(activeVisit); setPesan(''); setFormData(sanitizeFormDataForSchema(activeSchema, activeVisit.pos6 || {})); window.scrollTo({ top: 0, behavior: 'smooth' });
+      const serverFormData = sanitizeFormDataForSchema(activeSchema, activeVisit.pos6 || {});
+      const draft = loadDraft('pos6', activeVisit.id);
+      const shouldRestoreDraft = draft?.data && await confirmDialog({
+        title: 'Pulihkan draft Pos 6?',
+        message: `Ada draft Pos 6 tersimpan pada ${new Date(draft.savedAt).toLocaleString('id-ID')}.`,
+        confirmLabel: 'Pulihkan',
+        variant: 'info'
+      });
+      setPasienAktif(activeVisit);
+      setPesan('');
+      setDraftSavedAt(draft?.savedAt ? new Date(draft.savedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '');
+      setFormData(shouldRestoreDraft ? draft.data : serverFormData);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       try { await createTvQueueCall({ pos: "POS 6", queueNumber: activeVisit.nomor_antrian, speechText: buildQueueSpeech(activeVisit.nomor_antrian, 'Silakan menuju meja Pos Enam.') }); } catch (e) { console.warn("Gagal membuat panggilan TV Pos 6:", e); }
     } catch (e) {
       await alertDialog({ title: 'Pasien belum dapat dipanggil', message: e.message, variant: 'warning' });
@@ -49,6 +73,7 @@ function Pos6() {
 
   const handleSimpanData = async (e) => {
     e.preventDefault(); if (!pasienAktif || loading) return; setLoading(true); setPesan('');
+    const wasOffline = !isBrowserOnline();
     try {
       // 🚀 Setelah POS 6 selesai, pasien dikirim ke POS 7 (Review Dokter & Rapor)
       const activeSchema = getActiveSchema();
@@ -71,6 +96,14 @@ function Pos6() {
         toStatus: STATUS_MAPPING.POS7,
         extra: { status: VISIT_STATUS.POS6_COMPLETE, petugas_pos6: user?.nama || 'Sistem' }
       });
+      clearDraft('pos6', pasienAktif.id);
+      if (wasOffline) {
+        recordPendingSync('pos6', pasienAktif.id, {
+          patientName: pasienAktif.pasien_snapshot?.nama,
+          action: 'Simpan Pos 6 dan lanjut Pos 7'
+        });
+      }
+      setDraftSavedAt('');
       setPesan(`✅ Data terekam.`); setTimeout(() => setPasienAktif(null), 1000); 
     } catch (error) { setPesan("❌ Gagal menyimpan data: " + error.message); } finally { setLoading(false); }
   };
@@ -171,6 +204,9 @@ function Pos6() {
             
             <div className="patient-summary-card bg-white px-6 py-5 rounded-2xl shadow-sm border border-slate-200">
                 <h3 className="font-black text-lg">{pasienAktif.pasien_snapshot?.nama || "Tanpa Nama"}</h3>
+                <p className="autosave-status mt-2 text-[10px] font-bold uppercase text-emerald-600">
+                  {draftSavedAt ? `Draft lokal tersimpan ${draftSavedAt}` : 'Draft lokal aktif'}
+                </p>
                 <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{umurPasien} THN • {pasienAktif.kategori_usia_satusehat}</p>
             </div>
 

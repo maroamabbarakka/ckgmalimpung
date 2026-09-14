@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from './auth/AuthContext';
 import { STATUS_MAPPING } from './utils/constants';
 import { VISIT_STATUS } from './features/workflow/workflowStatus';
@@ -12,9 +12,12 @@ import { claimVisitForStaff, createTvQueueCall } from './services/queueService';
 import { buildPatientPayload, findCurrentYearCkgVisit, getPatientByNik, upsertPatient } from './services/patientService';
 import { buildPatientSnapshot, getVisitsByPatientNik, nowTimestamp, updateVisit } from './services/visitService';
 import useQueue from './hooks/useQueue';
+import { useAutosaveDraft } from './hooks/useAutosaveDraft';
+import { clearDraft, loadDraft } from './utils/draftStorage';
+import { isBrowserOnline, recordPendingSync } from './utils/syncQueueStorage';
 import { Camera } from 'lucide-react';
 import QueueCallList from './components/patient/QueueCallList';
-import { alertDialog } from './utils/appDialog';
+import { alertDialog, confirmDialog } from './utils/appDialog';
 import SmartDocumentScanner from './components/SmartDocumentScanner';
 
 const OPENCV_SCRIPT_ID = 'opencv-script';
@@ -206,8 +209,24 @@ function Pos1() {
   const [loading, setLoading] = useState(false); 
   const [callingVisitId, setCallingVisitId] = useState(null);
   const [pesan, setPesan] = useState('');
+  const [draftSavedAt, setDraftSavedAt] = useState('');
   const [, setStatusPasien] = useState('idle');
   const [, setRiwayatKunjungan] = useState([]);
+
+  const draftData = useMemo(() => ({
+    formData,
+    tanpaNik,
+    tglLahirView,
+    tglLahirWaliView
+  }), [formData, tanpaNik, tglLahirView, tglLahirWaliView]);
+
+  useAutosaveDraft({
+    moduleName: 'pos1',
+    visitId: pasienAktif?.id,
+    data: draftData,
+    enabled: Boolean(pasienAktif?.id && formData.nama?.trim()),
+    onSaved: () => setDraftSavedAt(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }))
+  });
 
   const getFieldError = (fieldName) => {
     if (fieldName === 'nik' && !tanpaNik && formData.nik && formData.nik.length !== 16) return 'NIK pasien harus 16 digit angka.';
@@ -308,19 +327,32 @@ function Pos1() {
         workflowStatus: VISIT_STATUS.POS1_IN_PROGRESS
       });
 
-      setPasienAktif(latestItem); setPesan(''); setStatusPasien('idle'); setRiwayatKunjungan([]); window.scrollTo({ top: 0, behavior: 'smooth' });
+      setPesan(''); setStatusPasien('idle'); setRiwayatKunjungan([]); window.scrollTo({ top: 0, behavior: 'smooth' });
       const snap = latestItem.pasien_snapshot || {}; const isTanpaNik = latestItem.patientNIK?.startsWith('NONIK') || false;
       const validSnapBirthDate = isValidIsoDate(snap.tgl_lahir) ? snap.tgl_lahir : '';
       const tglView = isoToDateView(validSnapBirthDate);
-      
-      setTanpaNik(isTanpaNik); setTglLahirView(tglView); setTglLahirWaliView(''); 
-      setFormData({
+      const serverFormData = {
           nik: isTanpaNik ? '' : (latestItem.patientNIK || ''), nama: snap.nama || '',
           status_perkawinan: snap.status && snap.status !== '-' ? snap.status : 'Belum Kawin',
           tgl_lahir: validSnapBirthDate, j_kelamin: snap.j_kelamin || 'P', no_hp: snap.no_hp || '',
           desa: latestItem.desa_pelaksanaan || 'Desa Malimpung', dusun: latestItem.tempat_pelaksanaan || WILAYAH_KERJA[latestItem.desa_pelaksanaan || 'Desa Malimpung'][0],
           nik_wali: '', nama_wali: '', tgl_lahir_wali: '', hubungan_wali: 'Ibu', no_hp_wali: ''
+      };
+      const draft = loadDraft('pos1', latestItem.id);
+      const shouldRestoreDraft = draft?.data && await confirmDialog({
+        title: 'Pulihkan draft Pos 1?',
+        message: `Ada draft registrasi tersimpan pada ${new Date(draft.savedAt).toLocaleString('id-ID')}.`,
+        confirmLabel: 'Pulihkan',
+        variant: 'info'
       });
+      const restoredData = shouldRestoreDraft ? draft.data : null;
+
+      setPasienAktif(latestItem);
+      setTanpaNik(restoredData?.tanpaNik ?? isTanpaNik);
+      setTglLahirView(restoredData?.tglLahirView ?? tglView);
+      setTglLahirWaliView(restoredData?.tglLahirWaliView ?? '');
+      setFormData(restoredData?.formData || serverFormData);
+      setDraftSavedAt(draft?.savedAt ? new Date(draft.savedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '');
 
       try {
           let teksPanggilan = `Nomor antrean... ${latestItem.nomor_antrian.replace(/-/g, ' ')}... Silakan menuju ke meja pendaftaran Pos Satu.`;
@@ -633,6 +665,7 @@ function Pos1() {
         if (finalNik.length !== 16) return setPesan('⚠️ NIK Pasien wajib 16 digit angka.'); 
     }
 
+    const wasOffline = !isBrowserOnline();
     setLoading(true); setPesan('');
     const namaPetugas = user?.nama || 'Sistem / Anonim';
 
@@ -696,6 +729,14 @@ function Pos1() {
         }
       });
       
+      clearDraft('pos1', pasienAktif.id);
+      if (wasOffline) {
+        recordPendingSync('pos1', pasienAktif.id, {
+          patientName: formData.nama,
+          action: 'Registrasi pasien dan lanjut Pos 2'
+        });
+      }
+      setDraftSavedAt('');
       setPesan(`✅ Registrasi berhasil! Pasien diarahkan ke POS 2.`);
       setPasienAktif(null);
       setFormData({
@@ -808,6 +849,9 @@ function Pos1() {
             <div className="relative z-10">
               <p className="text-blue-200 text-[10px] font-bold uppercase tracking-widest mb-1 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Melayani Antrean</p>
               <h2 className="pos1-active-number text-5xl font-black font-mono tracking-tighter drop-shadow-md">{pasienAktif.nomor_antrian}</h2>
+              <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-blue-100">
+                {draftSavedAt ? `Draft lokal tersimpan ${draftSavedAt}` : 'Draft lokal aktif'}
+              </p>
             </div>
             <button type="button" onClick={() => setPasienAktif(null)} className="pos1-cancel-btn relative z-10 bg-white/10 hover:bg-white/20 text-white px-4 py-3 rounded-2xl font-bold text-xs transition border border-white/20 flex items-center gap-1.5 active:scale-95 shadow-sm">x Batalkan</button>
         </div>

@@ -13,7 +13,8 @@ import { MOBILE_NAV_ITEMS, POS_CARDS, POS_NAV_ITEMS } from './app/navigation';
 import { APP_VERSION, BUILD_DATE } from './version';
 import useIdleTimeout from './hooks/useIdleTimeout';
 import { safeBack } from './utils/navigation';
-import { listDrafts } from './utils/draftStorage';
+import { DRAFTS_CHANGED_EVENT, listDrafts } from './utils/draftStorage';
+import { clearAllPendingSyncs, listPendingSyncs, PENDING_SYNC_CHANGED_EVENT } from './utils/syncQueueStorage';
 import './App.css';
 
 // IMPORT ICON DARI LUCIDE REACT
@@ -301,12 +302,14 @@ function Beranda() {
   const { isAuthenticated, hasAnyRole } = useAuth();
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
   const [draftCount, setDraftCount] = useState(0);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const isAdmin = hasAnyRole(['admin']);
   const allowedPosCards = posCards.filter((item) => hasAnyRole(item.roles));
   const workflowCount = allowedPosCards.filter((item) => item.to.startsWith('/pos')).length;
   const moduleCards = [
     { to: '/loket', title: 'Loket Tiket', subtitle: 'Antrean', icon: 'ticket', isAllowed: hasAnyRole(roleGroups.staff) },
     { to: '/dashboard', title: 'Dashboard', subtitle: 'Analitik Data', icon: 'chart', isAllowed: hasAnyRole(roleGroups.dashboard) },
+    { to: '/recovery', title: 'Pemulihan Draft', subtitle: `${draftCount} Draft Lokal`, icon: 'clipboard', isAllowed: isAuthenticated },
     { to: '/admin', title: 'Admin', subtitle: 'Admin Dashboard', icon: 'shield', isAllowed: isAdmin },
     { to: '/tentang', title: 'Tentang', subtitle: 'Info Aplikasi', icon: 'clipboard', isAllowed: true },
     { to: '/tv', target: '_blank', title: 'Layar Antrean', subtitle: 'Mode Display', icon: 'workflow', isAllowed: hasAnyRole(roleGroups.staff) },
@@ -315,26 +318,41 @@ function Beranda() {
   useEffect(() => {
     const updateOnline = () => setIsOnline(typeof navigator === 'undefined' ? true : navigator.onLine);
     const updateDrafts = () => setDraftCount(listDrafts().length);
+    const updatePendingSyncs = () => setPendingSyncCount(listPendingSyncs().length);
+    const handleOnline = () => {
+      updateOnline();
+      window.setTimeout(() => {
+        clearAllPendingSyncs();
+        updatePendingSyncs();
+      }, 8000);
+    };
 
     updateOnline();
     updateDrafts();
-    window.addEventListener('online', updateOnline);
+    updatePendingSyncs();
+    window.addEventListener('online', handleOnline);
     window.addEventListener('offline', updateOnline);
     window.addEventListener('storage', updateDrafts);
+    window.addEventListener('storage', updatePendingSyncs);
+    window.addEventListener(DRAFTS_CHANGED_EVENT, updateDrafts);
+    window.addEventListener(PENDING_SYNC_CHANGED_EVENT, updatePendingSyncs);
     const interval = window.setInterval(updateDrafts, 5000);
 
     return () => {
-      window.removeEventListener('online', updateOnline);
+      window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', updateOnline);
       window.removeEventListener('storage', updateDrafts);
+      window.removeEventListener('storage', updatePendingSyncs);
+      window.removeEventListener(DRAFTS_CHANGED_EVENT, updateDrafts);
+      window.removeEventListener(PENDING_SYNC_CHANGED_EVENT, updatePendingSyncs);
       window.clearInterval(interval);
     };
   }, []);
 
   const statusItems = [
     { label: 'Jaringan', value: isOnline ? 'Online' : 'Offline', accentClass: 'status-accent-online' },
-    { label: 'Sinkronisasi', value: isOnline ? 'Sinkron' : 'Menunggu', accentClass: 'status-accent-sinkron' },
-    { label: 'Draft Lokal', value: `${draftCount} Draft`, accentClass: 'status-accent-draft' },
+    { label: 'Sinkronisasi', value: pendingSyncCount > 0 ? `${pendingSyncCount} Menunggu` : (isOnline ? 'Sinkron' : 'Menunggu'), accentClass: 'status-accent-sinkron' },
+    { label: 'Draft Lokal', value: draftCount > 0 ? `${draftCount} Perlu Cek` : '0 Draft', accentClass: 'status-accent-draft' },
     { label: 'Workflow', value: `${workflowCount} Pos Aktif`, accentClass: 'status-accent-workflow' },
   ];
 
@@ -643,7 +661,7 @@ function AppShell() {
             <Route path="/display" element={<TvDisplay />} />
             <Route path="/tentang" element={<Tentang />} />
             <Route path="/rapor" element={<RequireAuth><RaporDigital /></RequireAuth>} />
-            <Route path="/rapor/:id" element={<RequireAuth><RaporDigital /></RequireAuth>} />
+            <Route path="/rapor/:id" element={<RaporDigital />} />
             <Route path="/pos1" element={<RequireRole allowedRoles={roleGroups.pos1}><Pos1 /></RequireRole>} />
             <Route path="/pos2" element={<RequireRole allowedRoles={roleGroups.pos2}><Pos2 /></RequireRole>} />
             <Route path="/pos3" element={<RequireRole allowedRoles={roleGroups.pos3}><Pos3 /></RequireRole>} />

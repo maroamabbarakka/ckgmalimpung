@@ -345,19 +345,29 @@ function Pos7() {
       const dia = extractValue(pasienAktif.pos2, ['diastolik'], pasienAktif.pos2_question_map);
       const tensiRes = sys && dia ? `${sys}/${dia}` : '-';
 
-      let teks = `Halo ${nama},%0A%0ABerikut adalah ringkasan hasil Pemeriksaan Kesehatan Anda hari ini di Puskesmas:%0A`;
-      teks += `-%20IMT/Gizi:%20${imt}%0A`;
-      teks += `-%20Tensi:%20${tensiRes}%0A`;
-      teks += `%0A*Kesimpulan Dokter:*%0A${kesimpulan || 'Dalam batas normal. Tetap jaga kesehatan.'}%0A%0A`;
-      teks += `Untuk melihat dan mengunduh Rapor Digital lengkap Anda, silakan klik link berikut:%0A`;
-      teks += `https://domain-anda.com/rapor/${pasienAktif.id}%0A%0A`;
-      teks += `Salam Sehat,%0APuskesmas Malimpung`;
+      const raporLink = `${window.location.origin}/rapor/${pasienAktif.id}`;
+      const teks = [
+        `Halo ${nama},`,
+        '',
+        'Berikut ringkasan hasil Pemeriksaan Kesehatan Anda hari ini di Puskesmas:',
+        `• IMT/Gizi: ${imt}`,
+        `• Tensi: ${tensiRes}`,
+        '',
+        '*Kesimpulan Dokter:*',
+        kesimpulan || 'Dalam batas normal. Tetap jaga kesehatan.',
+        '',
+        'Rapor Digital lengkap dapat dilihat dan diunduh melalui tautan berikut:',
+        raporLink,
+        '',
+        'Salam Sehat,',
+        'Puskesmas Malimpung'
+      ].join('\n');
 
       // Bersihkan angka 0 di depan
       let hpFormat = noHp.replace(/\D/g, '');
       if (hpFormat.startsWith('0')) hpFormat = '62' + hpFormat.substring(1);
 
-      window.open(`https://wa.me/${hpFormat}?text=${teks}`, '_blank');
+      window.open(`https://wa.me/${hpFormat}?text=${encodeURIComponent(teks)}`, '_blank');
   };
 
   return (

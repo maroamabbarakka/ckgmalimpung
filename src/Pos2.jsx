@@ -12,6 +12,7 @@ import { updateVisit } from './services/visitService';
 import useQueue from './hooks/useQueue';
 import { useAutosaveDraft } from './hooks/useAutosaveDraft';
 import { clearDraft, loadDraft } from './utils/draftStorage';
+import { isBrowserOnline, recordPendingSync } from './utils/syncQueueStorage';
 import { MobileQueueDrawer } from './features/pos/shared/MobileQueueDrawer';
 import PosBottomActionBar from './components/patient/PosBottomActionBar';
 import WorkflowStepper from './components/patient/WorkflowStepper';
@@ -77,6 +78,7 @@ function Pos2() {
 
   const handleSimpanData = async (e) => {
     e.preventDefault(); if (!pasienAktif || loading) return; setLoading(true);
+    const wasOffline = !isBrowserOnline();
     try {
       const activeSchema = getActiveSchema();
       const sanitizedFormData = sanitizeFormDataForSchema(activeSchema, formData, {
@@ -85,6 +87,12 @@ function Pos2() {
       });
       await updateVisit(pasienAktif.id, { status: VISIT_STATUS.POS2_COMPLETE, status_antrian: STATUS_MAPPING.POS3, petugas_pos2: user?.nama || 'Sistem', pos2: sanitizedFormData, pos2_question_map: buildQuestionMap(activeSchema), petugas_aktif: null });
       clearDraft('pos2', pasienAktif.id);
+      if (wasOffline) {
+        recordPendingSync('pos2', pasienAktif.id, {
+          patientName: pasienAktif.pasien_snapshot?.nama,
+          action: 'Simpan Pos 2 dan lanjut Pos 3'
+        });
+      }
       setDraftSavedAt('');
       await auditQueueTransition({
         visit: pasienAktif,

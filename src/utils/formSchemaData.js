@@ -20,10 +20,12 @@ const getValue = (formData, id) => (id ? formData[id] || '' : '');
 const isFilled = (formData, id) => Boolean(String(getValue(formData, id)).trim());
 const isYesValue = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
+  if (normalized.includes('non reaktif') || normalized.includes('tidak dilakukan') || normalized.includes('tidak diperiksa') || normalized.includes('belum diperiksa')) return false;
   return normalized === 'ya' || normalized === 'yes' || normalized.includes('positif') || normalized.includes('reaktif');
 };
 const isNoValue = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
+  if (normalized.includes('tidak dilakukan') || normalized.includes('tidak diperiksa') || normalized.includes('belum diperiksa')) return false;
   return normalized === 'tidak' || normalized === 'tdk' || normalized === 'no' || normalized.includes('negatif') || normalized.includes('non reaktif');
 };
 

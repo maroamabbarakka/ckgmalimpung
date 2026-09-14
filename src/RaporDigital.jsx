@@ -35,6 +35,11 @@ const isPlaceholderValue = (value) => {
     return !text || text.includes('data dummy') || text.includes('dummy lengkap') || text === 'undefined' || text.includes('undefined/');
 };
 
+const isNotExaminedValue = (value) => {
+    const text = normalizePrintValue(value).toLowerCase();
+    return text.includes('tidak dilakukan') || text.includes('tidak diperiksa') || text.includes('belum diperiksa');
+};
+
 const evalTensi = (td) => {
     if (!td || !td.includes('/')) return { status: 'Belum Diperiksa', color: 'text-slate-500', pos: 0 };
     const sys = parseInt(td.split('/')[0]);
@@ -152,6 +157,7 @@ const getPrintNormal = (name, gender = '') => {
 const getPrintRecommendation = (name, val) => {
     const text = `${name || ''} ${val || ''}`.toLowerCase();
     const valueText = String(val || '').toLowerCase();
+    if (isNotExaminedValue(val)) return 'Tidak dilakukan pemeriksaan pada kunjungan ini.';
     const isWarning = valueText === 'ya' || valueText.includes('positif') || valueText.includes('gangguan') || valueText.includes('risiko') || valueText.includes('obesitas') || valueText.includes('tinggi') || valueText.includes('kurang') || valueText.includes('abnormal');
     const isSafe = valueText === 'tidak' || valueText.includes('normal') || valueText.includes('negatif') || valueText.includes('aman') || valueText.includes('sehat');
 
@@ -169,6 +175,7 @@ const getPrintRecommendation = (name, val) => {
 
 const getResultTextColor = (val) => {
     const text = String(val || '').toLowerCase();
+    if (isNotExaminedValue(val)) return 'text-slate-400';
     if (text === 'tidak' || text.includes('normal') || text.includes('negatif') || text.includes('aman') || text.includes('sehat') || text.includes('cukup') || text.includes('mandiri')) return 'text-emerald-600';
     if (text === 'ya' || text.includes('positif') || text.includes('gangguan') || text.includes('risiko') || text.includes('obesitas') || text.includes('diabetes') || text.includes('tinggi') || text.includes('kurang')) return 'text-rose-600';
     if (text.includes('tidak diperiksa') || text === '-') return 'text-slate-400';
