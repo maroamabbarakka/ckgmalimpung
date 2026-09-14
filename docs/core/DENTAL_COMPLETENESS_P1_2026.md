@@ -57,4 +57,6 @@ Keempat status berjumlah tepat 1.316. Seluruh 43 record `Belum diperiksa` mempun
 
 ## Batasan Rollout
 
-P1 mengikuti branch/PR berantai dan tidak boleh lebih dahulu masuk produksi daripada patch inti Door-to-Door. Deployment tetap menunggu staging terpisah, akun pilot, serta approval operasional.
+P1 mengikuti branch/PR berantai dan telah masuk setelah patch inti Door-to-Door melalui PR #3 pada commit `1cb9a7829f8360685c54af135664564aa9e951a9`. Hosting production berhasil dideploy pada 15 September 2026 sebagai version `f3bf41a59eda2041` setelah persetujuan eksplisit pengelola.
+
+Smoke test produksi read-only memastikan card `Gigi & Mulut`, sumber `skrining_gigi`, role `door_to_door`, dan route Kunjungan Rumah tersedia pada bundle live. Halaman login lulus pada desktop dan mobile tanpa error JavaScript atau horizontal overflow. Verifikasi transaksi end-to-end tetap menunggu akun pilot DTD-only agar pengujian tidak memakai akun operasional atau membuat data pasien tanpa SOP.

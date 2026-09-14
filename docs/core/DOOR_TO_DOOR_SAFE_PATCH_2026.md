@@ -6,7 +6,10 @@
 - Baseline commit: `40dbaedc21899fd408ec8910f7e6617d2dfa9a2f`
 - Local rollback tag: `safety-pre-dtd-20260915-0300`
 - Scope: role `door_to_door`, provenance operator, semantik dokter pemeriksa, public queue opt-out, dan Firestore least privilege.
-- Production deployment: belum dilakukan. Deployment menunggu akun pilot DTD dan window operasional yang disetujui.
+- Merge production: PR #1 pada commit `e2a12937f7e2f28c606df59567b542bffb27475e`.
+- Production deployment: hosting dan Firestore Rules berhasil dideploy pada 15 September 2026 setelah persetujuan eksplisit pengelola.
+- Hosting version: `projects/695466415592/sites/ckg-malimpung/versions/f3bf41a59eda2041`.
+- Firestore ruleset: `projects/ckg-malimpung/rulesets/d450e261-a6a9-4603-b4e0-e9fc7abfa5fb`.
 
 ## Baseline
 
@@ -123,12 +126,13 @@ Baseline modal SIMPEG pertama tidak valid sebagai bukti modal karena data staff 
 
 ## Deployment Bertahap
 
-1. Review dan merge branch setelah approval.
-2. Deploy rules dan hosting pada window non-puncak.
-3. Buat satu akun uji dengan role hanya `door_to_door` melalui prosedur admin resmi.
-4. Jalankan satu visit test yang dapat dikenali sesuai SOP.
-5. Verifikasi provenance, `dokter_pemeriksa`, duplikasi, permission, Rapor, dan tidak adanya entry public queue.
-6. Pilot pada satu petugas, kemudian pantau sebelum rollout tambahan.
+1. Review dan merge branch setelah approval: selesai.
+2. Deploy rules dan hosting pada window yang disetujui: selesai.
+3. Smoke test anonim produksi pada desktop dan mobile: selesai; login render tanpa error/overflow dan route terlindungi mengarah ke login.
+4. Buat satu akun uji dengan role hanya `door_to_door` melalui prosedur admin resmi: belum dilakukan.
+5. Jalankan satu visit test yang dapat dikenali sesuai SOP: menunggu akun pilot.
+6. Verifikasi provenance, `dokter_pemeriksa`, duplikasi, permission, Rapor, dan tidak adanya entry public queue: menunggu transaksi pilot.
+7. Pilot pada satu petugas, kemudian pantau sebelum rollout tambahan.
 
 ## Rollback
 
@@ -139,6 +143,7 @@ Data tidak perlu direstore untuk masalah UI, route, atau permission yang tidak m
 ## Risiko Tersisa
 
 - Belum ada akun pilot DTD-only untuk uji end-to-end produksi.
+- Smoke test produksi yang telah dilakukan bersifat read-only dan tidak membuktikan jalur tulis transaksi DTD.
 - Test browser existing mempunyai assertion teks yang sudah tidak sesuai UI baseline.
 - Restore JSON telah dijalankan ke emulator terpisah menggunakan `scripts/verifyFirestoreBackupRestore.mjs`. Utility menolak host non-localhost dan project ID selain `ckg-malimpung-restore-drill`, membersihkan emulator sebelum/sesudah pengujian, serta tidak memiliki jalur tulis ke produksi.
 - Permission granular session sengaja ditunda sesuai arahan Safe Patch.
