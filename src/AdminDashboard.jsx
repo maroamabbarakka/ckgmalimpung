@@ -85,6 +85,7 @@ const AVAILABLE_ROLES = [
   { id: 'perawat_bidan', label: 'Bidan', desc: 'Akses KIA, KB, dan tindakan kebidanan.' },
   { id: 'dokter', label: 'Dokter', desc: 'Akses diagnosa, resep, dan rekam medis penuh.' },
   { id: 'apoteker', label: 'Apoteker', desc: 'Akses manajemen obat dan penyerahan resep.' },
+  { id: 'door_to_door', label: 'Petugas Door to Door', desc: 'Akses khusus pelayanan Kunjungan Rumah.' },
   { id: 'admin', label: 'Administrator', desc: 'Otoritas penuh pada pengaturan sistem dan SDM.' }
 ];
 
@@ -3232,7 +3233,7 @@ const activeUsername = normalizeText(user?.username);
                       {AVAILABLE_ROLES.map((role) => (
                         <label key={role.id} className={`cursor-pointer rounded-full border px-3 py-1 text-[11px] font-black uppercase transition-colors ${editStaff.role?.includes(role.id) ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
                           <input type="checkbox" className="hidden" checked={editStaff.role?.includes(role.id)} onChange={() => handleRoleToggle(role.id)} />
-                          {role.id.replace('_', ' ')}
+                          {role.id === 'door_to_door' ? role.label : role.id.replace('_', ' ')}
                         </label>
                       ))}
                     </div>
