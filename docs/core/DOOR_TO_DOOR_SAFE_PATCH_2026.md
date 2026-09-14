@@ -101,6 +101,7 @@ Nilai default tetap `true`. Hanya Kunjungan Rumah yang memanggilnya dengan `fals
 - Full lint: exit 0, dengan tujuh warning baseline yang tidak terkait patch.
 - Unit test: 56/56 lulus pada 15 file.
 - Firestore Rules emulator matrix: lulus.
+- Restore drill backup ke Firestore Emulator terisolasi: lulus untuk 10 collection dan 21.599 dokumen. Seluruh checksum sumber, jumlah dokumen, document ID, isi data, serta rekonstruksi Timestamp/GeoPoint/Bytes/Reference diverifikasi.
 - Production build: lulus.
 - `git diff --check`: lulus.
 - Screenshot baseline: 38 PNG pada desktop 1440x900, laptop 1366x768, mobile 390x844, dan mobile 360x800.
@@ -139,5 +140,5 @@ Data tidak perlu direstore untuk masalah UI, route, atau permission yang tidak m
 
 - Belum ada akun pilot DTD-only untuk uji end-to-end produksi.
 - Test browser existing mempunyai assertion teks yang sudah tidak sesuai UI baseline.
-- Restore JSON belum dijalankan ke emulator terpisah; validasi saat ini mencakup checksum, count, ID, dan preservasi tipe data. Import harus memakai utility terkontrol yang merekonstruksi tipe Firestore sebelum pilot/deploy.
+- Restore JSON telah dijalankan ke emulator terpisah menggunakan `scripts/verifyFirestoreBackupRestore.mjs`. Utility menolak host non-localhost dan project ID selain `ckg-malimpung-restore-drill`, membersihkan emulator sebelum/sesudah pengujian, serta tidak memiliki jalur tulis ke produksi.
 - Permission granular session sengaja ditunda sesuai arahan Safe Patch.
