@@ -14,6 +14,7 @@ import {
   PieChart,
   ResponsiveContainer,
   Tooltip,
+  XAxis,
   YAxis
 } from 'recharts';
 import { STATUS_MAPPING } from './utils/constants';
