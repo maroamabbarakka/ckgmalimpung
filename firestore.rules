@@ -37,6 +37,57 @@ service cloud.firestore {
       );
     }
 
+    function isDoorToDoor() {
+      return hasRole('door_to_door');
+    }
+
+    function isDoorToDoorVisit(data) {
+      return data.get('visit_source', '') == 'door_to_door' ||
+        data.get('jalur_pemeriksaan', '') == 'Kunjungan Rumah';
+    }
+
+    function isClinicalWriter() {
+      return hasAnyRole(['admin', 'petugas', 'ttlm', 'dokter', 'perawat', 'perawat_bidan', 'apoteker']);
+    }
+
+    function hasOnlyPatientMasterFieldsOnCreate() {
+      return request.resource.data.keys().hasOnly([
+        'nik',
+        'patient_identity_key',
+        'name',
+        'birthDate',
+        'gender',
+        'phone',
+        'status_perkawinan',
+        'desa',
+        'dusun',
+        'lastUpdated',
+        'data_wali'
+      ]);
+    }
+
+    function hasOnlyPatientMasterFieldsOnUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'nik',
+        'patient_identity_key',
+        'name',
+        'birthDate',
+        'gender',
+        'phone',
+        'status_perkawinan',
+        'desa',
+        'dusun',
+        'lastUpdated',
+        'data_wali'
+      ]);
+    }
+
+    function preservesVisitCreator() {
+      return !resource.data.keys().hasAny(['created_by_uid'])
+        ? (!request.resource.data.keys().hasAny(['created_by_uid']) || request.resource.data.created_by_uid == request.auth.uid)
+        : request.resource.data.created_by_uid == resource.data.created_by_uid;
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || hasRole('admin'));
       allow write: if hasRole('admin');
@@ -52,7 +103,11 @@ service cloud.firestore {
     }
 
     match /patients/{docId} {
-      allow read, create, update: if hasAnyRole(['admin', 'dokter', 'perawat', 'perawat_bidan', 'petugas']);
+      allow read: if hasAnyRole(['admin', 'dokter', 'perawat', 'perawat_bidan', 'petugas']) || isDoorToDoor();
+      allow create: if hasAnyRole(['admin', 'dokter', 'perawat', 'perawat_bidan', 'petugas']) ||
+        (isDoorToDoor() && request.resource.data.nik == docId && hasOnlyPatientMasterFieldsOnCreate());
+      allow update: if hasAnyRole(['admin', 'dokter', 'perawat', 'perawat_bidan', 'petugas']) ||
+        (isDoorToDoor() && request.resource.data.nik == docId && hasOnlyPatientMasterFieldsOnUpdate());
       allow delete: if hasRole('admin');
     }
 
@@ -60,8 +115,10 @@ service cloud.firestore {
       allow read: if activeUser() ||
         resource.data.status == 'FINALIZED' ||
         resource.data.status_antrian == 'Selesai';
-      allow create: if hasAnyRole(['admin', 'petugas', 'ttlm', 'dokter', 'perawat', 'perawat_bidan', 'apoteker']);
-      allow update: if hasAnyRole(['admin', 'petugas', 'ttlm', 'dokter', 'perawat', 'perawat_bidan', 'apoteker']);
+      allow create: if isClinicalWriter() ||
+        (isDoorToDoor() && isDoorToDoorVisit(request.resource.data) && request.resource.data.created_by_uid == request.auth.uid);
+      allow update: if isClinicalWriter() ||
+        (isDoorToDoor() && isDoorToDoorVisit(resource.data) && isDoorToDoorVisit(request.resource.data) && preservesVisitCreator());
       allow delete: if hasRole('admin');
     }
 
