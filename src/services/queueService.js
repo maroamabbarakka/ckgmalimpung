@@ -109,8 +109,10 @@ export async function createQueueTicket({ tanggalPelaksanaan, desaPelaksanaan, t
   const querySnapshot = await getDocs(q);
   const counterId = `${tanggalPelaksanaan}_${tempatPelaksanaan}`.replace(/[\\.#$[\]/]/g, '_');
   const counterRef = doc(db, 'queue_counters', counterId);
+  const visitRef = doc(collection(db, 'visits'));
 
-  const nomorUrut = await runTransaction(db, async (transaction) => {
+  let dataAntrian = null;
+  await runTransaction(db, async (transaction) => {
     const counterDoc = await transaction.get(counterRef);
     const currentNumber = counterDoc.exists()
       ? Number(counterDoc.data().lastNumber || 0)
@@ -123,21 +125,21 @@ export async function createQueueTicket({ tanggalPelaksanaan, desaPelaksanaan, t
       lastNumber: nextNumber,
       updatedAt: serverTimestamp()
     }, { merge: true });
-    return nextNumber;
+
+    dataAntrian = {
+      nomor_antrian: `${kodeDesa}${String(nextNumber).padStart(3, '0')}`,
+      status: VISIT_STATUS.REGISTERED,
+      status_antrian: STATUS_MAPPING.POS1,
+      waktu_ambil_tiket: serverTimestamp(),
+      tempat_pelaksanaan: tempatPelaksanaan,
+      tanggal_pelaksanaan: tanggalPelaksanaan,
+      desa_pelaksanaan: desaPelaksanaan
+    };
+    transaction.set(visitRef, dataAntrian);
   });
 
-  const dataAntrian = {
-    nomor_antrian: `${kodeDesa}${String(nomorUrut).padStart(3, '0')}`,
-    status: VISIT_STATUS.REGISTERED,
-    status_antrian: STATUS_MAPPING.POS1,
-    waktu_ambil_tiket: serverTimestamp(),
-    tempat_pelaksanaan: tempatPelaksanaan,
-    tanggal_pelaksanaan: tanggalPelaksanaan,
-    desa_pelaksanaan: desaPelaksanaan
-  };
-  const docRef = await addDoc(collection(db, 'visits'), dataAntrian);
-  await upsertPublicQueueFromVisit(docRef.id, dataAntrian).catch((error) => {
+  await upsertPublicQueueFromVisit(visitRef.id, dataAntrian).catch((error) => {
     console.warn('Gagal memperbarui antrean publik:', error);
   });
-  return { id: docRef.id, dataAntrian };
+  return { id: visitRef.id, dataAntrian };
 }

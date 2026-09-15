@@ -6,6 +6,7 @@ const LOGO_MALIMPUNG = "/logo_malimpung.png";
 import SyncStatusBanner from './components/system/SyncStatusBanner';
 import { createQueueTicket } from './services/queueService';
 import { updateActiveLocation } from './services/settingsService';
+import { auth } from './firebase';
 
 const WILAYAH_KERJA = {
   "Desa Malimpung": ["Dusun Malimpung", "Dusun Palita", "Dusun Pajalele"],
@@ -15,6 +16,13 @@ const WILAYAH_KERJA = {
 };
 
 const ESC = 0x1B; const GS = 0x1D; const CMD_INIT = [ESC, 0x40]; const CMD_ALIGN_CENTER = [ESC, 0x61, 0x01]; const CMD_BOLD_ON = [ESC, 0x45, 0x01]; const CMD_BOLD_OFF = [ESC, 0x45, 0x00]; const CMD_TEXT_NORMAL = [GS, 0x21, 0x00]; const CMD_FONT_A = [ESC, 0x4D, 0x00]; const CMD_FONT_B = [ESC, 0x4D, 0x01]; const CMD_LINE_SPACING_TIGHT = [ESC, 0x33, 20]; const CMD_LINE_SPACING_DEFAULT = [ESC, 0x32]; const CMD_CUT_PAPER = [GS, 0x56, 0x42, 0x00]; const CMD_TINY_FEED = [ESC, 0x4A, 0x18]; 
+
+const getMakassarDate = () => new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Makassar',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+}).format(new Date());
 
 function createImageFromText(text) {
   const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d'); canvas.width = 384; canvas.height = 160; 
@@ -87,7 +95,11 @@ function Loket() {
   const handleAmbilAntrian = async () => {
     setLoading(true);
     try {
-      const tglHariIni = new Date().toISOString().split('T')[0];
+      if (!auth.currentUser) {
+        throw Object.assign(new Error('Sesi Firebase tidak tersedia.'), { code: 'auth/unauthenticated' });
+      }
+      await auth.currentUser.getIdToken(true);
+      const tglHariIni = getMakassarDate();
       let kodeDesa = "A"; if(desaAktif === "Desa Padang Loang") kodeDesa = "B"; if(desaAktif === "Kelurahan Maccirinna") kodeDesa = "C"; if(desaAktif === "Luar Wilayah") kodeDesa = "Z";
       const { dataAntrian } = await createQueueTicket({
         tanggalPelaksanaan: tglHariIni,
@@ -115,7 +127,20 @@ function Loket() {
           setStrukAktif(dataStruk);
           setTimeout(() => { window.print(); setPrinterMessage('Nomor antrean berhasil dicetak'); setLoading(false); setTimeout(() => setStrukAktif(null), 1000); }, 500);
       }
-    } catch (error) { console.error("Error ambil antrian:", error); setPrinterMessage("Gagal mengambil antrian. Periksa koneksi internet, lalu coba lagi."); setLoading(false); }
+    } catch (error) {
+      console.error("Error ambil antrian:", error);
+      const code = String(error?.code || '');
+      if (code.includes('unauthenticated') || code.includes('user-token-expired')) {
+        setPrinterMessage("Sesi akun berakhir. Silakan keluar, masuk kembali, lalu coba sekali lagi.");
+      } else if (code.includes('permission-denied')) {
+        setPrinterMessage("Akses antrean ditolak untuk akun ini. Hubungi administrator dan jangan ulangi tombol.");
+      } else if (code.includes('unavailable') || code.includes('failed-precondition')) {
+        setPrinterMessage("Koneksi database belum siap. Tutup tab lama, buka aplikasi pada tab baru, lalu coba sekali.");
+      } else {
+        setPrinterMessage("Gagal mengambil antrean. Jangan tekan berulang; muat ulang aplikasi lalu coba sekali.");
+      }
+      setLoading(false);
+    }
   };
 
   return (
