@@ -1,4 +1,4 @@
-import { collection, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { STATUS_MAPPING } from '../utils/constants';
 import { getQueueStatusKey } from '../utils/queueStatus';
@@ -48,7 +48,13 @@ export async function upsertPublicQueueFromVisit(visitId, visit = {}) {
 }
 
 export function subscribePublicTvQueueGrid(onChange, onError) {
-  return onSnapshot(collection(db, 'public_queue'), (snapshot) => {
+  const publicQueueQuery = query(
+    collection(db, 'public_queue'),
+    orderBy('updatedAt', 'desc'),
+    limit(100)
+  );
+
+  return onSnapshot(publicQueueQuery, (snapshot) => {
     const grid = {
       pos1: [],
       pos2: [],

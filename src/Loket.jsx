@@ -132,6 +132,8 @@ function Loket() {
       const code = String(error?.code || '');
       if (code.includes('unauthenticated') || code.includes('user-token-expired')) {
         setPrinterMessage("Sesi akun berakhir. Silakan keluar, masuk kembali, lalu coba sekali lagi.");
+      } else if (code.includes('resource-exhausted')) {
+        setPrinterMessage("Kuota database harian habis. Jangan tekan berulang; hubungi administrator sistem.");
       } else if (code.includes('permission-denied')) {
         setPrinterMessage("Akses antrean ditolak untuk akun ini. Hubungi administrator dan jangan ulangi tombol.");
       } else if (code.includes('unavailable') || code.includes('failed-precondition')) {

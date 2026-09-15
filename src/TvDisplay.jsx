@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { DEFAULT_ACTIVE_LOCATION, subscribeActiveLocation } from './services/settingsService';
-import { subscribeLatestTvQueueCall, subscribeTvQueueGrid } from './services/queueService';
+import { subscribeLatestTvQueueCall } from './services/queueService';
 import { subscribePublicTvQueueGrid } from './services/publicQueueService';
 import { enterFullscreen, HEALTH_MESSAGES, sanitizePublicQueueItem } from './features/tv/tvService';
 
@@ -32,7 +32,6 @@ function TvDisplay() {
   const [antrianGrid, setAntrianGrid] = useState({
       pos1: [], pos2: [], pos3: [], pos4: [], pos5: [], pos6: [], pos7: []
   });
-  const [internalAntrianGrid, setInternalAntrianGrid] = useState(null);
   const [activeCallsPerPos, setActiveCallsPerPos] = useState({
       'POS 1': null, 'POS 2': null, 'POS 3': null, 'POS 4': null, 'POS 5': null, 'POS 6': null, 'POS 7': null
   });
@@ -42,11 +41,7 @@ function TvDisplay() {
   const callTimeoutRef = useRef(null);
   const tickerTrackRef = useRef(null);
   const tickerAnimationRef = useRef(null);
-  const internalQueueTotal = useMemo(() => {
-    if (!internalAntrianGrid) return 0;
-    return Object.values(internalAntrianGrid).reduce((total, items) => total + items.length, 0);
-  }, [internalAntrianGrid]);
-  const displayGrid = internalQueueTotal > 0 ? internalAntrianGrid : antrianGrid;
+  const displayGrid = antrianGrid;
   const antreanBerikutnya = useMemo(() => (
     Object.values(displayGrid)
       .flat()
@@ -150,19 +145,6 @@ function TvDisplay() {
           setTvQueueError('');
       }, () => {
           setTvQueueError('Koneksi data antrean sedang tidak stabil. Menampilkan data terakhir yang tersedia.');
-      });
-
-      return () => unsubscribe();
-  }, [isStarted]);
-
-  useEffect(() => {
-      if (!isStarted) return;
-
-      const unsubscribe = subscribeTvQueueGrid((nextGrid) => {
-          setInternalAntrianGrid(nextGrid);
-          setLastSyncAt(new Date());
-      }, () => {
-          setInternalAntrianGrid(null);
       });
 
       return () => unsubscribe();
