@@ -1,152 +1,185 @@
 {
-  "generatedAt": "2026-09-24T10:01:14.163Z",
+  "generatedAt": "2026-09-24T10:27:42.104Z",
   "academicYear": "2026/2027",
-  "mode": "dry-run",
+  "mode": "apply",
+  "adapter": "rest_api",
   "total": 16,
   "results": [
     {
-      "schoolId": "target_69911295",
-      "schoolName": "TK NEGERI PEMBINA II PATAMPANUA",
       "npsn": "69911295",
+      "schoolId": "school_69911295",
+      "schoolName": "TK NEGERI PEMBINA II PATAMPANUA",
+      "level": "TK/PAUD",
+      "desa": "Desa Malimpung",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/69911295",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 85
+      "status": "applied",
+      "totalStudents": 85,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_40304322",
-      "schoolName": "UPT SD NEGERI 121 PINRANG",
       "npsn": "40304322",
+      "schoolId": "school_40304322",
+      "schoolName": "UPT SD NEGERI 121 PINRANG",
+      "level": "SD",
+      "desa": "Desa Malimpung",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/40304322",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 153
+      "status": "applied",
+      "totalStudents": 153,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_40305338",
-      "schoolName": "UPT SD NEGERI 123 PINRANG",
       "npsn": "40305338",
+      "schoolId": "school_40305338",
+      "schoolName": "UPT SD NEGERI 123 PINRANG",
+      "level": "SD",
+      "desa": "Desa Malimpung",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/40305338",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 139
+      "status": "applied",
+      "totalStudents": 139,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_40305274",
-      "schoolName": "UPT SD NEGERI 195 PINRANG",
       "npsn": "40305274",
+      "schoolId": "school_40305274",
+      "schoolName": "UPT SD NEGERI 195 PINRANG",
+      "level": "SD",
+      "desa": "Desa Malimpung",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/40305274",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 90
+      "status": "applied",
+      "totalStudents": 90,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_69761928",
-      "schoolName": "UPT SMP NEGERI 5 PATAMPANUA",
       "npsn": "69761928",
+      "schoolId": "school_69761928",
+      "schoolName": "UPT SMP NEGERI 5 PATAMPANUA",
+      "level": "SMP",
+      "desa": "Desa Malimpung",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/69761928",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 51
+      "status": "applied",
+      "totalStudents": 51,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_40305095",
-      "schoolName": "UPT SMP NEGERI 4 PATAMPANUA",
       "npsn": "40305095",
+      "schoolId": "school_40305095",
+      "schoolName": "UPT SMP NEGERI 4 PATAMPANUA",
+      "level": "SMP",
+      "desa": "Desa Malimpung",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/40305095",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 348
+      "status": "applied",
+      "totalStudents": 348,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_69886044",
-      "schoolName": "RA DDI AL-MUNAWARAH PALITA",
       "npsn": "69886044",
+      "schoolId": "school_69886044",
+      "schoolName": "RA DDI AL-MUNAWARAH PALITA",
+      "level": "TK/PAUD",
+      "desa": "Desa Padangloang",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/69886044",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 0
+      "status": "applied",
+      "totalStudents": 0,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_69886045",
-      "schoolName": "RA DDI ASH-SHIDDIQ",
       "npsn": "69886045",
+      "schoolId": "school_69886045",
+      "schoolName": "RA DDI ASH-SHIDDIQ",
+      "level": "TK/PAUD",
+      "desa": "Desa Padangloang",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/69886045",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 0
+      "status": "applied",
+      "totalStudents": 0,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_69769246",
-      "schoolName": "TK MEKAR",
       "npsn": "69769246",
+      "schoolId": "school_69769246",
+      "schoolName": "TK MEKAR",
+      "level": "TK/PAUD",
+      "desa": "Desa Padangloang",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/69769246",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 23
+      "status": "applied",
+      "totalStudents": 23,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_40316640",
-      "schoolName": "UPT SD NEGERI PALITA PINRANG",
       "npsn": "40316640",
+      "schoolId": "LkQJwKpAaESSvNt10hnk",
+      "schoolName": "UPT SD NEGERI PALITA PINRANG",
+      "level": "SD",
+      "desa": "Desa Padangloang",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/40316640",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 131
+      "status": "applied",
+      "totalStudents": 131,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_40305055",
-      "schoolName": "UPT SD NEGERI 260 PINRANG",
       "npsn": "40305055",
+      "schoolId": "nLBd9ZCSdxVNf2AdQYiB",
+      "schoolName": "UPT SD NEGERI 260 PINRANG",
+      "level": "SD",
+      "desa": "Desa Padangloang",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/40305055",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 86
+      "status": "applied",
+      "totalStudents": 86,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_40305178",
-      "schoolName": "UPT SD NEGERI INPRES PADANG LOANG",
       "npsn": "40305178",
+      "schoolId": "school_40305178",
+      "schoolName": "UPT SD NEGERI INPRES PADANG LOANG",
+      "level": "SD",
+      "desa": "Desa Padangloang",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/40305178",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 116
+      "status": "applied",
+      "totalStudents": 116,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_69751520",
-      "schoolName": "RA/BA/TA DDI TAKKALALLA TIMUR",
       "npsn": "69751520",
+      "schoolId": "school_69751520",
+      "schoolName": "RA/BA/TA DDI TAKKALALLA TIMUR",
+      "level": "TK/PAUD",
+      "desa": "Kelurahan Maccirinna",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/69751520",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 0
+      "status": "applied",
+      "totalStudents": 0,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_60723874",
-      "schoolName": "MIS DDI TAKKALALLA TIMUR",
       "npsn": "60723874",
+      "schoolId": "school_60723874",
+      "schoolName": "MIS DDI TAKKALALLA TIMUR",
+      "level": "MI",
+      "desa": "Kelurahan Maccirinna",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/60723874",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 3
+      "status": "applied",
+      "totalStudents": 3,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_40305052",
-      "schoolName": "UPT SD NEGERI 258 PINRANG",
       "npsn": "40305052",
+      "schoolId": "school_40305052",
+      "schoolName": "UPT SD NEGERI 258 PINRANG",
+      "level": "SD",
+      "desa": "Kelurahan Maccirinna",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/40305052",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 119
+      "status": "applied",
+      "totalStudents": 119,
+      "httpStatus": 200
     },
     {
-      "schoolId": "target_69788489",
-      "schoolName": "MTsS DDI TAKKALALLA TIMUR",
       "npsn": "69788489",
+      "schoolId": "school_69788489",
+      "schoolName": "MTsS DDI TAKKALALLA TIMUR",
+      "level": "MTs",
+      "desa": "Kelurahan Maccirinna",
       "url": "https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/69788489",
-      "status": "ready",
-      "httpStatus": 200,
-      "totalStudents": 7
+      "status": "applied",
+      "totalStudents": 7,
+      "httpStatus": 200
     }
   ]
 }

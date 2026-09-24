@@ -43,13 +43,16 @@ jobs:
             echo "has_secret=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Jalankan Sinkronisasi (Dry Run jika tanpa secret atau tanpa --apply)
+      - name: Jalankan Sinkronisasi (Apply untuk schedule, atau sesuai input workflow_dispatch)
         if: steps.check_credentials.outputs.has_secret == 'true'
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
-          if [ "${{ github.event.inputs.apply_changes }}" = "true" ]; then
-            echo "Menjalankan sinkronisasi dengan --apply..."
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "Menjalankan sinkronisasi otomatis bulanan dengan --apply..."
+            node scripts/syncDapodikPublic.js --apply
+          elif [ "${{ github.event.inputs.apply_changes }}" = "true" ]; then
+            echo "Menjalankan sinkronisasi manual dengan --apply..."
             node scripts/syncDapodikPublic.js --apply
           else
             echo "Menjalankan sinkronisasi dalam mode DRY-RUN (tanpa menulis ke database)..."
