@@ -1,0 +1,134 @@
+{
+  "generatedAt": "2026-09-18T22:14:32.880Z",
+  "academicYear": "2026/2027",
+  "mode": "dry-run",
+  "total": 14,
+  "results": [
+    {
+      "schoolId": "school_40304322",
+      "schoolName": "UPT SD NEGERI 121 PINRANG",
+      "npsn": "40304322",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=40304322",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    },
+    {
+      "schoolId": "school_40305052",
+      "schoolName": "UPT SD NEGERI 258 PINRANG",
+      "npsn": "40305052",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=40305052",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    },
+    {
+      "schoolId": "school_40305178",
+      "schoolName": "UPT SD NEGERI INPRES PADANG LOANG",
+      "npsn": "40305178",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=40305178",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    },
+    {
+      "schoolId": "school_40305274",
+      "schoolName": "UPT SD NEGERI 195 PINRANG",
+      "npsn": "40305274",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=40305274",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    },
+    {
+      "schoolId": "school_40305298",
+      "schoolName": "UPT SD NEGERI 218 PINRANG",
+      "npsn": "40305298",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=40305298",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    },
+    {
+      "schoolId": "school_40305338",
+      "schoolName": "UPT SD NEGERI 123 PINRANG",
+      "npsn": "40305338",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=40305338",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    },
+    {
+      "schoolId": "school_60723874",
+      "schoolName": "MIS DDI TAKKALALLA TIMUR",
+      "npsn": "60723874",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=60723874",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    },
+    {
+      "schoolId": "school_69751520",
+      "schoolName": "RA/BA/TA DDI TAKKALALLA TIMUR",
+      "npsn": "69751520",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=69751520",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    },
+    {
+      "schoolId": "school_69761928",
+      "schoolName": "UPT SMP NEGERI 5 PATAMPANUA",
+      "npsn": "69761928",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=69761928",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    },
+    {
+      "schoolId": "school_69886044",
+      "schoolName": "RA DDI AL-MUNAWARAH PALITA",
+      "npsn": "69886044",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=69886044",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    },
+    {
+      "schoolId": "school_69886045",
+      "schoolName": "RA DDI ASH-SHIDDIQ",
+      "npsn": "69886045",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=69886045",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    },
+    {
+      "schoolId": "school_69886046",
+      "schoolName": "RA KARTINI URUNG",
+      "npsn": "69886046",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=69886046",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    },
+    {
+      "schoolId": "school_69886048",
+      "schoolName": "RA DDI DARABATU",
+      "npsn": "69886048",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=69886048",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    },
+    {
+      "schoolId": "school_70057285",
+      "schoolName": "TK IT WAHDAH QURROTA AYUN",
+      "npsn": "70057285",
+      "url": "https://referensi.data.kemendikdasmen.go.id/snpmb/site/sekolah?npsn=70057285",
+      "status": "portal_error",
+      "httpStatus": 500,
+      "error": "Portal publik mengembalikan halaman error, bukan data sekolah."
+    }
+  ]
+}

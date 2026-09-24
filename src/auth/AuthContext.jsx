@@ -97,6 +97,16 @@ export function AuthProvider({ children }) {
     [user]
   );
 
+  const hasPosition = useMemo(
+    () => (positions = []) => {
+      if (!user) return false;
+      if (user.roles?.includes('admin')) return true;
+      const assigned = Array.isArray(user.positions) ? user.positions : (user.pos ? [user.pos] : []);
+      return positions.some((position) => assigned.includes(position) || assigned.includes('ALL ACCESS'));
+    },
+    [user]
+  );
+
   const value = {
     user,
     isAuthenticated: Boolean(user?.isAuthenticated),
@@ -105,6 +115,7 @@ export function AuthProvider({ children }) {
     signOut,
     hasRole,
     hasAnyRole,
+    hasPosition,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

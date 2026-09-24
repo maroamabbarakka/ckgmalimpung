@@ -168,6 +168,33 @@ export const isInderaRisk = (visit = {}) => {
   return false;
 };
 
+const inderaSidePatterns = Object.freeze({
+  mata_kiri: /(mata|penglihatan|visus).*(kiri)|(kiri).*(mata|penglihatan|visus)/i,
+  mata_kanan: /(mata|penglihatan|visus).*(kanan)|(kanan).*(mata|penglihatan|visus)/i,
+  telinga_kiri: /(telinga|pendengaran|serumen|infeksi).*(kiri)|(kiri).*(telinga|pendengaran|serumen|infeksi)/i,
+  telinga_kanan: /(telinga|pendengaran|serumen|infeksi).*(kanan)|(kanan).*(telinga|pendengaran|serumen|infeksi)/i
+});
+
+const isPositiveFinding = (value) => {
+  const text = String(value ?? '').trim().toLowerCase();
+  if (!text || ['normal', 'tidak', 'tdk', 'tidak ada', 'baik', '6/6', '6/9', '6/12'].includes(text)) return false;
+  return /gangguan|indikasi|kelainan|infeksi|serumen|buram|kabur|positif|ya|<|tidak normal/.test(text);
+};
+
+export const getInderaBreakdown = (visit = {}) => {
+  const result = { mata_kiri: false, mata_kanan: false, telinga_kiri: false, telinga_kanan: false };
+  const p3 = visit.pos3 || {};
+  const questionMap = { ...(visit.pos3_question_map || {}), ...(p3.question_map || {}) };
+  const answers = { ...p3, ...(p3.answers || {}), ...(p3.jawaban || {}) };
+  Object.entries(answers).forEach(([key, value]) => {
+    const label = `${key} ${questionMap[key] || ''}`;
+    Object.entries(inderaSidePatterns).forEach(([side, pattern]) => {
+      if (pattern.test(label) && isPositiveFinding(value)) result[side] = true;
+    });
+  });
+  return result;
+};
+
 export const evaluateAllClinicalRisks = (visit = {}) => ({
   hipertensi: isHipertensiRisk(visit),
   diabetes: isDiabetesRisk(visit),

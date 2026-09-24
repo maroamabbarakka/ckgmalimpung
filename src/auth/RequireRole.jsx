@@ -2,8 +2,8 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import LoadingState from '../components/system/LoadingState';
 
-export default function RequireRole({ children, allowedRoles = [] }) {
-  const { isAuthenticated, hasAnyRole, loading } = useAuth();
+export default function RequireRole({ children, allowedRoles = [], allowedPositions = [] }) {
+  const { isAuthenticated, hasAnyRole, hasPosition, user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -14,7 +14,12 @@ export default function RequireRole({ children, allowedRoles = [] }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (allowedRoles.length > 0 && !hasAnyRole(allowedRoles)) {
+  const hasAssignedPosition = allowedPositions.length > 0 && hasPosition(allowedPositions);
+  const hasExplicitPositions = Array.isArray(user?.positions) && user.positions.length > 0;
+  const hasAccess = allowedPositions.length > 0 && hasExplicitPositions
+    ? hasAssignedPosition
+    : hasAnyRole(allowedRoles);
+  if (allowedRoles.length > 0 && !hasAccess) {
     const fallback = location.pathname === '/dashboard' ? '/' : '/dashboard';
     return <Navigate to={fallback} replace />;
   }

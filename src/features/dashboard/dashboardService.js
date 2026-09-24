@@ -1,6 +1,6 @@
 import { collection, doc, limit, onSnapshot, orderBy, query, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { calculateDataQualitySummary } from '../dataQuality/dataQualityRules';
+import { calculateDataQualitySummary, getCanonicalStatus } from '../dataQuality/dataQualityRules';
 
 const FINAL_STATUS = new Set(['FINALIZED', 'Selesai']);
 const CANCELLED_STATUS = new Set(['CANCELLED', 'Dibatalkan']);
@@ -43,11 +43,12 @@ export async function updateDashboardVisit(visitId, payload) {
 }
 
 export function calculateDashboardMetrics(visits = []) {
-  const finalized = visits.filter((visit) => FINAL_STATUS.has(visit.status) || FINAL_STATUS.has(visit.status_antrian)).length;
-  const cancelled = visits.filter((visit) => CANCELLED_STATUS.has(visit.status) || CANCELLED_STATUS.has(visit.status_antrian)).length;
+  const finalized = visits.filter((visit) => FINAL_STATUS.has(getCanonicalStatus(visit)) || FINAL_STATUS.has(visit.status)).length;
+  const cancelled = visits.filter((visit) => CANCELLED_STATUS.has(getCanonicalStatus(visit)) || CANCELLED_STATUS.has(visit.status)).length;
   const inProgress = visits.length - finalized - cancelled;
   const highRisk = visits.filter((visit) => visit.riskLevel === 'HIGH' || visit.risk_level === 'HIGH' || visit.keterangan_akhir === 'Risiko Tinggi').length;
-  const incomplete = visits.filter((visit) => visit.dataQuality?.isComplete === false || !visit.status || !visit.nama || !visit.desa).length;
+  const quality = calculateDataQualitySummary(visits);
+  const incomplete = quality.issueRows.length;
 
   return {
     total: visits.length,
@@ -62,7 +63,7 @@ export function calculateDashboardMetrics(visits = []) {
 
 export function calculateBottleneck(visits = []) {
   return visits.reduce((acc, visit) => {
-    const status = visit.status || visit.status_antrian || 'UNKNOWN';
+    const status = getCanonicalStatus(visit) || 'UNKNOWN';
     acc[status] = (acc[status] || 0) + 1;
     return acc;
   }, {});

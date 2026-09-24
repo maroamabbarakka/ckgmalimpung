@@ -741,6 +741,135 @@ export const exportClusterExcel = async (visits, clusterName) => {
     }
 };
 
+const EXAMINATION_KEYWORDS = ['tekanan darah', 'gula darah', 'hemoglobin', 'kolesterol', 'imt', 'indeks massa tubuh', 'berat badan', 'tinggi badan', 'lingkar perut', 'pulse oksimetri', 'saturasi', 'mata', 'telinga', 'gigi', 'mulut', 'mental', 'merokok', 'diagnosis', 'hasil pemeriksaan', 'status gizi', 'asi', 'imunisasi'];
+
+const getVillageQuestionColumns = (visits) => {
+    const forms = formSchemas.forms || {};
+    const questionMap = new Map();
+    Object.keys(forms).forEach((sheetName) => {
+        (forms[sheetName]?.questions || []).forEach((question) => {
+            const label = String(question.question_text || '').trim();
+            const normalized = normalizeText(label);
+            if (!label || ['nik', 'nama lengkap', 'tanggal lahir', 'jenis kelamin', 'tanggal pemeriksaan', 'nama faskes'].some((blocked) => normalized.includes(blocked))) return;
+            if (normalized.includes('provinsi') || normalized.includes('kabupaten') || normalized.includes('faskes')) return;
+            const score = EXAMINATION_KEYWORDS.reduce((total, keyword) => total + (normalized.includes(keyword) ? 10 : 0), 0) + (question.sequence_number ? Math.max(0, 5 - question.sequence_number / 1000) : 0);
+            const current = questionMap.get(normalized);
+            if (!current || score > current.score) questionMap.set(normalized, { ...question, score });
+        });
+    });
+    return [...questionMap.values()]
+        .sort((a, b) => b.score - a.score || (a.sequence_number || 0) - (b.sequence_number || 0))
+        .slice(0, 24);
+};
+
+const getVillageFormName = (visit) => {
+    const forms = formSchemas.forms || {};
+    return Object.keys(forms).find((sheetName) => isVisitForSheet(visit, sheetName)) || visit.kategori_usia_satusehat || '-';
+};
+
+const buildVillageRows = (visits, questions) => visits.map((visit, index) => [
+    index + 1,
+    getPkgValue(visit, 'NIK'),
+    getPkgValue(visit, 'NAMA LENGKAP'),
+    getVillageFormName(visit),
+    ...questions.map((question) => getQuestionExportValue(visit, question))
+]);
+
+export const exportVillageExcel = async (visits, villageName) => {
+    try {
+        if (!Array.isArray(visits) || visits.length === 0) {
+            await alertDialog({ title: 'Tidak ada data wilayah', message: `Tidak ada data untuk ${villageName}.`, variant: 'warning' });
+            return false;
+        }
+        const workbook = await createWorkbook();
+        const questions = getVillageQuestionColumns(visits);
+        const headers = ['NO', 'NIK', 'NAMA', 'FORM', ...questions.map((question) => shortenPdfHeader(question.question_text, 18))];
+        const rows = buildVillageRows(visits, questions);
+        const sheetData = [
+            [`REKAP DATA CKG - ${String(villageName).toUpperCase()}`],
+            [`TOTAL DATA: ${visits.length} | DICETAK: ${new Date().toLocaleDateString('id-ID')}`],
+            [],
+            headers,
+            ...rows
+        ];
+        appendArraySheet(workbook, 'Data Wilayah', sheetData, {
+            colWidths: [6, 20, 28, 24, ...questions.map(() => 16)].map((width) => ({ wch: width })),
+            autoFilter: { fromRow: 4, toRow: sheetData.length, toColumn: headers.length }
+        });
+        const safeName = String(villageName).replace(/[^a-z0-9]+/gi, '_');
+        await downloadWorkbook(workbook, `Rekap_CKG_${safeName}_Semua_Kelompok_Umur.xlsx`);
+        return true;
+    } catch (error) {
+        console.error('Error exporting village Excel:', error);
+        await alertDialog({ title: 'Gagal mengekspor Excel', message: 'Laporan wilayah tidak dapat dibuat.', variant: 'error' });
+        return false;
+    }
+};
+
+export const exportVillagePDF = async (visits, villageName) => {
+    try {
+        if (!Array.isArray(visits) || visits.length === 0) {
+            await alertDialog({ title: 'Tidak ada data wilayah', message: `Tidak ada data untuk ${villageName}.`, variant: 'warning' });
+            return false;
+        }
+        const doc = new jsPDF('landscape', 'mm', [330.2, 215.9]);
+        const safeName = String(villageName).replace(/[^a-z0-9]+/gi, '_');
+        doc.setProperties({ title: `Rekap CKG ${villageName}` });
+        const printedAt = new Date().toLocaleDateString('id-ID');
+        const [logoPinrangDataUrl, logoPuskesmasDataUrl] = await Promise.all([
+            loadImageDataUrl(getAssetUrl('/logo_pinrang.png')),
+            loadImageDataUrl(getAssetUrl('/logo_malimpung.png'))
+        ]);
+        const questions = getVillageQuestionColumns(visits);
+        const headers = ['NO', 'NIK', 'NAMA', 'FORM', ...questions.map((question) => shortenPdfHeader(question.question_text, 14))];
+        const drawPageHeader = () => {
+            const pageWidth = doc.internal.pageSize.getWidth();
+            doc.setFillColor(15, 118, 110);
+            doc.roundedRect(12, 8, pageWidth - 24, 25, 3, 3, 'F');
+            if (logoPinrangDataUrl) doc.addImage(logoPinrangDataUrl, 'PNG', 18, 11, 18, 18);
+            if (logoPuskesmasDataUrl) doc.addImage(logoPuskesmasDataUrl, 'PNG', pageWidth - 36, 11, 18, 18);
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(13);
+            doc.setFont(undefined, 'bold');
+            doc.text('REKAP HASIL PEMERIKSAAN CKG', pageWidth / 2, 18, { align: 'center' });
+            doc.setFont(undefined, 'normal');
+            doc.setFontSize(7);
+            doc.text(`${String(villageName).toUpperCase()} | Semua kelompok umur | ${visits.length} data | ${printedAt}`, pageWidth / 2, 26, { align: 'center' });
+        };
+        drawPageHeader();
+        autoTable(doc, {
+            startY: 39,
+            head: [headers],
+            body: buildVillageRows(visits, questions),
+            theme: 'grid',
+            styles: { fontSize: 4.2, cellPadding: 1.1, overflow: 'linebreak', valign: 'middle', minCellHeight: 6 },
+            headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontSize: 4.5, halign: 'center', valign: 'middle' },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            tableWidth: 'auto',
+            showHead: 'everyPage',
+            columnStyles: {
+                0: { cellWidth: 8, halign: 'center' }, 1: { cellWidth: 28 }, 2: { cellWidth: 35 }, 3: { cellWidth: 25 },
+                ...Object.fromEntries(questions.map((_, index) => [index + 4, { cellWidth: 9, halign: 'center' }]))
+            },
+            margin: { top: 39, right: 8, bottom: 14, left: 8 },
+            didDrawPage: (data) => {
+                drawPageHeader();
+                doc.setFontSize(8);
+                doc.setTextColor(100, 116, 139);
+                const pageHeight = doc.internal.pageSize.getHeight();
+                doc.text(`Rekap CKG ${villageName}`, data.settings.margin.left, pageHeight - 8);
+                doc.text(`Halaman ${doc.internal.getNumberOfPages()}`, doc.internal.pageSize.getWidth() - 40, pageHeight - 8, { align: 'right' });
+            }
+        });
+        doc.save(`Rekap_CKG_${safeName}_Semua_Kelompok_Umur.pdf`);
+        return true;
+    } catch (error) {
+        console.error('Error exporting village PDF:', error);
+        await alertDialog({ title: 'Gagal mengekspor PDF', message: 'Laporan wilayah tidak dapat dibuat.', variant: 'error' });
+        return false;
+    }
+};
+
 export const exportJsonToExcel = async (data, sheetName, fileName) => {
     try {
         const rows = Array.isArray(data) ? data : [data];

@@ -1,6 +1,7 @@
 import { doc, getDoc } from 'firebase/firestore';
 import { getIdTokenResult, signInWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
 import { auth, db } from '../firebase';
+import { sanitizeStaffPositions } from '../utils/staffConstants';
 
 export const normalizeRoles = (rawRole) => {
   if (Array.isArray(rawRole)) return rawRole.map(String).map((role) => role.trim().toLowerCase()).filter(Boolean);
@@ -24,12 +25,17 @@ export const buildAuthEmail = (username) => {
 
 export const buildSignedUser = (source, fallbackUsername = '') => {
   const roles = normalizeRoles(source.role || source.roles || '');
+  const cleanPositions = sanitizeStaffPositions(source.positions, source.pos);
+  const primaryPos = cleanPositions.length > 0 ? cleanPositions[0] : (source.pos === 'BELUM DITUGASKAN' ? '' : source.pos || '');
   return {
     uid: source.uid || source.id || null,
     username: source.username || fallbackUsername,
     email: source.email || '',
     nama: source.nama || source.name || '',
     roles,
+    positions: cleanPositions,
+    pos: primaryPos,
+    permissions: source.permissions || {},
     isAuthenticated: true,
   };
 };

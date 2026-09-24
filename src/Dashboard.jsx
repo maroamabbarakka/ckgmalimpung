@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { exportToPKGExcel, exportClusterExcel, exportToPKG_PDF, exportClusterPDF } from './utils/exportPKG';
+import { exportToPKGExcel, exportClusterExcel, exportToPKG_PDF, exportClusterPDF, exportVillageExcel, exportVillagePDF } from './utils/exportPKG';
 import { STATUS_MAPPING } from './utils/constants';
 import { useAuth } from './auth/AuthContext';
 import { writeAuditLog } from './services/auditService';
 import { maskNik } from './utils/privacy';
 import QueueStatusBadge from './design-system/components/QueueStatusBadge';
 import { alertDialog, confirmDialog } from './utils/appDialog';
+import { getServiceYear, getVisitYear } from './utils/ckgValidation';
 import {
   calculateBottleneck,
   calculateDashboardMetrics,
@@ -25,6 +26,7 @@ import {
   isParuRisk,
   isMentalRisk,
   isInderaRisk,
+  getInderaBreakdown,
   getClinicalRiskBadges
 } from './utils/clinicalRiskEvaluator';
 import {
@@ -32,6 +34,7 @@ import {
   calculateDentalScreeningSummary,
   getDentalScreeningStatus
 } from './features/dental/dentalScreening';
+import { WILAYAH_PENDUDUK, calculatePopulationCoverage } from './utils/wilayahPopulation';
 
 // =====================================================================
 // IMPORT STANDAR VITE: HANYA RESPONSIVE, TANPA WIDTH PROVIDER
@@ -54,6 +57,9 @@ const toVisitDate = (value) => {
 
 const getVisitDate = (visit = {}) =>
   toVisitDate(visit.waktu_selesai_total || visit.tanggal_kunjungan || visit.waktu_ambil_tiket || visit.createdAt || visit.lastUpdated);
+
+const getDesa = (visit = {}) =>
+  visit.pasien_snapshot?.desa || visit.desa_pelaksanaan || 'Belum Diisi';
 
 const toDateInputValue = (date) => {
   if (!date) return '';
@@ -239,13 +245,16 @@ const defaultLayouts = {
     { i: 'stat-obesitas', x: 12, y: 4, w: 3, h: 4, minW: 2, minH: 3 },
     { i: 'stat-paru', x: 15, y: 4, w: 3, h: 4, minW: 2, minH: 3 },
     { i: 'stat-mental', x: 18, y: 4, w: 3, h: 4, minW: 2, minH: 3 },
-    { i: 'stat-indera', x: 21, y: 4, w: 3, h: 4, minW: 2, minH: 3 },
-
-    { i: 'stat-dental', x: 21, y: 8, w: 3, h: 4, minW: 3, minH: 3 },
-    { i: 'ekspor', x: 6, y: 8, w: 15, h: 4, minW: 10, minH: 2 },
-    { i: 'quality', x: 0, y: 12, w: 12, h: 5, minW: 8, minH: 4 },
-    { i: 'bottleneck', x: 12, y: 12, w: 12, h: 5, minW: 8, minH: 4 },
-    { i: 'tabel', x: 0, y: 17, w: 24, h: 8, minW: 12, minH: 6 }
+    // Baris kedua khusus kartu PTM. Indera tidak boleh berbagi koordinat
+    // dengan Mental; ia ditempatkan pada kolom kanan di baris berikutnya.
+    { i: 'stat-dental', x: 21, y: 4, w: 3, h: 4, minW: 3, minH: 4 },
+    { i: 'stat-indera', x: 18, y: 8, w: 6, h: 5, minW: 6, minH: 5 },
+    { i: 'ekspor', x: 6, y: 8, w: 12, h: 6, minW: 12, minH: 6 },
+    { i: 'ekspor-wilayah', x: 6, y: 14, w: 18, h: 4, minW: 12, minH: 4 },
+    { i: 'wilayah', x: 0, y: 12, w: 6, h: 5, minW: 5, minH: 4 },
+    { i: 'quality', x: 0, y: 18, w: 12, h: 5, minW: 8, minH: 4 },
+    { i: 'bottleneck', x: 12, y: 18, w: 12, h: 5, minW: 8, minH: 4 },
+    { i: 'tabel', x: 0, y: 23, w: 24, h: 8, minW: 12, minH: 6 }
   ]
 };
 
@@ -280,6 +289,7 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDesa, setFilterDesa] = useState('Semua');
+  const [filterYear, setFilterYear] = useState(String(getServiceYear()));
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [patientPage, setPatientPage] = useState(1);
@@ -293,13 +303,15 @@ function Dashboard() {
 
   const [layouts, setLayouts] = useState(() => {
     try {
-        const saved = localStorage.getItem("dashboardLayout_v21");
+        const saved = localStorage.getItem("dashboardLayout_v27");
         return saved ? includeDentalInSavedLayouts(JSON.parse(saved)) : defaultLayouts;
     } catch { return defaultLayouts; }
   });
 
   const [isEditMode, setIsEditMode] = useState(false);
   const [popupConfig, setPopupConfig] = useState({ isOpen: false, type: '', title: '' });
+  const [popupSearch, setPopupSearch] = useState('');
+  const [popupDesa, setPopupDesa] = useState('Semua');
 
   const [stats, setStats] = useState({
     total: 0, selesai: 0, antri: 0,
@@ -321,7 +333,7 @@ function Dashboard() {
     // Hindari menyimpan layout saat isMobile (karena RGL tidak aktif secara penuh)
     if (isMobile) return;
     setLayouts(allLayouts);
-    localStorage.setItem("dashboardLayout_v21", JSON.stringify(allLayouts));
+    localStorage.setItem("dashboardLayout_v27", JSON.stringify(allLayouts));
   };
 
   const toggleEditMode = () => {
@@ -342,7 +354,12 @@ function Dashboard() {
         variant: 'warning'
     })){
         setLayouts(defaultLayouts);
-        localStorage.removeItem("dashboardLayout_v21");
+        localStorage.removeItem("dashboardLayout_v27");
+        localStorage.removeItem("dashboardLayout_v26");
+        localStorage.removeItem("dashboardLayout_v25");
+        localStorage.removeItem("dashboardLayout_v24");
+        localStorage.removeItem("dashboardLayout_v23");
+        localStorage.removeItem("dashboardLayout_v22");
         setIsEditMode(false);
         setPesan("🔄 Tata letak berhasil di-reset penuh.");
         setTimeout(() => setPesan(""), 3000);
@@ -353,7 +370,6 @@ function Dashboard() {
   useEffect(() => {
     const unsubscribe = subscribeDashboardVisits((data) => {
       setVisits(data);
-      kalkulasiStatistik(data);
       setLoading(false);
     }, (error) => {
       console.error("Firebase Error:", error);
@@ -399,8 +415,9 @@ function Dashboard() {
       const search = searchTerm.toLowerCase();
       const matchSearch = name.includes(search) || nik.includes(search);
       const matchDesa = filterDesa === 'Semua' || v.pasien_snapshot?.desa === filterDesa;
+      const matchYear = filterYear === 'Semua' || String(getVisitYear(v)) === filterYear;
       const matchDate = isVisitInDateRange(v, filterStartDate, filterEndDate);
-      return matchSearch && matchDesa && matchDate;
+      return matchSearch && matchDesa && matchYear && matchDate;
     });
 
     result.sort((a, b) => {
@@ -433,7 +450,17 @@ function Dashboard() {
     });
 
     return result;
-  }, [visits, searchTerm, filterDesa, filterStartDate, filterEndDate, sortConfig]);
+  }, [visits, searchTerm, filterDesa, filterYear, filterStartDate, filterEndDate, sortConfig]);
+
+  const yearOptions = useMemo(() => {
+    const years = new Set(visits.map((visit) => getVisitYear(visit)).filter(Boolean));
+    years.add(getServiceYear());
+    return [...years].sort((a, b) => b - a);
+  }, [visits]);
+
+  useEffect(() => {
+    kalkulasiStatistik(filteredVisits);
+  }, [filteredVisits]);
 
   const patientPageSize = isMobile ? 5 : 10;
   const patientTotalPages = Math.max(1, Math.ceil(filteredVisits.length / patientPageSize));
@@ -447,7 +474,7 @@ function Dashboard() {
 
   useEffect(() => {
     setPatientPage(1);
-  }, [searchTerm, filterDesa, filterStartDate, filterEndDate, sortConfig, isMobile]);
+  }, [searchTerm, filterDesa, filterYear, filterStartDate, filterEndDate, sortConfig, isMobile]);
 
   useEffect(() => {
     if (patientPage > patientTotalPages) setPatientPage(patientTotalPages);
@@ -460,6 +487,15 @@ function Dashboard() {
   const decisionMetrics = useMemo(() => calculateDashboardMetrics(filteredVisits), [filteredVisits]);
   const dataQuality = useMemo(() => calculateDataQuality(filteredVisits), [filteredVisits]);
   const dentalSummary = useMemo(() => calculateDentalScreeningSummary(filteredVisits), [filteredVisits]);
+  const inderaBreakdown = useMemo(() => filteredVisits.reduce((summary, visit) => {
+    const result = getInderaBreakdown(visit);
+    Object.keys(summary).forEach((key) => { if (result[key]) summary[key] += 1; });
+    return summary;
+  }, { mata_kiri: 0, mata_kanan: 0, telinga_kiri: 0, telinga_kanan: 0 }), [filteredVisits]);
+  const wilayahCoverageRows = useMemo(() => Object.entries(WILAYAH_PENDUDUK).map(([desa, baseline]) => {
+    const total = filteredVisits.filter((visit) => getDesa(visit) === desa).length;
+    return { desa, total, population: baseline.population, coverage: calculatePopulationCoverage(total, desa) };
+  }), [filteredVisits]);
   const bottleneckRows = useMemo(() => {
     const bottleneck = calculateBottleneck(filteredVisits);
     return Object.entries(bottleneck)
@@ -468,7 +504,7 @@ function Dashboard() {
   }, [filteredVisits]);
   const maxBottleneckCount = bottleneckRows[0]?.count || 1;
   const insightRows = useMemo(() => {
-    const qualityIssues = dataQuality.missingNik + dataQuality.invalidNik + dataQuality.missingBirthDate + dataQuality.invalidBirthDate + dataQuality.missingGender + dataQuality.invalidGender + dataQuality.missingVillage + dataQuality.invalidWorkflow + dataQuality.finalizedWithoutDoctor + dataQuality.duplicateIdentityYear;
+    const qualityIssues = dataQuality.issueRows.length;
     const topBottleneck = bottleneckRows[0];
     return [
       {
@@ -507,21 +543,25 @@ function Dashboard() {
   const popupPatients = useMemo(() => {
       if (!popupConfig.isOpen) return [];
 
-      if (popupConfig.type === 'dental') {
-          return filteredVisits.filter(v => [DENTAL_STATUS.NOT_EXAMINED, DENTAL_STATUS.LEGACY_REVIEW]
-              .includes(getDentalScreeningStatus(v).status));
-      }
-
-      return visits.filter(v => {
+      const rows = (popupConfig.type === 'dental' ? filteredVisits : visits).filter(v => {
+          if (popupConfig.type === 'dental') return [DENTAL_STATUS.NOT_EXAMINED, DENTAL_STATUS.LEGACY_REVIEW].includes(getDentalScreeningStatus(v).status);
           if (popupConfig.type === 'hipertensi') return isHipertensiRisk(v);
           if (popupConfig.type === 'diabetes') return isDiabetesRisk(v);
           if (popupConfig.type === 'obesitas') return isObesitasRisk(v);
           if (popupConfig.type === 'paru_ppok') return isParuRisk(v);
           if (popupConfig.type === 'mental') return isMentalRisk(v);
           if (popupConfig.type === 'indera') return isInderaRisk(v);
+          if (popupConfig.type.startsWith('indera_')) return getInderaBreakdown(v)[popupConfig.type.replace('indera_', '')];
           return false;
       });
-  }, [filteredVisits, visits, popupConfig]);
+      const search = popupSearch.trim().toLowerCase();
+      return rows.filter((visit) => {
+        const name = String(visit.pasien_snapshot?.nama || '').toLowerCase();
+        const nik = String(visit.patientNIK || '').toLowerCase();
+        const desa = getDesa(visit);
+        return (!search || name.includes(search) || nik.includes(search)) && (popupDesa === 'Semua' || desa === popupDesa);
+      });
+  }, [filteredVisits, visits, popupConfig, popupSearch, popupDesa]);
 
   const popupDetailsInfo = {
       'hipertensi': { icon: '🩺', title: 'Pasien Hipertensi (TD ≥ 140)' },
@@ -530,6 +570,10 @@ function Dashboard() {
       'paru_ppok': { icon: '🫁', title: 'Risiko Paru, PPOK & Perokok' },
       'mental': { icon: '🧠', title: 'Indikasi Gangguan Emosional' },
       'indera': { icon: '👁️', title: 'Gangguan Indera Mata / Telinga' },
+      'indera_mata_kiri': { icon: '👁️', title: 'Mata Kiri' },
+      'indera_mata_kanan': { icon: '👁️', title: 'Mata Kanan' },
+      'indera_telinga_kiri': { icon: '👂', title: 'Telinga Kiri' },
+      'indera_telinga_kanan': { icon: '👂', title: 'Telinga Kanan' },
       'dental': { icon: '🦷', title: 'Kelengkapan Pemeriksaan Gigi & Mulut', description: 'Belum diperiksa dan data legacy yang perlu diverifikasi' }
   };
   const currentPopupInfo = popupDetailsInfo[popupConfig.type] || { icon: '📋', title: 'Detail Data Pasien' };
@@ -552,6 +596,18 @@ function Dashboard() {
           variant: 'warning'
       });
       return false;
+  };
+
+  const runExport = async (operation) => {
+      try {
+          const result = await operation();
+          if (result === false) setPesan('Ekspor tidak menghasilkan file. Periksa kategori atau data yang tersedia.');
+          else setPesan('File berhasil disiapkan untuk diunduh.');
+          setTimeout(() => setPesan(''), 4000);
+      } catch (error) {
+          console.error('Dashboard export failed:', error);
+          await alertDialog({ title: 'Ekspor gagal', message: 'File tidak dapat dibuat. Silakan coba lagi.', variant: 'error' });
+      }
   };
 
   const exportExcelKategori = async (kategori) => {
@@ -591,6 +647,16 @@ function Dashboard() {
           action: 'Export PDF kolektif',
           module: 'Dashboard',
           after: { total: completedFilteredVisits.length, filterTanggal: getExportContext() }
+      });
+  };
+
+  const exportDesa = async (desa, format) => {
+      await runExport(async () => {
+          const rows = completedFilteredVisits.filter((visit) => getDesa(visit) === desa);
+          if (!(await ensureExportHasData(rows))) return false;
+          const result = format === 'excel' ? await exportVillageExcel(rows, desa) : await exportVillagePDF(rows, desa);
+          await writeAuditLog({ action: `Export ${format.toUpperCase()} wilayah ${desa}`, module: 'Dashboard', after: { desa, total: rows.length } });
+          return result;
       });
   };
 
@@ -813,13 +879,32 @@ function Dashboard() {
         </div>
     ),
     'stat-indera': (
-        <div key="stat-indera" className={`h-full ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move rounded-[1.5rem] p-0.5' : ''}`}>
-            <CardStatClickable title="Indera" value={stats.klinis.indera} subtitle="Mata & Telinga" gradient="from-teal-500 to-emerald-600" icon="👁️" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'indera'}) : handlePublicRestrictedDetail()} />
+        <div key="stat-indera" className={`grid h-full grid-cols-2 gap-3 ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move rounded-[1.5rem] p-2' : ''}`}>
+            {[['Mata Kiri', 'mata_kiri', 'from-teal-500 to-emerald-600', '👁️'], ['Mata Kanan', 'mata_kanan', 'from-cyan-500 to-teal-600', '👁️'], ['Telinga Kiri', 'telinga_kiri', 'from-indigo-500 to-blue-600', '👂'], ['Telinga Kanan', 'telinga_kanan', 'from-violet-500 to-indigo-600', '👂']].map(([title, key, gradient, icon]) => (
+              <CardStatClickable key={key} title={title} value={inderaBreakdown[key]} subtitle="Perlu perhatian" gradient={gradient} icon={icon} onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: `indera_${key}`}) : handlePublicRestrictedDetail()} />
+            ))}
         </div>
     ),
     'stat-dental': (
         <div key="stat-dental" className={`h-full ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move rounded-[1.5rem] p-0.5' : ''}`}>
             <CardStatClickable title="Gigi & Mulut" value={dentalSummary.needsAttention} subtitle="Belum / verifikasi" gradient="from-violet-500 to-fuchsia-600" icon="🦷" onClick={() => isAdmin ? setPopupConfig({isOpen: true, type: 'dental'}) : handlePublicRestrictedDetail()} />
+        </div>
+    ),
+    'wilayah': (
+        <div key="wilayah" className={`h-full rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move' : ''}`}>
+            <div className="mb-3 border-b border-slate-100 pb-3">
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-800">Cakupan Desa/Kelurahan</h3>
+                <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">Kunjungan ÷ penduduk</p>
+            </div>
+            <div className="space-y-3">
+              {wilayahCoverageRows.map((row) => (
+                <div key={row.desa}>
+                  <div className="mb-1 flex items-center justify-between gap-2 text-[9px] font-black text-slate-600"><span className="truncate">{row.desa.replace('Desa ', '').replace('Kelurahan ', '')}</span><span className="text-teal-700">{row.coverage.toFixed(1)}%</span></div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-teal-500" style={{ width: `${Math.min(row.coverage, 100)}%` }} /></div>
+                  <div className="mt-1 text-[8px] font-bold text-slate-400">{row.total} kunjungan / {row.population.toLocaleString('id-ID')} jiwa</div>
+                </div>
+              ))}
+            </div>
         </div>
     ),
     'ekspor': isAdmin ? (
@@ -832,7 +917,7 @@ function Dashboard() {
                     </p>
                 </div>
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 {/* KOLEKTIF */}
                 <div className="flex flex-col gap-2 bg-slate-100/80 p-3 rounded-2xl border border-slate-200 shadow-sm">
                     <div className="flex items-center justify-center gap-2 mb-1">
@@ -857,7 +942,7 @@ function Dashboard() {
                             <button onClick={() => exportPdfKategori(k)} className="w-full bg-white hover:bg-red-500 hover:text-white border border-slate-200 p-2.5 rounded-xl text-[9px] font-black uppercase transition-all shadow-sm">UNDUH PDF</button>
                         </div>
                     </div>
-                ))}
+                              ))}
             </div>
         </div>
     ) : (
@@ -866,6 +951,22 @@ function Dashboard() {
             <p className="text-xs font-black uppercase tracking-widest text-center text-slate-500">Ekspor Terkunci<br/><span className="text-[9px] font-bold text-slate-400">Fitur Khusus Administrator</span></p>
         </div>
     ),
+    'ekspor-wilayah': isAdmin ? (
+        <div key="ekspor-wilayah" className={`h-full rounded-[1.5rem] border border-teal-100 bg-white p-4 shadow-sm ${isEditMode && !isMobile ? 'border-2 border-dashed border-amber-400 cursor-move' : ''}`}>
+          <div className="mb-3 flex items-center justify-between gap-3 border-b border-teal-100 pb-3">
+            <div><h3 className="text-[11px] font-black uppercase tracking-widest text-teal-800">Unduh per Desa/Kelurahan</h3><p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">Semua kelompok umur • mengikuti filter tanggal</p></div>
+            <span className="rounded-full bg-teal-50 px-3 py-1 text-[9px] font-black text-teal-700">Laporan Wilayah</span>
+          </div>
+          <div className="grid h-[calc(100%-3.25rem)] grid-cols-1 gap-3 md:grid-cols-3">
+            {['Desa Malimpung', 'Desa Padang Loang', 'Kelurahan Maccirinna'].map((desa) => (
+              <div key={desa} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5 shadow-sm">
+                <div className="min-w-0"><p className="truncate text-[10px] font-black text-slate-700">{desa}</p><p className="mt-1 text-[8px] font-bold uppercase text-slate-400">Excel / PDF satu tabel</p></div>
+                <div className="flex shrink-0 gap-1.5"><button onClick={() => exportDesa(desa, 'excel')} className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[9px] font-black text-emerald-700 transition hover:bg-emerald-600 hover:text-white">XLS</button><button onClick={() => exportDesa(desa, 'pdf')} className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[9px] font-black text-rose-700 transition hover:bg-rose-600 hover:text-white">PDF</button></div>
+              </div>
+            ))}
+          </div>
+        </div>
+    ) : null,
     'tabel': isAdmin ? (
         <div key="tabel" className={`bg-white rounded-[2.5rem] shadow-xl border overflow-hidden flex flex-col h-full min-h-[400px] ${isEditMode && !isMobile ? 'border-amber-400 cursor-move border-2' : 'border-slate-200'}`}>
             <div className="p-5 border-b flex flex-col lg:flex-row justify-between items-center gap-4 bg-slate-50/80 backdrop-blur-md sticky top-0 z-20">
@@ -1032,22 +1133,30 @@ function Dashboard() {
           <div className="dashboard-container">
 
               {/* BANNER HITAM */}
-          <div className="m-4 lg:m-6 bg-slate-900 rounded-2xl px-5 py-4 md:px-6 shadow-md border border-slate-800 flex flex-col md:flex-row justify-between items-center gap-3 relative overflow-hidden shrink-0">
+          <div className="m-4 lg:m-6 bg-slate-900 rounded-2xl px-4 py-4 md:px-6 md:py-5 shadow-md border border-slate-800 flex flex-col xl:flex-row xl:items-center justify-between gap-5 relative overflow-hidden shrink-0">
               <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
-              <div className="relative z-10 flex items-center gap-4">
-                  <div className="hidden md:flex w-16 h-16 bg-white rounded-2xl items-center justify-center border-4 border-emerald-400 p-1.5 animate-pulse shadow-lg shadow-emerald-500/50 shrink-0">
+              <div className="relative z-10 flex w-full xl:w-auto items-center gap-3 md:gap-4">
+                  <div className="flex w-11 h-11 md:w-16 md:h-16 bg-white rounded-xl md:rounded-2xl items-center justify-center border-2 md:border-4 border-emerald-400 p-1.5 shadow-lg shadow-emerald-500/30 shrink-0">
                       <img src="/logo_pinrang.png" alt="Logo Pinrang" className="w-full h-full object-contain" />
                   </div>
-                  <div className="text-center md:text-left">
-                      <h2 className="text-xl md:text-2xl font-black text-white tracking-tight drop-shadow-md leading-none">Dashboard Data TERSANJUNG</h2>
+                  <div className="text-left min-w-0">
+                      <h2 className="text-base md:text-2xl font-black text-white tracking-tight drop-shadow-md leading-tight truncate">Dashboard Data TERSANJUNG</h2>
                       <p className="text-emerald-400 text-[10px] mt-1 font-bold uppercase tracking-widest">Live Monitoring • Puskesmas Malimpung</p>
                   </div>
               </div>
 
-              <div className="relative z-10 flex flex-col sm:flex-row gap-2 w-full md:w-auto items-center shrink-0">
+              <div className="relative z-10 grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:w-[760px] xl:grid-cols-[1fr_1.35fr_2.1fr_auto] xl:items-end">
 
-                  <div className="flex items-center bg-white/10 backdrop-blur-md border border-white/20 rounded-lg px-2 w-full sm:w-auto">
+                  <label className="flex min-w-0 flex-col gap-1 rounded-xl border border-white/15 bg-white/10 px-2.5 py-2 backdrop-blur-md">
+                      <span className="text-xs mr-1">📅</span>
+                      <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-full sm:w-28 bg-transparent text-white py-2 font-bold text-xs outline-none cursor-pointer" aria-label="Tahun layanan CKG">
+                          {yearOptions.map((year) => <option key={year} value={String(year)} className="text-slate-900">CKG {year}</option>)}
+                          <option value="Semua" className="text-slate-900">Semua Tahun</option>
+                      </select>
+                  </label>
+
+                  <label className="flex min-w-0 flex-col gap-1 rounded-xl border border-white/15 bg-white/10 px-2.5 py-2 backdrop-blur-md">
                       <span className="text-xs mr-1">🌍</span>
                       <select value={filterDesa} onChange={(e) => setFilterDesa(e.target.value)} className="w-full sm:w-48 bg-transparent text-white py-2 font-bold text-xs outline-none cursor-pointer">
                           <option value="Semua" className="text-slate-900">Seluruh Wilayah Kerja</option>
@@ -1055,16 +1164,16 @@ function Dashboard() {
                           <option value="Desa Padang Loang" className="text-slate-900">Desa Padang Loang</option>
                           <option value="Kelurahan Maccirinna" className="text-slate-900">Kel. Maccirinna</option>
                       </select>
-                  </div>
+                  </label>
 
-                  <div className="flex w-full flex-col gap-1 rounded-lg border border-white/20 bg-white/10 px-2 py-1.5 backdrop-blur-md sm:w-auto">
+                  <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-white/15 bg-white/10 px-2.5 py-2 backdrop-blur-md sm:col-span-2 xl:col-span-1">
                       <span className="text-[8px] font-black uppercase tracking-widest text-emerald-100">Download CKG baru</span>
-                      <div className="flex items-center gap-1">
+                      <div className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-1">
                           <input
                               type="date"
                               value={filterStartDate}
                               onChange={(e) => setFilterStartDate(e.target.value)}
-                              className="w-full rounded-md bg-white px-2 py-1.5 text-[10px] font-black text-slate-900 outline-none sm:w-32"
+                              className="min-w-0 w-full rounded-md bg-white px-2 py-1.5 text-[10px] font-black text-slate-900 outline-none"
                               aria-label="Tanggal mulai download data CKG"
                           />
                           <span className="text-[10px] font-black text-white">s/d</span>
@@ -1072,7 +1181,7 @@ function Dashboard() {
                               type="date"
                               value={filterEndDate}
                               onChange={(e) => setFilterEndDate(e.target.value)}
-                              className="w-full rounded-md bg-white px-2 py-1.5 text-[10px] font-black text-slate-900 outline-none sm:w-32"
+                              className="min-w-0 w-full rounded-md bg-white px-2 py-1.5 text-[10px] font-black text-slate-900 outline-none"
                               aria-label="Tanggal akhir download data CKG"
                           />
                           {(filterStartDate || filterEndDate) && (
@@ -1092,7 +1201,7 @@ function Dashboard() {
                   </div>
 
                   {!isMobile && isAdmin && (
-                      <button onClick={resetLayout} className="w-full sm:w-auto bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 border border-rose-500 active:scale-95 shrink-0">
+                      <button onClick={resetLayout} className="w-full bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-3 rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 border border-rose-500 active:scale-95 shrink-0">
                           🔄 RESET LAYOUT
                       </button>
                   )}
@@ -1115,6 +1224,7 @@ function Dashboard() {
                       {widgets['traffic']}
                       {widgets['umur']}
                       {widgets['demografi']}
+                      {widgets['wilayah']}
                       {widgets['quality']}
                       {widgets['bottleneck']}
                       {/* Grid khusus kartu klinik di Mobile */}
@@ -1125,9 +1235,10 @@ function Dashboard() {
                           {widgets['stat-paru']}
                           {widgets['stat-mental']}
                           {widgets['stat-indera']}
-                          {widgets['stat-dental']}
+                      {widgets['stat-dental']}
                       </div>
                       {widgets['ekspor']}
+                      {widgets['ekspor-wilayah']}
                       {widgets['tabel']}
                   </div>
               ) : (
@@ -1173,6 +1284,12 @@ function Dashboard() {
                         </div>
                       </div>
                       <button onClick={() => setPopupConfig({isOpen: false, type: '', title: ''})} className="w-12 h-12 bg-slate-100 text-slate-500 hover:bg-rose-600 hover:text-white rounded-full flex items-center justify-center transition-all font-black shadow-inner">✕</button>
+                  </div>
+                  <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_220px]">
+                    <input value={popupSearch} onChange={(event) => setPopupSearch(event.target.value)} placeholder="Cari nama atau NIK..." className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-teal-500" />
+                    <select value={popupDesa} onChange={(event) => setPopupDesa(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-teal-500">
+                      {['Semua', 'Desa Malimpung', 'Desa Padang Loang', 'Kelurahan Maccirinna', 'Luar Wilayah'].map((desa) => <option key={desa} value={desa}>{desa}</option>)}
+                    </select>
                   </div>
                   <div className="flex-1 overflow-y-auto min-h-0 bg-slate-50/50 rounded-[2rem] p-4 border-2 border-slate-100 shadow-inner custom-scrollbar">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

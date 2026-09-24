@@ -23,6 +23,7 @@ const {
   buildStableNonNik,
   findCkgVisitByIdentityKeyInYear,
   findCkgVisitInYear,
+  getServiceYear,
   getVisitYear
 } = await import('./ckgValidation');
 
@@ -45,10 +46,21 @@ describe('ckgValidation', () => {
     expect(getVisitYear({ tanggal_kunjungan: '2026-05-22' })).toBe(2026);
   });
 
+  it('prioritizes the stored service year when it is available', () => {
+    expect(getVisitYear({
+      serviceYear: 2025,
+      tanggal_kunjungan: '2026-05-22'
+    })).toBe(2025);
+  });
+
+  it('derives the current service year from the Makassar timezone', () => {
+    expect(getServiceYear(new Date('2026-01-01T00:00:00+08:00'))).toBe(2026);
+  });
+
   it('finds duplicate CKG visit in the same year by NIK', async () => {
     firestoreState.docs = [
-      { id: 'old', data: { patientNIK: '7312000000000001', tanggal_kunjungan: '2025-01-01' } },
-      { id: 'same-year', data: { patientNIK: '7312000000000001', tanggal_kunjungan: '2026-03-01' } }
+      { id: 'old', data: { patientNIK: '7312000000000001', serviceYear: 2025, tanggal_kunjungan: '2025-01-01' } },
+      { id: 'same-year', data: { patientNIK: '7312000000000001', serviceYear: 2026, tanggal_kunjungan: '2026-03-01' } }
     ];
 
     const duplicate = await findCkgVisitInYear({}, '7312000000000001', { year: 2026 });

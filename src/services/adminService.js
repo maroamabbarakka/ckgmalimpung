@@ -9,6 +9,7 @@ import {
   orderBy,
   query,
   runTransaction,
+  serverTimestamp,
   updateDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -113,10 +114,18 @@ export async function toggleStaffActive(staff) {
     const staffDoc = await transaction.get(staffRef);
     if (!staffDoc.exists()) throw new Error('Data pegawai tidak ditemukan!');
     newStatus = !staffDoc.data().isActive;
-    transaction.update(staffRef, { isActive: newStatus });
+    transaction.update(staffRef, { isActive: newStatus, archived: newStatus ? false : true });
   });
 
   return newStatus;
+}
+
+export async function archiveStaff(staffId) {
+  await updateDoc(doc(db, 'staff', staffId), {
+    isActive: false,
+    archived: true,
+    archivedAt: serverTimestamp()
+  });
 }
 
 export async function resetStaffPin(staffId) {

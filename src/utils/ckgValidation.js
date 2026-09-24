@@ -35,7 +35,12 @@ const getVisitDate = (visit) => {
   return null;
 };
 
-export const getVisitYear = (visit) => getVisitDate(visit)?.getFullYear() || null;
+export const getServiceYear = (date = new Date()) => Number(new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Makassar',
+  year: 'numeric'
+}).format(date));
+
+export const getVisitYear = (visit) => Number(visit?.serviceYear) || (getVisitDate(visit) ? getServiceYear(getVisitDate(visit)) : null);
 
 export const formatVisitDate = (visit) => {
   const date = getVisitDate(visit);
@@ -43,7 +48,7 @@ export const formatVisitDate = (visit) => {
   return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
 };
 
-export const findCkgVisitInYear = async (db, nik, { year = new Date().getFullYear(), excludeVisitId = null } = {}) => {
+export const findCkgVisitInYear = async (db, nik, { year = getServiceYear(), excludeVisitId = null } = {}) => {
   if (!nik || String(nik).startsWith('NONIK')) return null;
 
   const snapshot = await getDocs(query(collection(db, 'visits'), where('patientNIK', '==', nik)));
@@ -55,7 +60,7 @@ export const findCkgVisitInYear = async (db, nik, { year = new Date().getFullYea
   return visits.find((visit) => getVisitYear(visit) === year) || null;
 };
 
-export const findCkgVisitByIdentityKeyInYear = async (db, identityKey, { year = new Date().getFullYear(), excludeVisitId = null } = {}) => {
+export const findCkgVisitByIdentityKeyInYear = async (db, identityKey, { year = getServiceYear(), excludeVisitId = null } = {}) => {
   if (!identityKey) return null;
 
   const snapshot = await getDocs(query(collection(db, 'visits'), where('patient_identity_key', '==', identityKey)));

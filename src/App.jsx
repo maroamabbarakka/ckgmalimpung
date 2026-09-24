@@ -195,6 +195,10 @@ const NavMobileItem = ({ to, icon, label, isActive, isAllowed, onClick, type = '
 
 function MobileBottomNav({ pathname, hasAccess }) {
   const navigate = useNavigate();
+  const { hasPosition, user } = useAuth();
+  const hasPosAccess = (item) => (Array.isArray(user?.positions) && user.positions.length > 0)
+    ? hasPosition([item.position])
+    : hasAccess(item.roles);
   const [activePanel, setActivePanel] = useState(null);
 
   useEffect(() => {
@@ -209,15 +213,15 @@ function MobileBottomNav({ pathname, hasAccess }) {
     return pathname === item.to;
   };
 
-  const allowedPosItems = posCards.filter((item) => item.to.startsWith('/pos') && hasAccess(item.roles));
+  const allowedPosItems = posCards.filter((item) => item.to.startsWith('/pos') && hasPosAccess(item));
   const allowedMenuItems = [
-    { to: '/kunjungan-rumah', label: 'Door to Door', subtitle: 'Layanan lapangan', icon: 'route', roles: roleGroups.field },
+    { to: '/kunjungan-rumah', position: 'DOOR TO DOOR', label: 'Door to Door', subtitle: 'Layanan lapangan', icon: 'route', roles: roleGroups.field },
     { to: '/loket', label: 'Loket Tiket', subtitle: 'Ambil antrean', icon: 'ticket', roles: roleGroups.staff },
     { to: '/dashboard', label: 'Dashboard', subtitle: 'Pantau antrean', icon: 'chart', roles: roleGroups.dashboard },
     { to: '/tv', label: 'Layar Antrean', subtitle: 'Mode display', icon: 'workflow', roles: roleGroups.staff },
     { to: '/admin', label: 'Admin', subtitle: 'Operasional', icon: 'shield', roles: roleGroups.simpeg },
     { to: '/tentang', label: 'Tentang', subtitle: 'Info aplikasi', icon: 'clipboard' },
-  ].filter((item) => !item.roles || hasAccess(item.roles));
+  ].filter((item) => !item.roles || hasAccess(item.roles) || (item.position && hasPosition([item.position])));
 
   const openPanel = (panel) => {
     setActivePanel((current) => (current === panel ? null : panel));
@@ -299,12 +303,14 @@ function MobileBottomNav({ pathname, hasAccess }) {
 }
 
 function Beranda() {
-  const { isAuthenticated, hasAnyRole } = useAuth();
+  const { isAuthenticated, hasAnyRole, hasPosition, user } = useAuth();
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
   const [draftCount, setDraftCount] = useState(0);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const isAdmin = hasAnyRole(['admin']);
-  const allowedPosCards = posCards.filter((item) => hasAnyRole(item.roles));
+  const allowedPosCards = posCards.filter((item) => (Array.isArray(user?.positions) && user.positions.length > 0)
+    ? hasPosition([item.position])
+    : hasAnyRole(item.roles));
   const workflowCount = allowedPosCards.filter((item) => item.to.startsWith('/pos')).length;
   const moduleCards = [
     { to: '/loket', title: 'Loket Tiket', subtitle: 'Antrean', icon: 'ticket', isAllowed: hasAnyRole(roleGroups.staff) },
@@ -542,7 +548,7 @@ function NotFoundPage() {
 function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated, user, signOut, hasAnyRole } = useAuth();
+  const { isAuthenticated, user, signOut, hasAnyRole, hasPosition } = useAuth();
   const isActive = (path) => location.pathname === path;
   const isAdmin = user?.roles?.includes('admin');
   const hasAccess = (allowedRoles) => !allowedRoles || hasAnyRole(allowedRoles);
@@ -594,7 +600,7 @@ function AppShell() {
               <Link to="/" className={`nav-item ${isActive('/') ? 'active' : ''}`}>Beranda</Link>
               <NavDesktopItem to="/loket" label="Loket" isActive={isActive('/loket')} isAllowed={hasAccess(roleGroups.staff)} />
               {posNavItems.map((item) => (
-                <NavDesktopItem key={item.to} to={item.to} label={item.label} isActive={isActive(item.to)} isAllowed={hasAccess(item.roles)} />
+                <NavDesktopItem key={item.to} to={item.to} label={item.label} isActive={isActive(item.to)} isAllowed={(Array.isArray(user?.positions) && user.positions.length > 0) ? hasPosition([item.position]) : hasAccess(item.roles)} />
               ))}
               <NavDesktopItem to="/dashboard" label="Data" isActive={isActive('/dashboard')} isAllowed={hasAccess(roleGroups.dashboard)} />
             </div>
@@ -662,16 +668,16 @@ function AppShell() {
             <Route path="/tentang" element={<Tentang />} />
             <Route path="/rapor" element={<RequireAuth><RaporDigital /></RequireAuth>} />
             <Route path="/rapor/:id" element={<RaporDigital />} />
-            <Route path="/pos1" element={<RequireRole allowedRoles={roleGroups.pos1}><Pos1 /></RequireRole>} />
-            <Route path="/pos2" element={<RequireRole allowedRoles={roleGroups.pos2}><Pos2 /></RequireRole>} />
-            <Route path="/pos3" element={<RequireRole allowedRoles={roleGroups.pos3}><Pos3 /></RequireRole>} />
-            <Route path="/pos4" element={<RequireRole allowedRoles={roleGroups.pos4}><Pos4 /></RequireRole>} />
-            <Route path="/pos5" element={<RequireRole allowedRoles={roleGroups.pos5}><Pos5 /></RequireRole>} />
-            <Route path="/pos6" element={<RequireRole allowedRoles={roleGroups.pos6}><Pos6 /></RequireRole>} />
-            <Route path="/pos7" element={<RequireRole allowedRoles={roleGroups.pos7}><Pos7 /></RequireRole>} />
+            <Route path="/pos1" element={<RequireRole allowedRoles={roleGroups.pos1} allowedPositions={['POS 1']}><Pos1 /></RequireRole>} />
+            <Route path="/pos2" element={<RequireRole allowedRoles={roleGroups.pos2} allowedPositions={['POS 2']}><Pos2 /></RequireRole>} />
+            <Route path="/pos3" element={<RequireRole allowedRoles={roleGroups.pos3} allowedPositions={['POS 3']}><Pos3 /></RequireRole>} />
+            <Route path="/pos4" element={<RequireRole allowedRoles={roleGroups.pos4} allowedPositions={['POS 4']}><Pos4 /></RequireRole>} />
+            <Route path="/pos5" element={<RequireRole allowedRoles={roleGroups.pos5} allowedPositions={['POS 5']}><Pos5 /></RequireRole>} />
+            <Route path="/pos6" element={<RequireRole allowedRoles={roleGroups.pos6} allowedPositions={['POS 6']}><Pos6 /></RequireRole>} />
+            <Route path="/pos7" element={<RequireRole allowedRoles={roleGroups.pos7} allowedPositions={['POS 7']}><Pos7 /></RequireRole>} />
             <Route path="/dashboard" element={<RequireRole allowedRoles={roleGroups.dashboard}><Dashboard /></RequireRole>} />
             <Route path="/recovery" element={<RequireAuth><RecoveryPage /></RequireAuth>} />
-            <Route path="/kunjungan-rumah" element={<RequireRole allowedRoles={roleGroups.field}><KunjunganRumah /></RequireRole>} />
+            <Route path="/kunjungan-rumah" element={<RequireRole allowedRoles={roleGroups.field} allowedPositions={['DOOR TO DOOR']}><KunjunganRumah /></RequireRole>} />
             <Route path="/kunjungan" element={<Navigate to="/kunjungan-rumah" replace />} />
             <Route path="/admin" element={<RequireRole allowedRoles={['admin']}><AdminDashboard /></RequireRole>} />
             <Route path="/admin-dashboard" element={<RequireRole allowedRoles={['admin']}><AdminDashboard /></RequireRole>} />

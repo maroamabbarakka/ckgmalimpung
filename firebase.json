@@ -4,6 +4,7 @@
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
+    "site": "ckg-malimpung",
     "public": "dist",
     "ignore": [
       "firebase.json",

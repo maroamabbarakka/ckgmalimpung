@@ -3,6 +3,29 @@ import { isValidIsoDate } from '../../utils/dateAge';
 const FINAL_STATUSES = new Set(['FINALIZED', 'Selesai']);
 const VALID_GENDERS = new Set(['L', 'P']);
 
+export function getCanonicalStatus(visit = {}) {
+  return String(visit.status_antrian || visit.status || '').trim();
+}
+
+export function getCanonicalPatientName(visit = {}) {
+  const patient = getPatientSnapshot(visit);
+  return getFirstValue(visit.nama, patient.nama, visit.name);
+}
+
+export function getCanonicalVillage(visit = {}) {
+  const patient = getPatientSnapshot(visit);
+  return getFirstValue(patient.desa, visit.desa, visit.desa_pelaksanaan);
+}
+
+export function hasDoctorValidation(visit = {}) {
+  return Boolean(
+    visit.validasiDokter ||
+    visit.dokter_pemeriksa ||
+    visit.pos7?.validasiDokter ||
+    visit.pos7?.dokter_pemeriksa
+  );
+}
+
 function getFirstValue(...values) {
   return values.find((value) => value !== undefined && value !== null && String(value).trim() !== '');
 }
@@ -46,7 +69,7 @@ export function evaluateVisitDataQuality(visit = {}) {
   const birthDate = normalizeText(getFirstValue(visit.patientBirthDate, patient.tgl_lahir, visit.tgl_lahir));
   const gender = normalizeText(getFirstValue(visit.jenisKelamin, patient.j_kelamin, visit.j_kelamin));
   const village = normalizeText(getFirstValue(patient.desa, visit.desa, visit.desa_pelaksanaan));
-  const status = normalizeText(getFirstValue(visit.status, visit.status_antrian));
+  const status = normalizeText(getCanonicalStatus(visit));
 
   if (!nik) {
     issues.push({ code: 'MISSING_NIK', severity: 'warning', message: 'NIK belum terisi.' });
@@ -74,7 +97,7 @@ export function evaluateVisitDataQuality(visit = {}) {
     issues.push({ code: 'INVALID_WORKFLOW', severity: 'error', message: 'Status workflow belum tersedia.' });
   }
 
-  if (FINAL_STATUSES.has(status) && !visit.validasiDokter && !visit.pos7?.validasiDokter) {
+  if (FINAL_STATUSES.has(status) && !hasDoctorValidation(visit)) {
     issues.push({ code: 'FINALIZED_WITHOUT_DOCTOR', severity: 'error', message: 'Finalisasi belum punya validasi dokter.' });
   }
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
-import { formatVisitDate } from './utils/ckgValidation';
+import { formatVisitDate, getServiceYear } from './utils/ckgValidation';
 import { createQrDataUrl } from './utils/qrCode';
 import { STATUS_MAPPING } from './utils/constants';
 import { writeAuditLog } from './services/auditService';
@@ -685,6 +685,7 @@ function KunjunganRumah() {
         patient_identity_key: identityKey,
         kategori_usia_satusehat: dataUmur.kategori,
         umur_saat_periksa: dataUmur.tahun,
+        serviceYear: getServiceYear(),
         status_antrian: STATUS_MAPPING.SELESAI,
         waktu_ambil_tiket: nowTimestamp(),
         waktu_selesai_total: nowTimestamp(),

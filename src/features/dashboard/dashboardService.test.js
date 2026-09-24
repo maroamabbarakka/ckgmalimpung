@@ -26,4 +26,18 @@ describe('dashboardService', () => {
     expect(quality.invalidWorkflow).toBe(1);
     expect(quality.finalizedWithoutDoctor).toBe(1);
   });
+
+  it('does not mark a completed snapshot visit incomplete because root fields are absent', () => {
+    const metrics = calculateDashboardMetrics([{
+      status: 'FINALIZED',
+      status_antrian: 'Selesai',
+      patientNIK: '7312000000000001',
+      pasien_snapshot: { nama: 'A', tgl_lahir: '1990-01-01', j_kelamin: 'L', desa: 'Desa Malimpung' },
+      dokter_pemeriksa: 'Dokter/Petugas',
+      tanggal_kunjungan: '2026-01-01'
+    }]);
+
+    expect(metrics.incomplete).toBe(0);
+    expect(metrics.finalized).toBe(1);
+  });
 });
