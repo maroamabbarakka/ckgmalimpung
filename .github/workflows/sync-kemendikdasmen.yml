@@ -1,0 +1,62 @@
+name: Sinkronisasi Bulanan Data Siswa Kemendikdasmen
+
+on:
+  schedule:
+    # Berjalan 1 kali per bulan (tanggal 1 pukul 02:00 UTC)
+    - cron: '0 2 1 * *'
+  workflow_dispatch:
+    inputs:
+      apply_changes:
+        description: 'Terapkan perubahan ke database Firestore (--apply)'
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  sync:
+    name: Sinkronisasi Data Referensi Kemendikdasmen
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Kode
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependensi
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Periksa Kredensial Firebase Service Account
+        id: check_credentials
+        run: |
+          if [ -z "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" ]; then
+            echo "FIREBASE_SERVICE_ACCOUNT_JSON belum disetel pada GitHub Secrets."
+            echo "has_secret=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_secret=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Jalankan Sinkronisasi (Dry Run jika tanpa secret atau tanpa --apply)
+        if: steps.check_credentials.outputs.has_secret == 'true'
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ "${{ github.event.inputs.apply_changes }}" = "true" ]; then
+            echo "Menjalankan sinkronisasi dengan --apply..."
+            node scripts/syncDapodikPublic.js --apply
+          else
+            echo "Menjalankan sinkronisasi dalam mode DRY-RUN (tanpa menulis ke database)..."
+            node scripts/syncDapodikPublic.js
+          fi
+
+      - name: Notifikasi Aman Jika Kredensial Belum Dikonfigurasi
+        if: steps.check_credentials.outputs.has_secret != 'true'
+        run: |
+          echo "::notice ::Workflow dilewati secara aman karena secret FIREBASE_SERVICE_ACCOUNT_JSON belum dikonfigurasi. Untuk mengaktifkan sinkronisasi otomatis bulanan, tambahkan service account JSON ke repository secrets."

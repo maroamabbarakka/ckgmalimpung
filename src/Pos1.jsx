@@ -13,6 +13,7 @@ import { claimVisitForStaff, createTvQueueCall } from './services/queueService';
 import { buildPatientPayload, findCurrentYearCkgVisit, getPatientByNik, upsertPatient } from './services/patientService';
 import { buildPatientSnapshot, getVisitsByPatientNik, nowTimestamp, updateVisit } from './services/visitService';
 import { subscribeAdminSchools } from './services/adminService';
+import { getCkgTargetSchools, isSchoolCompatibleWithAgeCategory } from './features/schools/schoolScope';
 import useQueue from './hooks/useQueue';
 import { useAutosaveDraft } from './hooks/useAutosaveDraft';
 import { clearDraft, loadDraft } from './utils/draftStorage';
@@ -219,6 +220,13 @@ function Pos1() {
 
   useEffect(() => subscribeAdminSchools(setSchoolList), []);
 
+  const ckgTargetSchools = useMemo(() => getCkgTargetSchools(schoolList), [schoolList]);
+  const compatibleSchools = useMemo(() => {
+    return ckgTargetSchools.filter(
+      (school) => school.isActive !== false && isSchoolCompatibleWithAgeCategory(school.level, dataUmur.kategori)
+    );
+  }, [ckgTargetSchools, dataUmur.kategori]);
+
   const draftData = useMemo(() => ({
     formData,
     tanpaNik,
@@ -342,7 +350,10 @@ function Pos1() {
           status_perkawinan: snap.status && snap.status !== '-' ? snap.status : 'Belum Kawin',
           tgl_lahir: validSnapBirthDate, j_kelamin: snap.j_kelamin || 'P', no_hp: snap.no_hp || '',
           desa: latestItem.desa_pelaksanaan || 'Desa Malimpung', dusun: latestItem.tempat_pelaksanaan || WILAYAH_KERJA[latestItem.desa_pelaksanaan || 'Desa Malimpung'][0],
-          nik_wali: '', nama_wali: '', tgl_lahir_wali: '', hubungan_wali: 'Ibu', no_hp_wali: ''
+          nik_wali: '', nama_wali: '', tgl_lahir_wali: '', hubungan_wali: 'Ibu', no_hp_wali: '',
+          educationStatus: latestItem.educationStatus || snap.educationStatus || 'sekolah_wilayah',
+          schoolId: latestItem.schoolId || snap.schoolId || '',
+          schoolClass: latestItem.schoolClass || snap.schoolClass || ''
       };
       const draft = loadDraft('pos1', latestItem.id);
       const shouldRestoreDraft = draft?.data && await confirmDialog({
@@ -361,9 +372,9 @@ function Pos1() {
       setFormData({
         ...serverFormData,
         ...restoredFormData,
-        educationStatus: restoredFormData.educationStatus || 'sekolah_wilayah',
-        schoolId: restoredFormData.schoolId || '',
-        schoolClass: restoredFormData.schoolClass || ''
+        educationStatus: restoredFormData.educationStatus || serverFormData.educationStatus || 'sekolah_wilayah',
+        schoolId: restoredFormData.schoolId || serverFormData.schoolId || '',
+        schoolClass: restoredFormData.schoolClass || serverFormData.schoolClass || ''
       });
       setDraftSavedAt(draft?.savedAt ? new Date(draft.savedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '');
 
@@ -685,7 +696,8 @@ function Pos1() {
     try {
       const isSchoolAge = ['SD', 'SMP', 'SMA'].includes(dataUmur.kategori);
       const educationStatus = isSchoolAge ? (formData.educationStatus || 'sekolah_wilayah') : null;
-      const selectedSchool = schoolList.find((school) => school.id === formData.schoolId);
+      const selectedSchool = ckgTargetSchools.find((school) => school.id === formData.schoolId || (school.aliasIds && school.aliasIds.includes(formData.schoolId)))
+        || schoolList.find((school) => school.id === formData.schoolId);
       if (isSchoolAge && educationStatus === 'sekolah_wilayah' && !selectedSchool) {
         setPesan('⚠️ Pilih nama sekolah dari Sarana Binaan atau pilih Sekolah Luar Wilayah.');
         setLoading(false);
@@ -727,6 +739,7 @@ function Pos1() {
         schoolNameSnapshot: selectedSchool?.name || (educationStatus === 'sekolah_luar_wilayah' ? 'Sekolah Luar Wilayah' : null),
         schoolLevel: selectedSchool?.level || null,
         schoolClass: selectedSchool ? formData.schoolClass || null : null,
+        npsn: selectedSchool?.npsn || null,
         status: VISIT_STATUS.POS1_COMPLETE,
         status_antrian: STATUS_MAPPING.POS2, 
         tanggal_kunjungan: nowTimestamp(),
@@ -742,7 +755,8 @@ function Pos1() {
             schoolId: selectedSchool?.id || null,
             schoolName: selectedSchool?.name || (educationStatus === 'sekolah_luar_wilayah' ? 'Sekolah Luar Wilayah' : null),
             schoolLevel: selectedSchool?.level || null,
-            schoolClass: selectedSchool ? formData.schoolClass || null : null
+            schoolClass: selectedSchool ? formData.schoolClass || null : null,
+            npsn: selectedSchool?.npsn || null
         }), 
         petugas_pos1: namaPetugas,
         petugas_aktif: null,
@@ -1048,13 +1062,44 @@ function Pos1() {
                           </select>
                         </div>
                         {formData.educationStatus === 'sekolah_wilayah' && (
-                          <div>
-                            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-widest text-slate-500">Nama Sekolah Binaan *</label>
-                            <select name="schoolId" value={formData.schoolId} onChange={handleChange} required className="w-full min-h-[44px] rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500">
-                              <option value="">Pilih sekolah...</option>
-                              {schoolList.filter((school) => school.isActive !== false).map((school) => <option key={school.id} value={school.id}>{school.name} — {school.level}</option>)}
-                            </select>
-                            {schoolList.length === 0 && <p className="mt-1.5 text-[10px] font-bold text-rose-600">Data sekolah binaan belum tersedia. Tambahkan melalui Admin &gt; Sarana Binaan.</p>}
+                          <div className="space-y-3">
+                            <div>
+                              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-widest text-slate-500">Nama Sekolah Binaan *</label>
+                              <select name="schoolId" value={formData.schoolId} onChange={handleChange} required className="w-full min-h-[44px] rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500">
+                                <option value="">Pilih sekolah...</option>
+                                {(() => {
+                                  // Pastikan jika sekolah terpilih berasal dari dokumen lama, tetap muncul
+                                  const options = [...compatibleSchools];
+                                  if (formData.schoolId && !options.some((s) => s.id === formData.schoolId || (s.aliasIds && s.aliasIds.includes(formData.schoolId)))) {
+                                    const legacySchool = schoolList.find((s) => s.id === formData.schoolId);
+                                    if (legacySchool) {
+                                      options.unshift(legacySchool);
+                                    }
+                                  }
+                                  return options.map((school) => (
+                                    <option key={school.id} value={school.id}>
+                                      {school.name} — {school.level} · {school.desa}
+                                    </option>
+                                  ));
+                                })()}
+                              </select>
+                              {compatibleSchools.length === 0 && (
+                                <p className="mt-1.5 text-[10px] font-semibold text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                                  Tidak ada satuan pendidikan jenjang {dataUmur.kategori} di wilayah binaan 3 desa/kelurahan. Silakan gunakan pilihan &ldquo;Sekolah Luar Wilayah&rdquo;.
+                                </p>
+                              )}
+                            </div>
+                            <div>
+                              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-widest text-slate-500">Tingkat / Kelas (Opsional)</label>
+                              <input
+                                type="text"
+                                name="schoolClass"
+                                value={formData.schoolClass || ''}
+                                onChange={handleChange}
+                                placeholder="Contoh: Kelas 4 / 4A"
+                                className="w-full min-h-[44px] rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-500"
+                              />
+                            </div>
                           </div>
                         )}
                       </div>

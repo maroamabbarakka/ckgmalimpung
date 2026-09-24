@@ -42,6 +42,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  FileSpreadsheet,
   KeyRound,
   Plus,
   Search,
@@ -53,7 +54,6 @@ import {
   deleteSchool,
   archiveStaff,
   fetchCollectionBackup,
-  removeDuplicateSchools,
   resetStaffPin,
   saveSchool,
   saveStaff,
@@ -63,6 +63,8 @@ import {
   subscribeAdminVisits,
   toggleStaffActive
 } from './services/adminService';
+import { getCkgTargetSchools } from './features/schools/schoolScope';
+import { buildSchoolRowAnalytics, calculateAggregateSummary } from './features/schools/schoolAnalytics';
 
 const LOGO_PINRANG = '/logo_pinrang.png';
 const LOGO_MALIMPUNG = '/logo_malimpung.png';
@@ -182,26 +184,6 @@ const normalizeText = (value) =>
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
-const visitMatchesSchool = (visit, school) => {
-  // Hanya hubungkan data anak sekolah
-  if (getCluster(visit) !== 'Anak/Siswa' && getCluster(visit) !== 'Bayi/Balita') return false;
-
-  const haystack = normalizeText(JSON.stringify(visit));
-  const schoolName = normalizeText(school.name);
-  const npsn = normalizeText(school.npsn);
-  
-  // Hindari false positive dari kata-kata umum jika schoolName terlalu pendek
-  if (schoolName && schoolName.length < 4) return false;
-
-  // Data baru menggunakan ID master sekolah; ini menjadi pencocokan utama.
-  if (visit.schoolId && school.id) return visit.schoolId === school.id;
-  if (visit.pasien_snapshot?.schoolId && school.id) return visit.pasien_snapshot.schoolId === school.id;
-  
-  return (
-    (schoolName && haystack.includes(schoolName)) ||
-    (npsn && npsn !== '-' && npsn.length > 3 && haystack.includes(npsn))
-  );
-};
 
 const getRiskStats = (visits) => {
   const stats = {
@@ -320,6 +302,8 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
   const [activeMenu, setActiveMenu] = useState(initialMenu);
   const [openMonth, setOpenMonth] = useState(new Date().getMonth());
   const [schoolSearch, setSchoolSearch] = useState('');
+  const [schoolLevelFilter, setSchoolLevelFilter] = useState('Semua');
+  const [schoolWilayahFilter, setSchoolWilayahFilter] = useState('Semua');
   const [schoolList, setSchoolList] = useState([]);
   const [dapodikSync, setDapodikSync] = useState({ open: false, year: '2026/2027', rows: [], errors: [], fileName: '' });
   const [isSchoolModalOpen, setIsSchoolModalOpen] = useState(false);
@@ -645,19 +629,11 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
       };
     });
 
-    const search = normalizeText(schoolSearch);
-    const schools = schoolList.filter((school) => {
-      if (!search) return true;
-      return [school.name, school.level, school.desa, school.address].some((value) => normalizeText(value).includes(search));
-    }).map((school) => {
-      const matchedVisits = filteredVisits.filter((visit) => visitMatchesSchool(visit, school));
-      const desaVisits = filteredVisits.filter((visit) => getDesa(visit) === school.desa && getCluster(visit) === 'Anak/Siswa');
+    const schools = getCkgTargetSchools(schoolList).map((school) => {
+      const row = buildSchoolRowAnalytics(school, filteredVisits);
       return {
-        ...school,
-        screened: matchedVisits.length,
-        desaStudentScreened: desaVisits.length,
-        status: matchedVisits.length > 0 ? 'Terdeteksi di data' : desaVisits.length > 0 ? 'Perlu verifikasi sekolah' : 'Perlu follow-up',
-        patients: matchedVisits
+        ...row,
+        patients: row.completedPatients.length > 0 ? row.completedPatients : row.matchedVisits
       };
     });
 
@@ -668,7 +644,47 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
       schools,
       priorityDusun: byDusun.filter((item) => item.risikoTotal > 0).slice(0, 8)
     };
-  }, [filteredVisits, schoolSearch, schoolList, currentDateMs]);
+  }, [filteredVisits, schoolList, currentDateMs]);
+
+  const ckgTargetSchools = useMemo(() => getCkgTargetSchools(schoolList), [schoolList]);
+
+  const schoolRowsAnalytics = useMemo(() => {
+    return ckgTargetSchools.map((school) => {
+      const row = buildSchoolRowAnalytics(school, filteredVisits);
+      return {
+        ...row,
+        patients: row.completedPatients.length > 0 ? row.completedPatients : row.matchedVisits
+      };
+    });
+  }, [ckgTargetSchools, filteredVisits]);
+
+  const schoolSummary = useMemo(() => {
+    return calculateAggregateSummary(schoolRowsAnalytics);
+  }, [schoolRowsAnalytics]);
+
+  const filteredSchoolRows = useMemo(() => {
+    const search = normalizeText(schoolSearch);
+    return schoolRowsAnalytics.filter((school) => {
+      if (schoolLevelFilter !== 'Semua') {
+        if (schoolLevelFilter === 'SD/MI' && !['SD', 'MI'].includes(school.level)) return false;
+        if (schoolLevelFilter === 'SMP/MTs' && !['SMP', 'MTs'].includes(school.level)) return false;
+        if (schoolLevelFilter === 'TK/RA/PAUD' && !['TK/PAUD', 'TK', 'RA', 'PAUD', 'BA', 'TA'].includes(school.level)) return false;
+      }
+
+      if (schoolWilayahFilter !== 'Semua') {
+        if (school.desa !== schoolWilayahFilter) return false;
+      }
+
+      if (!search) return true;
+      return [
+        school.name,
+        school.npsn,
+        school.level,
+        school.desa,
+        school.address
+      ].some((val) => normalizeText(val).includes(search));
+    });
+  }, [schoolRowsAnalytics, schoolSearch, schoolLevelFilter, schoolWilayahFilter]);
 
   const filteredStaff = useMemo(() => {
     const search = normalizeText(staffSearch);
@@ -744,31 +760,13 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
 
 
 
-  const cleanDuplicates = async () => {
-    const confirmed = await requestAdminConfirm({
-      title: 'Bersihkan data ganda?',
-      message: `Sistem akan memeriksa dan membersihkan duplikasi dari ${schoolList.length} data sarana binaan.`,
-      confirmLabel: 'Bersihkan',
-      variant: 'danger'
-    });
-    if (!confirmed) return;
-    try {
-      const deletedCount = await removeDuplicateSchools();
-      showAdminNotice({ title: 'Duplikasi dibersihkan', message: `${deletedCount} data ganda berhasil dibersihkan.` });
-    } catch (e) {
-      showAdminNotice({ type: 'error', title: 'Gagal membersihkan data', message: e.message });
-    }
-  };
-
-  
-    
   const openSchoolForm = (school = null) => {
     const snapshots = Object.entries(school?.studentSnapshots || {}).sort(([a], [b]) => b.localeCompare(a));
-    const latestTotal = snapshots[0]?.[1]?.totalStudents || school?.totalStudents || '';
+    const latestTotal = snapshots[0]?.[1]?.totalStudents ?? school?.totalStudents ?? '';
     setEditSchool(
       school
-        ? { ...school, totalStudents: latestTotal }
-        : { name: '', level: 'SD', desa: 'Desa Malimpung', address: '', npsn: '-', source: 'Admin Input', totalStudents: '' }
+        ? { ...school, totalStudents: latestTotal !== null ? latestTotal : '' }
+        : { name: '', level: 'SD', desa: 'Desa Malimpung', address: '', npsn: '', source: 'Admin Input', totalStudents: '' }
     );
     setIsSchoolModalOpen(true);
   };
@@ -777,20 +775,24 @@ function AdminDashboard({ initialMenu = 'wilayah' }) {
     e.preventDefault();
     try {
       const schoolName = editSchool.name;
-      const totalStudents = Number(editSchool.totalStudents) || 0;
+      const rawTotal = editSchool.totalStudents;
+      const hasNumberInput = rawTotal !== '' && rawTotal !== null && rawTotal !== undefined;
+      const totalStudents = hasNumberInput ? Math.max(0, Number(rawTotal)) : null;
+
       const updatedSnapshots = { ...(editSchool.studentSnapshots || {}) };
-      if (totalStudents > 0) {
+      if (totalStudents !== null && !isNaN(totalStudents)) {
         const academicYear = '2026/2027';
         updatedSnapshots[academicYear] = {
           totalStudents,
-          source: editSchool.npsn && editSchool.npsn !== '-' ? 'Kemendikdasmen Residu' : 'Admin Input',
+          source: 'Admin Input', // Selalu 'Admin Input' untuk input/edit manual oleh admin
           syncedAt: new Date().toISOString()
         };
       }
       const payload = {
         ...editSchool,
         totalStudents,
-        studentSnapshots: updatedSnapshots
+        studentSnapshots: updatedSnapshots,
+        source: editSchool.source || 'Admin Input'
       };
       await saveSchool(payload);
       await logActivity(`${editSchool.id ? 'Edit' : 'Tambah'} Sekolah: ${schoolName}`, 'Admin Dashboard');
@@ -2570,176 +2572,288 @@ const activeUsername = normalizeText(user?.username);
 
 
           {activeMenu === 'sekolah' && (
-              <section className="space-y-6">
-                <div className="rounded-lg border border-slate-200 bg-white p-6">
-                  <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 md:flex-row md:items-end md:justify-between">
-                    <div>
-                      <h3 className="text-xl font-black text-slate-950">Basis Data Sekolah & Sinkronisasi</h3>
-                      <p className="text-sm font-medium text-slate-500">
-                        Cari, perbarui, dan validasi data sekolah. Data akan disinkronkan otomatis dengan kunjungan pasien (Klaster Anak/Siswa).
-                      </p>
-                    </div>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                        <label className="cursor-pointer rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-xs font-black text-emerald-700 shadow-sm transition hover:bg-emerald-100">
-                          Sinkron Dapodik
-                          <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) parseDapodikFile(file); event.target.value = ''; }} />
-                        </label>
-                        <button type="button" onClick={cleanDuplicates} className="rounded-lg border border-rose-200 px-4 py-2 text-xs font-black text-rose-700 hover:bg-rose-50 mr-2 shadow-sm">
-                          Hapus Duplikat
-                        </button>
-                        <button type="button" onClick={() => openSchoolForm()} className="rounded-lg bg-teal-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-teal-700">
-                          + Tambah Sekolah
-                        </button>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-5 mb-5 flex">
+            <section className="space-y-6">
+              {/* Header & Subtitle */}
+              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-xl font-black text-slate-950">Data Sarana Binaan</h3>
+                  <p className="mt-0.5 text-xs font-semibold text-slate-500">
+                    Manajemen Data Fasilitas dan Sarana Satuan Pendidikan Wilayah CKG Malimpung
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-black text-emerald-700 shadow-xs transition hover:bg-emerald-100">
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Impor Excel/CSV
                     <input
-                      type="search"
-                      value={schoolSearch}
-                      onChange={(event) => setSchoolSearch(event.target.value)}
-                      placeholder="Pencarian spesifik: nama sekolah, jenjang, desa, NPSN..."
-                      className="h-11 w-full rounded-lg border border-slate-300 px-4 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 shadow-sm"
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) parseDapodikFile(file);
+                        event.target.value = '';
+                      }}
                     />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => openSchoolForm()}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-xs font-black text-white shadow-xs transition hover:bg-teal-700 active:scale-95"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Tambah Sekolah
+                  </button>
+                </div>
+              </div>
+
+              {/* Compact Summary KPI (4 Kartu Ringkas) */}
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Satuan Pendidikan</span>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <span className="text-2xl font-black text-slate-900">{schoolSummary.totalSchools}</span>
+                    <span className="text-[11px] font-bold text-slate-500">Sasaran Wilayah</span>
                   </div>
+                  <p className="mt-1 text-[10px] font-semibold text-slate-400">3 Wilayah Puskesmas</p>
+                </div>
 
-                  <p className="-mt-3 mb-5 text-[10px] font-semibold text-slate-400">Unggah Excel/CSV hasil ekspor Dapodik. Pencocokan menggunakan NPSN dan disimpan sebagai snapshot per tahun ajaran.</p>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Jumlah Siswa</span>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <span className="text-2xl font-black text-indigo-700">{formatNumber(schoolSummary.totalStudents)}</span>
+                    <span className="text-[11px] font-bold text-slate-500">Murid Terdata</span>
+                  </div>
+                  <p className="mt-1 text-[10px] font-semibold text-slate-400">Sumber: Kemendikdasmen</p>
+                </div>
 
-                  {wilayahAnalytics.schools.length === 0 ? (
-                     <div className="py-12 text-center text-slate-500 font-semibold bg-slate-50 rounded-lg border border-dashed border-slate-300">Belum ada data sekolah atau pencarian tidak ditemukan. (Total Database: {schoolList.length})</div>
-                  ) : (
-                    <div className="space-y-8">
-                      {['SD/MI', 'SMP/MTs', 'SMA/SMK/MA', 'TK/PAUD/Lainnya'].map(group => {
-                         const groupSchools = wilayahAnalytics.schools.filter(s => {
-                           if (group === 'SD/MI') return ['SD', 'MI'].includes(s.level);
-                           if (group === 'SMP/MTs') return ['SMP', 'MTs'].includes(s.level);
-                           if (group === 'SMA/SMK/MA') return ['SMA', 'SMK', 'MA'].includes(s.level);
-                           return !['SD','MI','SMP','MTs','SMA','SMK','MA'].includes(s.level);
-                         });
-                         
-                         if (groupSchools.length === 0) return null;
-                         
-                         return (
-                           <div key={group} className="animate-in fade-in duration-500">
-                             <h4 className="text-xl font-black text-slate-800 mb-4 pb-2 border-b border-slate-200">{group}</h4>
-                             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                               {groupSchools.map(school => (
-                                 <div key={`${school.id}-${school.name}`} className="flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-teal-300">
-                                   <div className="flex items-start justify-between gap-3">
-                                     <div>
-                                       <p className="font-black text-slate-950 leading-tight">{school.name}</p>
-                                       <p className="mt-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                         {school.level} - {school.desa}
-                                       </p>
-                                     </div>
-                                     <button type="button" onClick={() => openSchoolForm(school)} className="rounded-md bg-slate-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-600 hover:bg-slate-200">
-                                       Edit
-                                     </button>
-                                   </div>
-                                   
-                                   <p className="mt-4 text-xs font-semibold leading-relaxed text-slate-600 border-l-2 border-slate-200 pl-3">{school.address || 'Alamat belum diatur'}</p>
-                                   <p className="mt-2 text-[10px] font-black text-slate-400">NPSN: <span className="text-slate-600">{school.npsn}</span></p>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Sudah Diperiksa</span>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <span className="text-2xl font-black text-teal-700">{formatNumber(schoolSummary.totalExamined)}</span>
+                    <span className="text-[11px] font-bold text-slate-500">Anak Unik</span>
+                  </div>
+                  <p className="mt-1 text-[10px] font-semibold text-slate-400">Pemeriksaan CKG Selesai</p>
+                </div>
 
-                                   <div className="mt-5 grid grid-cols-2 gap-3 text-xs flex-1">
-                                     <div className="rounded-lg bg-teal-50 p-3 flex flex-col justify-center">
-                                       <p className="font-black text-teal-700 text-lg">{formatNumber(school.screened)}</p>
-                                       <p className="font-bold text-teal-700/80 mt-0.5">Siswa Terdeteksi</p>
-                                     </div>
-                                     <div className="rounded-lg bg-amber-50 p-3 flex flex-col justify-center">
-                                       <p className="font-black text-amber-700 text-lg">{formatNumber(school.desaStudentScreened)}</p>
-                                       <p className="font-bold text-amber-700/80 mt-0.5">Siswa Sedesa</p>
-                                     </div>
-                                   </div>
-                                   {(() => {
-                                      const snapshots = Object.entries(school.studentSnapshots || {}).sort(([a], [b]) => b.localeCompare(a));
-                                      const latestSnapshot = snapshots[0]?.[1];
-                                      const totalDapodik = Number(latestSnapshot?.totalStudents || school.totalStudents) || 0;
-                                      const screenedCount = school.screened || 0;
-                                      const pct = totalDapodik > 0 ? Math.min(100, Math.round((screenedCount / totalDapodik) * 100)) : 0;
-                                      const yearLabel = snapshots[0]?.[0] || '2026/2027';
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Cakupan Terukur</span>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <span className="text-2xl font-black text-emerald-700">{schoolSummary.aggregateCoverageDisplay}</span>
+                    <span className="text-[11px] font-bold text-slate-500">Rasio Total</span>
+                  </div>
+                  <p className="mt-1 text-[10px] font-semibold text-slate-400">
+                    {schoolSummary.schoolsWithDenominatorCount} sekolah ber-target &gt; 0
+                  </p>
+                </div>
+              </div>
 
-                                      return (
-                                        <div className="mt-3 rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50/90 to-purple-50/50 p-3.5 shadow-xs">
-                                          <div className="flex items-center justify-between">
-                                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-800">Capaian Skrining Siswa</span>
-                                            {totalDapodik > 0 ? (
-                                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${pct >= 80 ? 'bg-emerald-100 text-emerald-800' : pct >= 50 ? 'bg-teal-100 text-teal-800' : 'bg-amber-100 text-amber-800'}`}>
-                                                {pct}% Tercakup
-                                              </span>
-                                            ) : (
-                                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-500">
-                                                Target Belum Diisi
-                                              </span>
-                                            )}
-                                          </div>
+              {/* Toolbar Pencarian & Filter */}
+              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs md:flex-row md:items-center">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="search"
+                    value={schoolSearch}
+                    onChange={(event) => setSchoolSearch(event.target.value)}
+                    placeholder="Cari sekolah: nama, NPSN, jenjang, desa, atau alamat..."
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-xs font-bold text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-100"
+                  />
+                </div>
 
-                                          {totalDapodik > 0 ? (
-                                            <>
-                                              <div className="mt-2 flex items-baseline justify-between text-xs">
-                                                <span className="font-extrabold text-slate-900">{formatNumber(screenedCount)} <span className="text-[11px] font-medium text-slate-500">diperiksa</span></span>
-                                                <span className="text-[11px] font-semibold text-slate-500">Target: {formatNumber(totalDapodik)} murid ({yearLabel})</span>
-                                              </div>
-                                              <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-200/80">
-                                                <div
-                                                  className={`h-full rounded-full transition-all duration-700 ${pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-teal-500' : 'bg-amber-500'}`}
-                                                  style={{ width: `${pct}%` }}
-                                                />
-                                              </div>
-                                            </>
-                                          ) : (
-                                            <p className="mt-1.5 text-[10px] font-semibold text-slate-500">
-                                              Target jumlah murid riil belum diisi. Masukkan total siswa untuk mengaktifkan kalkulasi persentase.
-                                            </p>
-                                          )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={schoolLevelFilter}
+                    onChange={(e) => setSchoolLevelFilter(e.target.value)}
+                    className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 outline-none transition focus:border-teal-500 focus:bg-white"
+                  >
+                    <option value="Semua">Semua Jenjang</option>
+                    <option value="SD/MI">SD / MI</option>
+                    <option value="SMP/MTs">SMP / MTs</option>
+                    <option value="TK/RA/PAUD">TK / RA / PAUD</option>
+                  </select>
 
-                                          <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-indigo-100/70 pt-2 text-[10px]">
-                                            {school.npsn && school.npsn !== '-' ? (
-                                              <a
-                                                href={`https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/${school.npsn}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-1 font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
-                                                title="Lihat data murid resmi di portal Kemendikdasmen (tab Residu Data Master)"
-                                              >
-                                                <ExternalLink className="h-3 w-3" />
-                                                Cek Data Kemendikdasmen
-                                              </a>
-                                            ) : (
-                                              <span className="text-slate-400">NPSN belum ada</span>
-                                            )}
-                                            <button
-                                              type="button"
-                                              onClick={() => openSchoolForm(school)}
-                                              className="font-black text-indigo-700 hover:text-indigo-900"
-                                            >
-                                              {totalDapodik > 0 ? 'Perbarui Target' : '+ Isi Target Siswa'}
-                                            </button>
-                                          </div>
-                                        </div>
-                                      );
-                                    })()}
-                                   
-                                   <div className="mt-4 pt-4 border-t border-slate-100">
-                                      <button 
-                                        type="button" 
-                                        onClick={() => setSelectedSchoolPatients(school)}
-                                        disabled={!school.patients || school.patients.length === 0}
-                                        className={`w-full rounded-lg py-2.5 text-xs font-black transition-colors ${school.patients && school.patients.length > 0 ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-md' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
-                                      >
-                                        {school.patients && school.patients.length > 0 ? `Lihat ${school.patients.length} Pasien Terhubung` : 'Belum Ada Pasien Terhubung'}
-                                      </button>
-                                   </div>
-                                 </div>
-                               ))}
-                             </div>
-                           </div>
-                         );
-                      })}
-                    </div>
+                  <select
+                    value={schoolWilayahFilter}
+                    onChange={(e) => setSchoolWilayahFilter(e.target.value)}
+                    className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 outline-none transition focus:border-teal-500 focus:bg-white"
+                  >
+                    <option value="Semua">Semua Wilayah</option>
+                    <option value="Desa Malimpung">Desa Malimpung</option>
+                    <option value="Desa Padangloang">Desa Padangloang</option>
+                    <option value="Kelurahan Maccirinna">Kelurahan Maccirinna</option>
+                  </select>
+
+                  {(schoolSearch || schoolLevelFilter !== 'Semua' || schoolWilayahFilter !== 'Semua') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSchoolSearch('');
+                        setSchoolLevelFilter('Semua');
+                        setSchoolWilayahFilter('Semua');
+                      }}
+                      className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50"
+                    >
+                      Reset Filter
+                    </button>
                   )}
                 </div>
-              </section>
-            )}
+              </div>
+
+              {/* Tabel Ringkas Data Sarana Binaan (Desktop & Mobile Friendly) */}
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+                {filteredSchoolRows.length === 0 ? (
+                  <div className="py-12 text-center text-xs font-bold text-slate-400">
+                    Tidak ada sekolah yang cocok dengan pencarian atau filter yang dipilih.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[760px] text-left text-xs">
+                      <thead className="border-b border-slate-100 bg-slate-50/80 font-black uppercase tracking-wider text-slate-500">
+                        <tr>
+                          <th className="p-3.5 pl-5">Sekolah</th>
+                          <th className="p-3.5">Jenjang & Wilayah</th>
+                          <th className="p-3.5 text-right">Siswa</th>
+                          <th className="p-3.5 text-right">Diperiksa</th>
+                          <th className="p-3.5 text-right">Cakupan</th>
+                          <th className="p-3.5 pr-5 text-center">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                        {filteredSchoolRows.map((school) => {
+                          const hasDenominator = school.studentCount !== null && school.studentCount > 0;
+                          return (
+                            <tr key={`${school.npsn}-${school.id}`} className="transition hover:bg-slate-50/70">
+                              {/* Kolom Sekolah & NPSN */}
+                              <td className="p-3.5 pl-5">
+                                <div className="font-black text-slate-900 leading-snug">{school.name}</div>
+                                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400">
+                                  <span className="font-bold text-slate-600">NPSN: {school.npsn}</span>
+                                  <span>·</span>
+                                  <span className="truncate max-w-[280px]" title={school.address || school.desa}>
+                                    {school.address || school.desa}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Kolom Jenjang & Wilayah */}
+                              <td className="p-3.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">
+                                    {school.level}
+                                  </span>
+                                  <span className="text-[11px] font-bold text-slate-600">{school.desa}</span>
+                                </div>
+                              </td>
+
+                              {/* Kolom Siswa */}
+                              <td className="p-3.5 text-right">
+                                <div className="font-black text-slate-900">
+                                  {school.studentCount !== null ? formatNumber(school.studentCount) : '—'}
+                                </div>
+                                <div className="text-[10px] font-semibold text-slate-400">
+                                  {school.academicYear ? `${school.academicYear}` : school.sourceName || 'Residu'}
+                                </div>
+                              </td>
+
+                              {/* Kolom Diperiksa (Anak Unik Selesai CKG) */}
+                              <td className="p-3.5 text-right">
+                                {school.examinedCount > 0 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedSchoolPatients(school)}
+                                    className="inline-flex items-center gap-1 rounded-lg bg-teal-50 px-2.5 py-1 text-xs font-black text-teal-700 transition hover:bg-teal-100"
+                                    title="Lihat daftar pasien yang telah menyelesaikan CKG"
+                                  >
+                                    <span>{formatNumber(school.examinedCount)}</span>
+                                    <span className="text-[10px] font-semibold text-teal-600/70">anak</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-400 font-bold">0</span>
+                                )}
+                              </td>
+
+                              {/* Kolom Cakupan */}
+                              <td className="p-3.5 text-right">
+                                <div className="inline-flex flex-col items-end">
+                                  <span
+                                    className={`font-black ${
+                                      school.isOverTarget
+                                        ? 'text-amber-700'
+                                        : school.coveragePct >= 80
+                                        ? 'text-emerald-700'
+                                        : school.coveragePct >= 50
+                                        ? 'text-teal-700'
+                                        : school.coveragePct > 0
+                                        ? 'text-slate-800'
+                                        : 'text-slate-400'
+                                    }`}
+                                  >
+                                    {school.coverageDisplay}
+                                  </span>
+                                  {hasDenominator && (
+                                    <div className="mt-1 h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+                                      <div
+                                        className={`h-full rounded-full transition-all duration-500 ${
+                                          school.isOverTarget
+                                            ? 'bg-amber-500'
+                                            : school.coveragePct >= 80
+                                            ? 'bg-emerald-500'
+                                            : school.coveragePct >= 50
+                                            ? 'bg-teal-500'
+                                            : 'bg-slate-400'
+                                        }`}
+                                        style={{ width: `${school.visualWidth}%` }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Kolom Aksi */}
+                              <td className="p-3.5 pr-5 text-center">
+                                <div className="inline-flex items-center justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => openSchoolForm(school)}
+                                    className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700 transition hover:bg-slate-200"
+                                    title="Edit data sekolah atau perbarui target siswa"
+                                  >
+                                    Edit
+                                  </button>
+                                  {school.npsn && school.npsn !== '-' && (
+                                    <a
+                                      href={`https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/${school.npsn}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center rounded-lg p-1 text-indigo-600 transition hover:bg-indigo-50 hover:text-indigo-800"
+                                      title="Buka referensi resmi Kemendikdasmen di tab baru"
+                                    >
+                                      <ExternalLink className="h-3.5 w-3.5" />
+                                    </a>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Single Disclaimer Ringkas Sesuai Bagian N */}
+                <div className="border-t border-slate-100 bg-slate-50/60 p-4 text-[11px] font-semibold text-slate-500">
+                  <p>
+                    Data jumlah peserta didik mengacu pada Data Referensi/Residu Kemendikdasmen dan mengikuti data terakhir yang tersedia pada waktu sinkronisasi.
+                  </p>
+                  <p className="mt-0.5 text-slate-400">
+                    Persentase dihitung bila jumlah siswa lebih dari 0. Nilai di atas 100% tetap ditampilkan sebagai bahan evaluasi.
+                  </p>
+                </div>
+              </div>
+            </section>
+          )}
 
             {activeMenu === 'simpeg' && (
               <section className="space-y-6">
@@ -3548,7 +3662,7 @@ const activeUsername = normalizeText(user?.username);
         <div className="fixed inset-0 z-[125] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
           <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-              <div><h2 className="text-xl font-black text-slate-950">Preview Sinkronisasi Dapodik</h2><p className="text-xs font-semibold text-slate-500">{dapodikSync.fileName || 'File impor'} · tidak ada data disimpan sebelum konfirmasi.</p></div>
+              <div><h2 className="text-xl font-black text-slate-950">Preview Impor Data Siswa (Excel/CSV)</h2><p className="text-xs font-semibold text-slate-500">{dapodikSync.fileName || 'File impor'} · tidak ada data disimpan sebelum konfirmasi.</p></div>
               <button type="button" onClick={() => setDapodikSync((prev) => ({ ...prev, open: false }))} className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-500">Tutup</button>
             </div>
             <label className="mt-5 block text-xs font-black uppercase tracking-wider text-slate-500">Tahun Ajaran
@@ -3556,7 +3670,7 @@ const activeUsername = normalizeText(user?.username);
             </label>
             <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200"><table className="w-full min-w-[620px] text-left text-xs"><thead className="bg-slate-50 font-black text-slate-500"><tr><th className="p-3">NPSN</th><th className="p-3">Sekolah</th><th className="p-3 text-right">Jumlah Siswa</th><th className="p-3">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{dapodikSync.rows.map((row) => <tr key={`${row.npsn}-${row.schoolId}`}><td className="p-3 font-bold">{row.npsn}</td><td className="p-3">{row.schoolName}</td><td className="p-3 text-right font-black">{formatNumber(row.totalStudents)}</td><td className="p-3 font-bold text-emerald-700">Siap disimpan</td></tr>)}{!dapodikSync.rows.length && <tr><td colSpan="4" className="p-6 text-center text-slate-400">Tidak ada baris valid untuk disimpan.</td></tr>}</tbody></table></div>
             {dapodikSync.errors.length > 0 && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-800">{dapodikSync.errors.length} baris dilewati karena NPSN belum cocok, jumlah siswa tidak valid, atau data belum lengkap.</div>}
-            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setDapodikSync((prev) => ({ ...prev, open: false }))} className="rounded-lg border border-slate-200 px-5 py-3 text-xs font-black text-slate-600">Batal</button><button type="button" disabled={!dapodikSync.rows.length || !dapodikSync.year} onClick={applyDapodikSync} className="rounded-lg bg-teal-600 px-5 py-3 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-40">Simpan Snapshot Dapodik</button></div>
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setDapodikSync((prev) => ({ ...prev, open: false }))} className="rounded-lg border border-slate-200 px-5 py-3 text-xs font-black text-slate-600">Batal</button><button type="button" disabled={!dapodikSync.rows.length || !dapodikSync.year} onClick={applyDapodikSync} className="rounded-lg bg-teal-600 px-5 py-3 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-40">Simpan Snapshot Impor</button></div>
           </div>
         </div>
       )}
@@ -3566,8 +3680,14 @@ const activeUsername = normalizeText(user?.username);
           <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 p-5">
               <div>
-                <h2 className="text-xl font-black text-slate-950">{editSchool.id ? 'Edit Data Sekolah' : 'Tambah Sekolah Baru'}</h2>
-                <p className="text-xs font-semibold text-slate-500">Pastikan penulisan nama spesifik agar deteksi data pasien akurat.</p>
+                <h2 className="text-xl font-black text-slate-950">
+                  {editSchool.id && !editSchool.isVirtual ? 'Edit Data Sekolah' : 'Tambah Sekolah Baru'}
+                </h2>
+                <p className="text-xs font-semibold text-slate-500">
+                  {editSchool.npsn && editSchool.npsn !== '-'
+                    ? 'Satuan pendidikan resmi terhubung dengan data referensi Kemendikdasmen.'
+                    : 'Tambah fasilitas/sekolah lokal secara mandiri.'}
+                </p>
               </div>
               <button type="button" onClick={() => setIsSchoolModalOpen(false)} className="rounded-lg bg-white px-3 py-2 text-sm font-black text-slate-500 shadow-sm hover:text-rose-600">
                 Batal
@@ -3576,13 +3696,23 @@ const activeUsername = normalizeText(user?.username);
             <form onSubmit={handleSaveSchool} className="overflow-y-auto p-6 space-y-4">
               <label className="block">
                 <span className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-500">Nama Sekolah Lengkap</span>
-                <input value={editSchool.name} onChange={(e) => setEditSchool({ ...editSchool, name: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-teal-500" placeholder="Contoh: UPT SD Negeri 123 Pinrang" required />
+                <input
+                  value={editSchool.name}
+                  onChange={(e) => setEditSchool({ ...editSchool, name: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-teal-500"
+                  placeholder="Contoh: UPT SD Negeri 123 Pinrang"
+                  required
+                />
               </label>
               
               <div className="grid grid-cols-2 gap-4">
                 <label className="block">
                   <span className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-500">Jenjang</span>
-                  <select value={editSchool.level} onChange={(e) => setEditSchool({ ...editSchool, level: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-teal-500">
+                  <select
+                    value={editSchool.level}
+                    onChange={(e) => setEditSchool({ ...editSchool, level: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-teal-500"
+                  >
                     <option value="TK/PAUD">TK/PAUD</option>
                     <option value="SD">SD</option>
                     <option value="MI">MI</option>
@@ -3594,22 +3724,43 @@ const activeUsername = normalizeText(user?.username);
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-500">NPSN Sekolah</span>
-                  <input value={editSchool.npsn} onChange={(e) => setEditSchool({ ...editSchool, npsn: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-teal-500" placeholder="Contoh: 70057285" />
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="block text-xs font-black uppercase tracking-wider text-slate-500">NPSN Sekolah</span>
+                    {editSchool.id && editSchool.npsn && editSchool.npsn !== '-' && (
+                      <span className="text-[10px] font-bold text-indigo-600">Primary ID Resmi</span>
+                    )}
+                  </div>
+                  <input
+                    value={editSchool.npsn || ''}
+                    readOnly={Boolean(editSchool.id && editSchool.npsn && editSchool.npsn !== '-' && !editSchool.isVirtual)}
+                    onChange={(e) => setEditSchool({ ...editSchool, npsn: e.target.value })}
+                    className={`w-full rounded-lg border px-3 py-2.5 text-sm font-semibold outline-none ${
+                      editSchool.id && editSchool.npsn && editSchool.npsn !== '-' && !editSchool.isVirtual
+                        ? 'border-slate-200 bg-slate-100 text-slate-600 cursor-not-allowed'
+                        : 'border-slate-300 focus:border-teal-500'
+                    }`}
+                    placeholder="Contoh: 40304322"
+                  />
+                  {editSchool.id && editSchool.npsn && editSchool.npsn !== '-' && !editSchool.isVirtual && (
+                    <p className="mt-1 text-[10px] font-medium text-slate-400">
+                      NPSN dikunci untuk menjaga integritas sinkronisasi referensi Kemendikdasmen.
+                    </p>
+                  )}
                 </label>
               </div>
 
               <label className="block">
                 <span className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-500">
-                  Total Peserta Didik / Siswa (Dapodik / Kemendikdasmen)
+                  Total Peserta Didik / Siswa (Kemendikdasmen / Riil)
                 </span>
                 <div className="flex gap-2">
                   <input
                     type="number"
-                    value={editSchool.totalStudents || ''}
+                    min="0"
+                    value={editSchool.totalStudents ?? ''}
                     onChange={(e) => setEditSchool({ ...editSchool, totalStudents: e.target.value })}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-teal-500"
-                    placeholder="Contoh: 23 (lihat tab Residu Data Master)"
+                    placeholder="Contoh: 153 (jika 0, isi 0)"
                   />
                   {editSchool.npsn && editSchool.npsn !== '-' && (
                     <a
@@ -3625,32 +3776,42 @@ const activeUsername = normalizeText(user?.username);
                   )}
                 </div>
                 <p className="mt-1 text-[10px] font-semibold text-slate-400">
-                  Data ini digunakan sebagai penyebut untuk menghitung persentase capaian skrining CKG secara otomatis.
+                  Data ini digunakan sebagai denominator untuk menghitung persentase cakupan skrining CKG.
                 </p>
               </label>
 
               <div className="grid grid-cols-2 gap-4">
                 <label className="block col-span-2">
                   <span className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-500">Desa/Kelurahan</span>
-                  <select value={editSchool.desa} onChange={(e) => setEditSchool({ ...editSchool, desa: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-teal-500">
+                  <select
+                    value={editSchool.desa}
+                    onChange={(e) => setEditSchool({ ...editSchool, desa: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-teal-500"
+                  >
                     <option value="Desa Malimpung">Desa Malimpung</option>
-                    <option value="Desa Padang Loang">Desa Padang Loang</option>
+                    <option value="Desa Padangloang">Desa Padangloang</option>
                     <option value="Kelurahan Maccirinna">Kelurahan Maccirinna</option>
                   </select>
                 </label>
                 <label className="block col-span-2">
                   <span className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-500">Alamat Spesifik</span>
-                  <input value={editSchool.address} onChange={(e) => setEditSchool({ ...editSchool, address: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-teal-500" placeholder="Alamat dusun/lingkungan" required />
+                  <input
+                    value={editSchool.address || ''}
+                    onChange={(e) => setEditSchool({ ...editSchool, address: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none focus:border-teal-500"
+                    placeholder="Alamat dusun/lingkungan"
+                    required
+                  />
                 </label>
               </div>
 
               <div className="mt-6 border-t border-slate-100 pt-5 flex gap-3">
-                {editSchool.id && (
+                {editSchool.id && !editSchool.isVirtual && (
                   <button type="button" onClick={() => handleDeleteSchool(editSchool.id)} className="w-1/3 rounded-lg bg-rose-50 text-rose-600 border border-rose-200 py-3 text-sm font-black hover:bg-rose-100 shadow-sm transition">
                     Hapus
                   </button>
                 )}
-                <button type="submit" className={`${editSchool.id ? 'w-2/3' : 'w-full'} rounded-lg bg-teal-600 py-3 text-sm font-black text-white hover:bg-teal-700 shadow-md transition`}>
+                <button type="submit" className={`${editSchool.id && !editSchool.isVirtual ? 'w-2/3' : 'w-full'} rounded-lg bg-teal-600 py-3 text-sm font-black text-white hover:bg-teal-700 shadow-md transition`}>
                   Simpan Data Sekolah
                 </button>
               </div>

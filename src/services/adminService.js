@@ -50,35 +50,6 @@ export function subscribeActivityLogs(onChange, onError, maxRows = 200) {
   return onSnapshot(logsQuery, (snapshot) => onChange(mapDocs(snapshot)), onError);
 }
 
-export async function removeDuplicateSchools() {
-  const snapshot = await getDocs(collection(db, 'schools'));
-  const unique = new Set();
-  const duplicatesToDelete = [];
-
-  for (const item of snapshot.docs) {
-    const data = item.data();
-    const name = String(data.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    const npsn = String(data.npsn || '').trim();
-    const key = npsn && npsn !== '-' && npsn.length > 3 ? `npsn_${npsn}` : `name_${name}`;
-
-    if (unique.has(key)) {
-      duplicatesToDelete.push(item.ref);
-    } else {
-      unique.add(key);
-    }
-  }
-
-  if (duplicatesToDelete.length > 0) {
-    await runTransaction(db, async (transaction) => {
-      for (const ref of duplicatesToDelete) {
-        const docSnap = await transaction.get(ref);
-        if (docSnap.exists()) transaction.delete(ref);
-      }
-    });
-  }
-
-  return duplicatesToDelete.length;
-}
 
 export async function saveSchool(school) {
   const payload = { ...school, lastUpdated: new Date().toISOString() };
