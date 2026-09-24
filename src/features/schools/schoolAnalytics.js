@@ -33,9 +33,8 @@ export function getStablePatientKey(visit) {
 
   if (visit.patient_identity_key && typeof visit.patient_identity_key === 'string') {
     const raw = visit.patient_identity_key.trim().toLowerCase();
-    const match = raw.match(/nik[_:\s]*([0-9a-z]+)/i);
-    if (match) return `nik_${match[1]}`;
-    return raw;
+    const cleanKey = raw.replace(/^nik[_:\s]*/i, '');
+    return `nik_${cleanKey}`;
   }
 
   const nik = visit.patientNIK || visit.nik || visit.pasien_snapshot?.nik;
