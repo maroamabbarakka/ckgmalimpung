@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Dokumentasi TERSANJUNG v4.4</title>
+<title>Dokumentasi TERSANJUNG v4.4 - Revisi Oktober 2026</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -898,7 +898,8 @@ body.mobile-menu-open .mobile-drawer{
       <a href="#keamanan-privasi-dan-integritas-infrastruktur">10. Keamanan, Privasi, dan Integritas Infrastruktur</a>
       <a href="#milestone-pengembangan-terkini">11. Milestone Pengembangan Terkini</a>
       <a href="#smart-ui-ux-standard">12. SMART UI/UX Standard</a>
-      <a href="#rekomendasi-lanjutan">13. Rekomendasi Lanjutan</a>
+      <a href="#kondisi-aktual-2026">13. Kondisi Aktual 2026</a>
+      <a href="#rekomendasi-lanjutan">14. Rekomendasi Lanjutan</a>
   </nav>
 </aside>
 
@@ -918,7 +919,8 @@ body.mobile-menu-open .mobile-drawer{
 <a href="#keamanan-privasi-dan-integritas-infrastruktur">10. Keamanan, Privasi, dan Integritas Infrastruktur</a>
 <a href="#milestone-pengembangan-terkini">11. Milestone Pengembangan Terkini</a>
 <a href="#smart-ui-ux-standard">12. SMART UI/UX Standard</a>
-<a href="#rekomendasi-lanjutan">13. Rekomendasi Lanjutan</a>
+<a href="#kondisi-aktual-2026">13. Kondisi Aktual 2026</a>
+<a href="#rekomendasi-lanjutan">14. Rekomendasi Lanjutan</a>
     </nav>
   </aside>
 
@@ -937,7 +939,7 @@ body.mobile-menu-open .mobile-drawer{
           <img alt="Logo Puskesmas Malimpung" class="logo" onerror="this.onerror=null;this.src='/logo_malimpung.png';" src="logo_malimpung.png"/>
         </div>
 
-        <div class="hero-badge">Production-ready • SMART UI/UX • Mei 2026</div>
+        <div class="hero-badge">Production &bull; SMART UI/UX &bull; Audit kode 26 Oktober 2026</div>
         <h1>Laporan Komprehensif Pengembangan Aplikasi TERSANJUNG v4.4</h1>
         <p class="subtitle">Dokumen teknis dan operasional terbaru untuk Sistem Informasi CKG UPT Puskesmas Malimpung sebagai Healthcare Workflow Super App</p>
 
@@ -945,8 +947,10 @@ body.mobile-menu-open .mobile-drawer{
 
         Nama Sistem: TERSANJUNG (Sistem Informasi Layanan Kesehatan Berbasis Jaringan Terpadu Puskesmas Malimpung)<br/>
         Institusi: UPT Puskesmas Malimpung<br/>
-        Status Sistem: Production-ready, real-time, dan siap dipakai di dalam gedung maupun layanan lapangan<br/>
-        Pembaruan Laporan: 29 Mei 2026
+        Status Sistem: Production; layanan inti, dashboard, dan layanan lapangan tersedia dengan kontrol akses berbasis peran<br/>
+        Versi Aplikasi: 4.4.0 (versi sumber tetap; laporan ini merekam perubahan pascarilis)<br/>
+        Basis Audit: source code commit <code>0e22f41</code>, 24 September 2026<br/>
+        Pembaruan Laporan: 26 Oktober 2026
 
         </div>
       </section>
@@ -954,11 +958,12 @@ body.mobile-menu-open .mobile-drawer{
       <section class="doc-section" id="ringkasan-eksekutif">
 <h2 id="ringkasan-eksekutif-title">1. Ringkasan Eksekutif</h2>
 <p>TERSANJUNG adalah aplikasi rekam medis dan dashboard operasional yang dirancang khusus untuk mendukung layanan Cek Kesehatan Gratis (CKG) di UPT Puskesmas Malimpung. Sistem ini menggabungkan registrasi pasien, antrean, skrining klinis per pos, rapor digital, dashboard pemantauan, ekspor laporan, serta alur kunjungan rumah dalam satu aplikasi berbasis web.</p>
-<p>Pembaruan terkini memperkuat empat area strategis: <b>Ketahanan Infrastruktur Cloud</b> melalui pembatasan kuota Firebase secara cerdas, <b>Keamanan Data</b> via eksekusi transaksional (Atomicity), <b>Optimasi Performa UI</b> dengan arsitektur <i>Code-Splitting</i>, serta <b>SMART Healthcare Workflow UI</b> yang menyeragamkan dashboard, Loket, Pos 1-7, Door to Door, bottom navigation, dan analitik wilayah agar lebih cepat dipakai petugas.</p>
+<p>Pembaruan sampai baseline kode 24 September 2026 memperkuat enam area strategis: <b>ketahanan data</b> melalui draft lokal dan antrean sinkronisasi, <b>keamanan layanan lapangan</b> melalui RBAC Door-to-Door dan provenance operator, <b>mutu klinis</b> melalui indikator kelengkapan Gigi &amp; Mulut, <b>ketahanan antrean</b> saat kuota Firestore bermasalah, <b>analitik sarana binaan</b> untuk 16 sekolah sasaran resmi, serta <b>SMART Healthcare Workflow UI</b> untuk penggunaan desktop dan mobile.</p>
 <div class="grid">
 <div class="card"><strong>18</strong><span>Form skrining utama</span></div>
 <div class="card"><strong>1.548</strong><span>Pertanyaan RME</span></div>
 <div class="card"><strong>Multi-dokumen</strong><span>KTP, KK, BPJS/KIS/JKN</span></div>
+<div class="card"><strong>16 sekolah</strong><span>Sasaran resmi berbasis NPSN pada 3 wilayah kerja</span></div>
 </div>
 </section>
 
@@ -974,13 +979,14 @@ body.mobile-menu-open .mobile-drawer{
 <tr><td>UI dan tata letak</td><td>Tailwind CSS, react-grid-layout</td><td>Antarmuka mobile-friendly dan dashboard yang dapat dikustomisasi.</td></tr>
 <tr><td>Ekspor laporan</td><td>XLSX, jsPDF, jspdf-autotable</td><td>Generasi Excel/PDF langsung dari browser tanpa template berat.</td></tr>
 <tr><td>OCR lokal browser</td><td>Tesseract.js</td><td>Fallback offline untuk membaca dokumen identitas saat backend OCR tidak aktif.</td></tr>
-<tr><td>OCR backend opsional</td><td>PaddleOCR, FastAPI</td><td>Mesin OCR lokal yang lebih kuat untuk foto buram, dokumen lapangan, dan KK/BPJS.</td></tr>
+<tr><td>Smart Scan online</td><td>Node.js, Express, Google Gemini 2.5 Flash Vision</td><td>Mesin utama ekstraksi identitas; API key tetap berada di server pembantu.</td></tr>
+<tr><td>OCR backend eksperimental</td><td>PaddleOCR, FastAPI</td><td>Implementasi lokal masih tersedia di source tree, tetapi bukan jalur utama yang didokumentasikan untuk deployment aktif.</td></tr>
 <tr><td>PWA</td><td>Service Worker, manifest</td><td>Aplikasi dapat dipasang dan tetap mudah diakses pada perangkat lapangan.</td></tr>
 </tbody>
 </table>
 <div class="note-box">
 <div class="note-title">Prinsip Arsitektur</div>
-        Data klinis tetap berada di Firestore dan workflow utama tetap berjalan di browser. Backend PaddleOCR bersifat opsional: bila aktif, sistem memakainya untuk OCR yang lebih presisi; bila tidak aktif, aplikasi otomatis kembali ke Tesseract.js lokal.
+        Data klinis tetap berada di Firestore dan workflow utama tetap berjalan di browser. Smart Scan mengirim gambar terkompresi ke service Express/Gemini bila service tersedia. Jika jalur online gagal, aplikasi dapat kembali ke Tesseract.js di browser. Hasil OCR tetap wajib diverifikasi petugas sebelum disimpan.
     </div>
 </section>
 
@@ -1030,8 +1036,9 @@ body.mobile-menu-open .mobile-drawer{
 <ul>
 <li>Gambar ditingkatkan sebelum OCR: pembesaran resolusi, grayscale, peningkatan kontras, dan sharpening ringan.</li>
 <li>Jika hasil awal belum menemukan NIK atau nama, sistem menjalankan OCR ulang dengan mode kontras tinggi.</li>
-<li>PaddleOCR backend lokal dicoba lebih dulu bila tersedia karena lebih kuat untuk dokumen buram dan teks kecil.</li>
-<li>Tesseract.js tetap menjadi fallback lokal agar pemindaian tetap berjalan tanpa server OCR.</li>
+<li>Gambar dikompresi di browser sebelum dikirim agar payload lebih kecil dan waktu pemindaian lebih singkat.</li>
+<li>Gemini 2.5 Flash Vision melalui backend Express menjadi jalur Smart Scan online utama.</li>
+<li>Tesseract.js menjadi fallback lokal agar pemindaian tetap tersedia ketika service online gagal atau tidak aktif.</li>
 <li>Pesan hasil selalu meminta petugas memeriksa ulang NIK dan nama, terutama pada confidence rendah.</li>
 </ul>
 </section>
@@ -1225,7 +1232,7 @@ body.mobile-menu-open .mobile-drawer{
 
 <section class="doc-section" id="dashboard-pelaporan">
 <h2 id="dashboard-pelaporan-title">9. Dashboard &amp; Pelaporan</h2>
-<p>Dashboard menyajikan kondisi layanan secara real-time: jumlah antrian, pasien selesai, proporsi usia, gender, indikator klinis, dan daftar kunjungan. Pembaruan v4.3 mengarahkan dashboard menjadi <b>Healthcare Workflow Hub</b>: workflow Pos menjadi fokus utama, modul pendukung dipindahkan ke panel super app mobile, dan analitik wilayah memakai filter ringkas serta card list mobile untuk Dusun/Lingkungan.</p>
+<p>Dashboard menyajikan kondisi layanan secara real-time: jumlah antrean, pasien selesai, proporsi usia, gender, indikator klinis, mutu Gigi &amp; Mulut, capaian sarana binaan, dan daftar kunjungan. Dashboard berfungsi sebagai <b>Healthcare Workflow Hub</b>: workflow Pos menjadi fokus utama, modul pendukung tersedia melalui panel super app mobile, dan analitik wilayah memakai filter ringkas serta card list mobile untuk Dusun/Lingkungan.</p>
 <h3>Pembaruan Export Excel</h3>
 <ul>
 <li>Workbook kolektif kini menambahkan sheet <strong>Rekap Keseluruhan</strong> berisi jumlah data per kategori/sheet.</li>
@@ -1244,6 +1251,9 @@ body.mobile-menu-open .mobile-drawer{
 <h2 id="keamanan-privasi-dan-integritas-infrastruktur-title">10. Keamanan, Privasi, dan Integritas Infrastruktur</h2>
 <ul>
 <li>Role-Based Access Control membatasi akses sesuai fungsi petugas, tenaga laboratorium, perawat, dokter, dan admin.</li>
+<li><b>Role Door-to-Door khusus:</b> role <code>door_to_door</code> hanya memperoleh akses modul lapangan dan tidak otomatis memperoleh akses Loket, Pos, Dashboard, SIMPEG, atau administrasi.</li>
+<li><b>Provenance layanan lapangan:</b> kunjungan baru merekam UID, nama, role pembuat, sumber kunjungan, dan petugas lapangan; operator non-dokter tidak otomatis dicatat sebagai dokter pemeriksa.</li>
+<li><b>Firestore least privilege:</b> rules mencegah petugas Door-to-Door menulis visit normal, mengganti creator, menulis konfigurasi admin, atau memasukkan kunjungan rumah ke antrean publik.</li>
 <li><b>Firebase Atomic Transactions:</b> Modifikasi status krusial (hapus duplikat, aktivasi pegawai) menggunakan metode <code>runTransaction</code> untuk mencegah data korup saat diakses banyak Nakes secara bersamaan (<i>Race Condition Prevention</i>).</li>
 <li><b>Firestore Quota Locks:</b> Tarikan data histori dibatasi maksimal 2.500 dokumen terakhir untuk mencegah ledakan tagihan/kuota baca Firebase (<i>Overbilling Protection</i>) dan mencegah browser Nakes hang.</li>
 <li>Data bayi/anak tanpa NIK diarahkan ke skema NONIK dengan data wali yang wajib dilengkapi.</li>
@@ -1263,6 +1273,10 @@ body.mobile-menu-open .mobile-drawer{
 <li><strong>Smart Fill CKG:</strong> Pertanyaan dibuat berjenjang, interpretasi dibantu otomatis, dan output tetap dikunci ke <code>formSchemas.json</code>.</li>
 <li><strong>SMART UI/UX Healthcare Workflow:</strong> Dashboard, Loket, Pos 1-7, Door to Door, bottom nav, queue list, action bar, dan analitik wilayah diseragamkan agar lebih cepat, ringan, mobile-first, dan tidak melelahkan.</li>
 <li><strong>Optimasi Share Link &amp; SEO:</strong> Mengimplementasikan pratinjau thumbnail/cover otomatis beresolusi tinggi (1200x675px) serta konfigurasi Open Graph/Twitter Card yang kompatibel dengan WhatsApp, Facebook, dan Telegram.</li>
+<li><strong>Clinical Workflow Recovery:</strong> draft Pos dapat disimpan lokal, ditampilkan pada halaman pemulihan, dan status data menunggu sinkron terlihat oleh petugas.</li>
+<li><strong>Door-to-Door Safe Patch:</strong> role khusus, provenance operator, semantik dokter pemeriksa, pengecualian antrean publik, rules least-privilege, backup, dan restore drill emulator telah diterapkan.</li>
+<li><strong>Dental Completeness:</strong> dashboard menurunkan empat status kelengkapan Gigi &amp; Mulut secara read-only tanpa mengubah data klinis lama.</li>
+<li><strong>Sarana Binaan:</strong> dashboard mengelola 16 sekolah sasaran resmi pada Desa Malimpung, Desa Padangloang, dan Kelurahan Maccirinna dengan pencocokan NPSN, deduplikasi view, serta sinkronisasi bulanan Kemendikdasmen.</li>
 </ol>
 </section>
 
@@ -1290,19 +1304,56 @@ body.mobile-menu-open .mobile-drawer{
     </div>
 </section>
 
+<section class="doc-section" id="kondisi-aktual-2026">
+<h2 id="kondisi-aktual-2026-title">13. Kondisi Aktual per 26 Oktober 2026</h2>
+<p>Bagian ini merupakan hasil audit terhadap source tree dan riwayat perubahan. Implementasi terbaru yang dapat dibuktikan di repository berada pada commit <code>0e22f41</code> tanggal 24 September 2026. Tanggal laporan tidak dimaksudkan sebagai bukti bahwa ada deployment baru setelah tanggal commit tersebut.</p>
+
+<h3>Status Implementasi Utama</h3>
+<table>
+<thead><tr><th>Area</th><th>Kondisi Terverifikasi</th><th>Catatan Operasional</th></tr></thead>
+<tbody>
+<tr><td>Versi aplikasi</td><td><code>4.4.0</code>; metadata versi masih bertanggal 29 Mei 2026.</td><td>Perubahan Juni-September belum menaikkan nomor versi. Perlu disiplin release/versioning agar operator dapat membedakan build.</td></tr>
+<tr><td>Recovery &amp; sinkronisasi</td><td>Draft lokal Pos 1-6, halaman recovery, banner koneksi, dan indikator antrean sinkron tersedia.</td><td>Berfungsi sebagai mitigasi kehilangan isian; tetap memerlukan SOP penyelesaian draft pada perangkat bersama.</td></tr>
+<tr><td>Door-to-Door</td><td>RBAC khusus, provenance pembuat, kompatibilitas visit legacy, dan opt-out antrean publik telah masuk production pada 15 September 2026.</td><td>Uji tulis end-to-end dengan akun pilot ber-role hanya <code>door_to_door</code> masih tercatat belum dilakukan.</td></tr>
+<tr><td>Mutu Gigi &amp; Mulut</td><td>Dashboard menampilkan status turunan: Sudah diperiksa, Belum diperiksa, Tidak berlaku, dan Data legacy/perlu verifikasi.</td><td>Snapshot backup 1.316 visit menghasilkan 1.272 lengkap, 43 belum lengkap, dan 1 legacy/perlu verifikasi; angka ini adalah snapshot audit 15 September, bukan angka real-time.</td></tr>
+<tr><td>Sarana binaan</td><td>16 sekolah sasaran resmi: 6 Malimpung, 6 Padangloang, dan 4 Maccirinna. Pencocokan memakai ID/NPSN lalu fallback nama untuk data legacy.</td><td>Cakupan dihitung dari anak unik berstatus selesai dibanding denominator siswa terbaru; nilai di atas 100% sengaja tidak dipotong agar anomali denominator terlihat.</td></tr>
+<tr><td>Ketahanan kuota</td><td>Query dashboard/admin memakai batas dokumen dan antrean publik dikurangi pembacaannya saat kuota bermasalah.</td><td>Pembatasan melindungi browser dan biaya, tetapi laporan historis penuh tetap memerlukan strategi pagination atau proses server-side.</td></tr>
+<tr><td>Backup &amp; pemulihan</td><td>Backup valid pra-patch mencakup 10 koleksi dan 21.599 dokumen; checksum serta restore drill ke emulator dilaporkan lulus.</td><td>Backup bersifat titik-waktu 14 September 2026 dan tidak menggantikan jadwal backup produksi berulang.</td></tr>
+<tr><td>Pengujian</td><td>Pada rollout 15 September: lint dan build lulus, 56/56 unit test lulus, matrix rules dan restore drill lulus.</td><td>Dokumentasi juga mencatat 8 kegagalan E2E lama akibat assertion teks yang tidak mengikuti UI aktual; suite tersebut perlu diselaraskan agar kembali menjadi gate tepercaya.</td></tr>
+</tbody>
+</table>
+
+<div class="note-box amber">
+<div class="note-title">Batas Klaim Produksi</div>
+        Bukti deployment yang tersedia di repository adalah hosting dan Firestore Rules tanggal 15 September 2026. Perubahan sarana binaan tanggal 24 September 2026 terverifikasi pada kode dan test repository, tetapi dokumen audit yang ditinjau tidak memuat bukti deployment production terpisah untuk commit tersebut.
+    </div>
+
+<h3>Perubahan Struktur Data yang Kompatibel</h3>
+<ul>
+<li>Visit Door-to-Door baru dapat membawa <code>visit_source</code>, <code>execution_mode</code>, <code>created_by_uid</code>, <code>created_by_name</code>, <code>created_by_roles</code>, dan <code>petugas_kunjungan_rumah</code>.</li>
+<li>Visit lama tetap dikenali melalui <code>jalur_pemeriksaan = Kunjungan Rumah</code>; tidak ada migrasi atau penghapusan massal yang dicatat pada safe patch.</li>
+<li>Data sekolah dinormalisasi di lapisan view berdasarkan 16 NPSN sasaran; dokumen duplikat dipertahankan sebagai alias dan tidak dihapus otomatis.</li>
+<li>Status kelengkapan dental dihitung saat baca dan tidak menulis field klinis baru ke Firestore.</li>
+</ul>
+</section>
+
 <section class="doc-section" id="rekomendasi-lanjutan">
-<h2 id="rekomendasi-lanjutan-title">13. Rekomendasi Lanjutan</h2>
+<h2 id="rekomendasi-lanjutan-title">14. Rekomendasi Lanjutan</h2>
 <ul>
 <li><strong>Uji lapangan OCR:</strong> kumpulkan 20-50 sampel foto KTP, KK, dan BPJS dengan variasi cahaya/buram untuk mengukur akurasi field NIK, nama, dan tanggal lahir.</li>
-<li><strong>Service PaddleOCR permanen:</strong> jalankan backend OCR pada laptop/server lokal Puskesmas agar akurasi lapangan lebih stabil.</li>
+<li><strong>Validasi Smart Scan:</strong> ukur akurasi Gemini dan fallback Tesseract pada sampel lapangan; tentukan apakah service PaddleOCR lokal masih diperlukan atau dapat dipensiunkan.</li>
 <li><strong>Audit trail perubahan identitas:</strong> simpan log ketika hasil OCR dikoreksi manual oleh petugas.</li>
 <li><strong>Pagination dashboard:</strong> bila volume kunjungan tinggi, dashboard dan export perlu pemuatan bertahap agar browser tetap ringan.</li>
 <li><strong>Bridging SATUSEHAT:</strong> siapkan pemetaan Encounter, Observation, Condition, dan DiagnosticReport dari data internal.</li>
 <li><strong>Hardening RBAC:</strong> batasi export massal hanya untuk admin atau role yang diberi mandat.</li>
+<li><strong>Pilot Door-to-Door:</strong> lakukan satu transaksi terkontrol memakai akun DTD-only, lalu verifikasi provenance, dokter pemeriksa, duplikasi, Rapor, permission, dan ketiadaan entry antrean publik.</li>
+<li><strong>Perbaiki gate E2E:</strong> selaraskan assertion teks lama dengan UI aktual dan jadikan lint, unit, rules, build, serta E2E kritis sebagai syarat deployment.</li>
+<li><strong>Release discipline:</strong> naikkan versi dan tanggal build untuk perubahan pasca-Mei, buat release notes, dan tampilkan commit/build identifier agar audit produksi tidak bergantung pada perkiraan.</li>
+<li><strong>Backup berulang:</strong> tetapkan jadwal backup Firestore, retensi, enkripsi, serta restore drill berkala; snapshot September tidak cukup sebagai perlindungan berkelanjutan.</li>
 </ul>
 </section>
 
-      <div class="footer">Laporan disusun oleh Tim Pengembang Aplikasi TERSANJUNG v4.4 (MAROA Project)</div>
+      <div class="footer">Laporan disusun oleh Tim Pengembang Aplikasi TERSANJUNG v4.4 (MAROA Project) &bull; Revisi audit 26 Oktober 2026</div>
     </main>
   </div>
 </div>
